@@ -138,6 +138,23 @@ static bool powerButtonReleasedSinceWake = false;
 // ends that wake gesture so it cannot become an in-session button action.
 static bool wakePowerReleasePending = false;
 
+#if FREEINK_CAP_POWER_POLICY
+// PowerConfig::wakeNoInputTimeoutS: armed by a power-button wake that boots,
+// disarmed by the first input after it (noteBatteryInput()).
+static bool wakeNoInputArmed = false;
+// PowerConfig::storageErrorSleepS: setup() ended on the SD-card error screen.
+static bool storageErrorScreen = false;
+
+// Input for the battery awake limits (HalPowerManager::noteInput()). Kept apart
+// from loop()'s inactivity timer: a press that a Quick Lock rejects is not input
+// here (loop() skips it), and its unlock is (notifyQuickLockChanged()).
+static void noteBatteryInput() {
+  powerManager.noteInput();
+  // The release of the press that woke the device is not the user's first input.
+  if (!wakePowerReleasePending) wakeNoInputArmed = false;
+}
+#endif
+
 namespace {
 constexpr unsigned long X4PRO_HOME_KEY_DOUBLE_TAP_MS = 300;
 
@@ -369,6 +386,12 @@ static void restartWithSilentToken() {
 #ifdef SIMULATOR
   SimulatorLifecycle::setSilentRebootToken(silentRebootMagic, silentRebootTarget, silentRebootPayload);
 #endif
+#if FREEINK_CAP_POWER_POLICY
+  // The restart continues this session: the battery awake limits keep counting
+  // through it, so a restart nobody asked for (low heap, a network screen's
+  // exit) cannot extend them.
+  powerManager.carryAwakeClocks(wakeNoInputArmed);
+#endif
   ESP.restart();
 }
 
@@ -581,6 +604,11 @@ void notifyQuickLockChanged() {
     }
     if (!restoredBadgeBackdrop) (void)activityManager.requestUpdateAndWait();
     activityManager.notifyInputLockChanged(false);
+#if FREEINK_CAP_POWER_POLICY
+    // Every unlock passes here; it is the only press of the locked time that
+    // counts as input for the battery awake limits.
+    noteBatteryInput();
+#endif
   }
 }
 
@@ -1379,6 +1407,11 @@ void setup() {
   // only on screens that explicitly allow the fallback.
   gpio.setSharedConfirmPowerShortPressEmitsPower(true);
   powerManager.begin();
+#if FREEINK_CAP_POWER_POLICY
+  // The battery awake limits count from here, or carry on after a silent
+  // restart (restartWithSilentToken()).
+  wakeNoInputArmed = powerManager.resumeAwakeClocks();
+#endif
 
   const auto wakeupReason = gpio.getWakeupReason();
 #ifndef SIMULATOR
@@ -1425,6 +1458,9 @@ void setup() {
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
       wakePowerReleasePending = true;
+#if FREEINK_CAP_POWER_POLICY
+      wakeNoInputArmed = BoardConfig::powerPolicy().wakeNoInputTimeoutS > 0;
+#endif
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // TEMP: continue booting while diagnosing post-flash/reset behavior.
@@ -1459,6 +1495,9 @@ void setup() {
 #endif
     setupDisplayAndFonts(isSilentReboot, !isNetworkResume, useReaderRenderStack);
     activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
+#if FREEINK_CAP_POWER_POLICY
+    storageErrorScreen = true;
+#endif
     return;
   }
   logBootHeap("storage ready");
@@ -1718,6 +1757,80 @@ void setup() {
   allowSleepAt = millis() + 2000;
 }
 
+#if FREEINK_CAP_POWER_POLICY
+// loop() checks the user's sleep timeout (or the Quick Lock's) later this pass:
+// one is set, no screen holds auto-sleep off, and no key is held (loop() returns
+// before that check while a chord or shortcut waits for a key's release).
+static bool userTimeoutGoverns(const unsigned long sleepTimeoutMs) {
+  if (sleepTimeoutMs == 0 || activityManager.preventAutoSleep()) return false;
+  for (uint8_t button = HalGPIO::BTN_BACK; button <= HalGPIO::BTN_POWER; ++button) {
+    if (gpio.isPressed(button)) return false;
+  }
+  return true;
+}
+
+// Battery awake limits (BoardConfig::powerPolicy(), Silkscreen). loop() runs
+// them on every pass before anything can return early (the wake release, the
+// screenshot and shortcut chords, Quick Lock), so none of those can hold the
+// device awake on battery. They count from HalPowerManager's input and
+// client-traffic clocks, not loop()'s inactivity timer, which a screen holding
+// auto-sleep off resets on every pass. Each applies on battery only. The USB
+// Drive loop cannot sleep with the card handed to the host; UsbDriveActivity
+// ends that session on the same limits, and the restart sleeps here.
+static void sleepOnBatteryAwakeLimits() {
+  // PowerConfig::lowBatteryCutoffMv, at most one reading a second. The divider
+  // reads low under the radio's load, so with Wi-Fi on the reading is allowed
+  // PowerConfig::cutoffRadioAllowanceMv below the cutoff. BatteryMonitor needs
+  // several consecutive readings at or below it and never fires on external
+  // power. A blocking download checks the same latch and aborts, so its screen
+  // returns and this pass sleeps.
+  if (BoardConfig::powerPolicy().lowBatteryCutoffMv > 0 && powerManager.lowBatteryCutoffTripped()) {
+    enterDeepSleep();
+    return;
+  }
+
+  // PowerConfig::awakeCeilingMin: a screen that holds auto-sleep off (network,
+  // keyboard, Nearby, automatic page turns) or a Never timeout still ends once
+  // no input and no client traffic have come for this long. The ceiling is never
+  // shorter than the user's timeout (HalPowerManager::awakeCeilingMs()), and
+  // where loop() reaches that timeout this pass, the timeout governs alone.
+  const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
+  if (powerManager.awakeCeilingPassed(sleepTimeoutMs) && !userTimeoutGoverns(sleepTimeoutMs)) {
+    LOG_INF("SLP", "No input or client traffic for %lu min on battery; sleeping",
+            HalPowerManager::awakeCeilingMs(sleepTimeoutMs) / 60000UL);
+    enterDeepSleep(true);
+    return;
+  }
+
+  // PowerConfig::awakeInputCapMin: client traffic cannot extend it, since a
+  // desktop that keeps a WebDAV share mounted, or an automatic page turn, goes
+  // on with nobody at the device.
+  if (powerManager.awakeInputCapPassed()) {
+    LOG_INF("SLP", "No input for %u min on battery; sleeping", BoardConfig::powerPolicy().awakeInputCapMin);
+    enterDeepSleep(true);
+    return;
+  }
+
+  // PowerConfig::wakeNoInputTimeoutS: a power-button wake that gets no input (a
+  // press in a pocket that passed the hold check) sleeps again.
+  if (const unsigned long wakeMs = BoardConfig::powerPolicy().wakeNoInputTimeoutS * 1000UL;
+      wakeNoInputArmed && wakeMs > 0 && powerManager.msSinceInput() >= wakeMs && !activityManager.preventAutoSleep() &&
+      !gpio.isUsbConnected()) {
+    LOG_INF("SLP", "No input for %lu s after the wake on battery; sleeping", wakeMs / 1000UL);
+    enterDeepSleep(true);
+    return;
+  }
+
+  // PowerConfig::storageErrorSleepS: nothing can be done on the SD-card error
+  // screen.
+  if (const unsigned long errorMs = BoardConfig::powerPolicy().storageErrorSleepS * 1000UL;
+      storageErrorScreen && errorMs > 0 && powerManager.msSinceInput() >= errorMs && !gpio.isUsbConnected()) {
+    LOG_INF("SLP", "SD card error screen idle for %lu s on battery; sleeping", errorMs / 1000UL);
+    enterDeepSleep(true);
+  }
+}
+#endif
+
 void loop() {
   static unsigned long maxLoopDuration = 0;
   const unsigned long loopStartTime = millis();
@@ -1736,6 +1849,12 @@ void loop() {
   HalPowerManager::endAbnormalResetRunWhenHealthy();
 #endif
   if (activityManager.requiresExclusiveStorageLoop()) {
+#if FREEINK_CAP_POWER_POLICY
+    // Keys pressed here count for the battery awake limits as anywhere else.
+    // This loop cannot sleep with the card handed to the host: UsbDriveActivity
+    // ends the session on those limits instead (sleepOnBatteryAwakeLimits()).
+    if (gpio.wasAnyPressed() || gpio.wasAnyReleased()) noteBatteryInput();
+#endif
     // Keep the serial endpoint responsive so Inky receives ERR:not_on_home,
     // while every filesystem/UI/global path remains suspended by the activity.
     (void)UsbSerialFileTransfer::process(false);
@@ -1747,7 +1866,11 @@ void loop() {
       // No host is active, so a slower loop is safe. The activity itself times
       // out the raw-storage handoff rather than entering deep sleep detached.
       powerManager.setPowerSaving(true);
+#ifdef SIMULATOR
       delay(50);
+#else
+      gpio.idleDelay(50);  // ends early on an ADC-ladder key contact (Silkscreen)
+#endif
     }
     return;
   }
@@ -1791,6 +1914,14 @@ void loop() {
   if (userInputReceived) {
     activityManager.notifyUserInput();
   }
+
+#if FREEINK_CAP_POWER_POLICY
+  // A press that a Quick Lock rejects is not input for the battery limits;
+  // notifyQuickLockChanged() counts the unlock. The limits run before every
+  // early return below.
+  if (userInputReceived && !buttonShortcutController.isQuickLocked()) noteBatteryInput();
+  sleepOnBatteryAwakeLimits();
+#endif
 
   // Let wake continue as soon as its hold has been verified. The release can
   // arrive after setup, so consume that one input frame rather than making it

@@ -20,6 +20,9 @@
 - Silkscreen: the clock is set from the network again on the next Wi-Fi connection after the clock chip loses its time.
 - Silkscreen: the battery icon shows charging on any USB supply, wall chargers included, read from the charger's status output.
 - Silkscreen: the reader goes straight back to sleep after a wake caused only by releasing a held power button, after three crashes or brown-outs in a row, and when the battery is below its cutoff at boot, and the touchscreen starts only once a wake has been accepted. A power button whose input cannot wake the board is reported on screen.
+- Silkscreen: on battery the reader sleeps after 15 minutes with no key press and no network client, or after the sleep timeout when that is longer, also on screens that keep it awake and with the timeout set to Never. Automatic page turns keep it awake, but an hour with no key press ends any session on battery.
+- Silkscreen: on battery the reader also sleeps 3 minutes after a wake that gets no key press, a minute after an SD card error, and when the battery reaches its cutoff, stopping any download first. Key presses that Quick Lock rejects do not keep it awake, and its own restarts (the Loading screen) do not reset these limits.
+- Silkscreen: USB Drive ends a few seconds after the USB cable is pulled.
 
 ### Changed
 

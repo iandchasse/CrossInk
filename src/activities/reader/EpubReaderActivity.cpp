@@ -8,6 +8,9 @@
 #include <FontCacheManager.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
+#ifndef SIMULATOR
+#include <HalPowerManager.h>
+#endif
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -3108,6 +3111,12 @@ void EpubReaderActivity::loop() {
     }
 
     if ((millis() - lastPageTurnTime) >= pageTurnDuration) {
+#ifndef SIMULATOR
+      // Client traffic for the battery awake ceiling (PowerConfig::
+      // awakeCeilingMin): an attended session outlasts it, and the input cap
+      // still ends one left turning in a bag.
+      powerManager.noteClientTraffic();
+#endif
       pageTurn(true, "auto");
       return;
     }

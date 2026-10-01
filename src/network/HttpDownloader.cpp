@@ -1,6 +1,9 @@
 #include "HttpDownloader.h"
 
 #include <Arduino.h>
+#ifndef SIMULATOR
+#include <HalPowerManager.h>
+#endif
 #include <Logging.h>
 #include <Memory.h>
 #include <WiFi.h>
@@ -62,6 +65,14 @@ bool isCancelRequested(bool* cancelFlag, const HttpDownloader::CancelCallback& s
     if (cancelFlag) *cancelFlag = true;
     return true;
   }
+#ifndef SIMULATOR
+  // loop()'s low-battery cutoff cannot run during a download (OPDS, fonts, OTA):
+  // abort on it here (never on boards without one), and the next pass sleeps.
+  if (powerManager.lowBatteryCutoffTripped()) {
+    if (cancelFlag) *cancelFlag = true;
+    return true;
+  }
+#endif
   return false;
 }
 

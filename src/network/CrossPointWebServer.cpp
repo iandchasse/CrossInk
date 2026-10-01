@@ -8,6 +8,7 @@
 #include <Epub.h>
 #include <FsHelpers.h>
 #include <HalGPIO.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <Memory.h>
@@ -51,6 +52,13 @@ constexpr uint16_t LOCAL_UDP_PORT = 8134;
 
 // Static pointer for WebSocket callback (WebSocketsServer requires C-style callback)
 CrossPointWebServer* wsInstance = nullptr;
+
+#if FREEINK_CAP_POWER_POLICY
+// Set by handleNotFound() for the request in flight, so begin()'s client-traffic
+// middleware leaves out what nobody asked the device for (a phone's captive-portal
+// probes in hotspot mode, stray paths).
+bool notFoundAnswered = false;
+#endif
 
 uint8_t enumRawValueForDisplayIndex(const SettingInfo& setting, uint8_t displayIndex) {
   if (setting.enumRawValues.empty()) {
@@ -368,6 +376,33 @@ void CrossPointWebServer::begin() {
   // are answered in handleNotFound().
   server->enableCORS(true);
 
+#if FREEINK_CAP_POWER_POLICY
+  // On a board with a battery awake ceiling (PowerConfig::awakeCeilingMin), a
+  // request counts as client traffic, so a device serving a client stays up
+  // however long ago its keys were touched. Not the methods an OS WebDAV client
+  // sends on its own to poll a mounted share (PowerConfig::awakeInputCapMin
+  // bounds the rest), and not a request handleNotFound() answers.
+  if (BoardConfig::powerPolicy().awakeCeilingMin > 0) {
+    server->addMiddleware([](WebServer& request, Middleware::Callback next) {
+      const HTTPMethod method = request.method();
+      notFoundAnswered = false;
+      const bool handled = next();
+      switch (method) {
+        case HTTP_OPTIONS:
+        case HTTP_HEAD:
+        case HTTP_PROPFIND:
+        case HTTP_LOCK:
+        case HTTP_UNLOCK:
+          break;
+        default:
+          if (!notFoundAnswered) powerManager.noteClientTraffic();
+          break;
+      }
+      return handled;
+    });
+  }
+#endif
+
   // Setup routes
   server->on("/", HTTP_GET, [this] { handleRoot(); });
   server->on("/files", HTTP_GET, [this] { handleFileList(); });
@@ -603,6 +638,9 @@ void CrossPointWebServer::handleLogo() const {
 }
 
 void CrossPointWebServer::handleNotFound() const {
+#if FREEINK_CAP_POWER_POLICY
+  notFoundAnswered = true;
+#endif
   // in AP mode, redirect unmatched browser/captive-portal requests to "/" so the OS auto-opens the browser
   // API requests (/api/*) still return 404 so XHR errors surface correctly
   // see https://en.wikipedia.org/wiki/Captive_portal#Detection
@@ -2027,6 +2065,9 @@ void CrossPointWebServer::wsEventCallback(uint8_t num, WStype_t type, uint8_t* p
 //   3. Server sends TEXT "PROGRESS:<received>:<total>" after each chunk
 //   4. Server sends TEXT "DONE" or "ERROR:<message>" when complete
 void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* payload, size_t length) {
+#if FREEINK_CAP_POWER_POLICY
+  powerManager.noteClientTraffic();  // upload frames arrive here, one per loop pass
+#endif
   switch (type) {
     case WStype_DISCONNECTED:
       LOG_DBG("WS", "Client %u disconnected", num);

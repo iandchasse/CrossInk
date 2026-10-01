@@ -18,6 +18,17 @@
 HalPowerManager powerManager;  // Singleton instance
 
 namespace {
+#if FREEINK_CAP_POWER_POLICY
+// HalPowerManager::carryAwakeClocks(). RTC_NOINIT survives ESP.restart() (and
+// deep sleep) but not power loss; the magic marks a carry the next boot has not
+// taken back yet.
+RTC_NOINIT_ATTR uint32_t awakeCarryMagic;
+RTC_NOINIT_ATTR uint32_t awakeCarrySinceInputMs;
+RTC_NOINIT_ATTR uint32_t awakeCarrySinceTrafficMs;
+RTC_NOINIT_ATTR uint32_t awakeCarryWakeNoInputArmed;
+constexpr uint32_t AWAKE_CARRY_MAGIC = 0x41574B43;  // "AWKC"
+#endif
+
 void disableWiFiBeforeDeepSleep() {
   const wifi_mode_t wifiMode = WiFi.getMode();
   if (wifiMode == WIFI_MODE_NULL) {
@@ -300,6 +311,40 @@ bool HalPowerManager::lowBatteryCutoffTripped() {
   cutoffTripped = true;
   LOG_ERR("PWR", "Battery at %u mV%s, below the %u mV cutoff; sleeping", mv, radioOn ? " with Wi-Fi on" : "", cutoffMv);
   return true;
+}
+
+void HalPowerManager::carryAwakeClocks(const bool wakeNoInputArmed) const {
+#if FREEINK_CAP_POWER_POLICY
+  awakeCarrySinceInputMs = msSinceInput();
+  awakeCarrySinceTrafficMs = msSinceClientTraffic();
+  awakeCarryWakeNoInputArmed = wakeNoInputArmed ? 1 : 0;
+  awakeCarryMagic = AWAKE_CARRY_MAGIC;
+#else
+  (void)wakeNoInputArmed;
+#endif
+}
+
+bool HalPowerManager::resumeAwakeClocks() {
+  const unsigned long now = millis();
+  lastInputMs = now;
+  lastClientTrafficMs = now;
+#if FREEINK_CAP_POWER_POLICY
+  // Only the software reset that carryAwakeClocks() preceded takes a carry back;
+  // any later boot finds it cleared.
+  const bool carried = awakeCarryMagic == AWAKE_CARRY_MAGIC && esp_reset_reason() == ESP_RST_SW;
+  awakeCarryMagic = 0;
+  if (!carried) return false;
+  // Unsigned wrap keeps msSinceInput() = now - lastInputMs right when the carried
+  // time is longer than this boot's uptime.
+  lastInputMs = now - awakeCarrySinceInputMs;
+  lastClientTrafficMs = now - awakeCarrySinceTrafficMs;
+  LOG_DBG("PWR", "Awake clocks resumed after a restart: input %lu s ago, client traffic %lu s ago",
+          static_cast<unsigned long>(awakeCarrySinceInputMs / 1000U),
+          static_cast<unsigned long>(awakeCarrySinceTrafficMs / 1000U));
+  return awakeCarryWakeNoInputArmed == 1;
+#else
+  return false;
+#endif
 }
 
 unsigned long HalPowerManager::awakeCeilingMs(const unsigned long sleepTimeoutMs) {

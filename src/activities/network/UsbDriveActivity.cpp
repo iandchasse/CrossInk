@@ -5,7 +5,13 @@
 #include <I18n.h>
 #include <LibraryBuilder.h>
 #include <SdCardFontSystem.h>
+#ifndef SIMULATOR
+#include <BatteryMonitor.h>
+#include <BoardConfig.h>
+#include <HalPowerManager.h>
+#endif
 
+#include "CrossPointSettings.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "components/CompactHeader.h"
@@ -26,6 +32,8 @@ void UsbDriveActivity::onEnter() {
   startFailureStartedAt = 0;
   forcedDisconnectRequestedAt = 0;
   hostSuspendStartedAt = 0;
+  sawExternalPower = false;
+  onBatterySince = 0;
 
   // Paint the instruction screen before detaching the filesystem and exposing
   // its block device to the host. The two operations must never overlap.
@@ -73,6 +81,18 @@ void UsbDriveActivity::loop() {
 
 // The simulator HAL does not expose TinyUSB's host-suspend signal.
 #if !defined(SIMULATOR)
+  // In every state: with the cable gone (or on the battery limits that loop()
+  // sleeps on) nothing can use the session, and this loop cannot sleep while
+  // the host holds the card. The restart lands where those limits sleep.
+  if (cablePulledOnBattery() || batteryLimitReached()) {
+    restartToHome();
+    return;
+  }
+  // A host using the drive is client traffic for the battery awake ceiling, so
+  // pulling the cable after a long copy does not sleep the restart at once. The
+  // input cap still counts keys only.
+  if (state == State::Connected || state == State::Accessed) powerManager.noteClientTraffic();
+
   // Cable removal can leave a battery-powered USB device mounted but
   // suspended. A sleeping host intentionally follows the same timeout policy.
   if ((state == State::Connected || state == State::Accessed) && Storage.usbDriveHostSuspended()) {
@@ -187,6 +207,41 @@ void UsbDriveActivity::renderMessage(const char* message, const char* detail) co
     UITheme::drawCenteredWrappedText(renderer, textArea, UI_10_FONT_ID, y, detail, 3);
   }
 }
+
+#ifndef SIMULATOR
+// There is no VBUS sense, and TinyUSB may never see a detach on battery, so a
+// board with an analog charge-status ladder watches the cable through it: once
+// it has shown external power this session (the ladder samples at 1 Hz and
+// debounces), a steady "on battery" means the cable left. False on boards
+// without the ladder.
+bool UsbDriveActivity::cablePulledOnBattery() {
+  if (!BoardConfig::hasChargeStatusLadder()) return false;
+  using BoardConfig::ChargeState;
+  const ChargeState charge = BatteryMonitor::chargeStatus();
+  if (charge == ChargeState::ExternalIdle || charge == ChargeState::Charging || charge == ChargeState::Complete) {
+    sawExternalPower = true;
+  }
+  if (!sawExternalPower || charge != ChargeState::OnBattery) {
+    onBatterySince = 0;
+    return false;
+  }
+  if (onBatterySince == 0) onBatterySince = millis() | 1UL;
+  if (millis() - onBatterySince < CABLE_PULLED_TIMEOUT_MS) return false;
+  LOG_INF("USB", "USB cable gone (charge status on battery); ending USB Drive session");
+  return true;
+}
+
+// The battery limits main.cpp's sleepOnBatteryAwakeLimits() sleeps on: the
+// low-battery cutoff, the awake ceiling and the input cap (BoardConfig::
+// powerPolicy(); never on boards without them, and never on external power).
+bool UsbDriveActivity::batteryLimitReached() const {
+  if (powerManager.lowBatteryCutoffTripped()) return true;  // logs the reading
+  const unsigned long sleepTimeoutMs = SETTINGS.getSleepTimeoutMs();
+  if (!powerManager.awakeCeilingPassed(sleepTimeoutMs) && !powerManager.awakeInputCapPassed()) return false;
+  LOG_INF("USB", "Awake limit on battery reached; ending USB Drive session");
+  return true;
+}
+#endif
 
 void UsbDriveActivity::restartToHome() {
   if (restartRequested) return;
