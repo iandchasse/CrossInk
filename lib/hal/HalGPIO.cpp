@@ -222,6 +222,44 @@ void HalGPIO::startTouch() {
 #endif
 }
 
+void HalGPIO::prepareForSleep() {
+  if (!FREEINK_CAP_TOUCH) return;
+  switch (inputMgr.prepareTouchForSleep()) {
+    case InputManager::TouchSleepResult::Asleep:
+      LOG_DBG("HW", "Touch controller asleep");
+      break;
+    case InputManager::TouchSleepResult::NoAnswer:
+      // Without a controller found at boot this was a best-effort write to a
+      // tail that may not be fitted.
+      if (hasTouch()) {
+        LOG_ERR("HW", "Touch controller did not accept its sleep command");
+      } else {
+        LOG_DBG("HW", "No touch controller answered the sleep command");
+      }
+      break;
+    case InputManager::TouchSleepResult::NotApplicable:
+      break;
+  }
+}
+
+void HalGPIO::prepareForMinimalSleep() {
+  if (FREEINK_CAP_TOUCH) inputMgr.holdTouchIntForSleep();
+}
+
+void HalGPIO::resetTouchForSleep() {
+  if (!FREEINK_CAP_TOUCH) return;
+  switch (inputMgr.resetAndHibernateTouch()) {
+    case InputManager::TouchSleepResult::Asleep:
+      LOG_DBG("HW", "Touch controller reset and asleep");
+      break;
+    case InputManager::TouchSleepResult::NoAnswer:
+      LOG_DBG("HW", "No touch controller answered after its reset");
+      break;
+    case InputManager::TouchSleepResult::NotApplicable:
+      break;
+  }
+}
+
 void HalGPIO::checkPowerButtonIdle() {
 #if FREEINK_CAP_POWER_POLICY
   if (!BoardConfig::powerPolicy().powerPinIdleCheck) return;

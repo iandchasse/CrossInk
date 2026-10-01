@@ -3,6 +3,7 @@
 #include <BoardConfig.h>
 #include <Logging.h>
 #include <PowerManager.h>
+#include <SharedI2c.h>
 #include <WiFi.h>
 #include <esp_sleep.h>
 #include <soc/soc_caps.h>
@@ -10,6 +11,7 @@
 #include <algorithm>
 #include <cassert>
 
+#include "HalFrontlight.h"
 #include "HalGPIO.h"
 
 HalPowerManager powerManager;  // Singleton instance
@@ -31,6 +33,34 @@ void disableWiFiBeforeDeepSleep() {
   delay(30);
   WiFi.mode(WIFI_OFF);
   delay(30);
+}
+
+void setPowerLatchesForSleep() {
+#if !SOC_PM_SUPPORT_EXT1_WAKEUP
+  // Release every configured battery latch. BoardConfig owns the pin mapping;
+  // the collision guard prevents a stale/mismatched profile from driving a
+  // display or SD bus pin low and holding it through sleep.
+  for (const int8_t pin : {BoardConfig::ACTIVE.power.latch0, BoardConfig::ACTIVE.power.latch1}) {
+    if (pin < 0 || BoardConfig::latchConflictsWithBus(pin)) continue;
+    const auto latch = static_cast<gpio_num_t>(pin);
+    gpio_set_direction(latch, GPIO_MODE_OUTPUT);
+    gpio_set_level(latch, 0);
+    gpio_hold_en(latch);
+  }
+#else
+  // Keep configured power latches asserted through deep sleep. The SDK isolates
+  // GPIO pads before sleeping, so an unheld latch can float LOW once external
+  // power is removed and turn a fast wake into a cold boot. This is deliberately
+  // complementary to the C3 path above, where the battery latch must go LOW.
+  for (const int8_t pin : {BoardConfig::ACTIVE.power.latch0, BoardConfig::ACTIVE.power.latch1}) {
+    if (pin < 0 || BoardConfig::latchConflictsWithBus(pin)) continue;
+    const auto latch = static_cast<gpio_num_t>(pin);
+    gpio_hold_dis(latch);
+    gpio_set_direction(latch, GPIO_MODE_OUTPUT);
+    gpio_set_level(latch, 1);
+    gpio_hold_en(latch);
+  }
+#endif
 }
 }  // namespace
 
@@ -91,6 +121,11 @@ void HalPowerManager::setPowerSaving(bool enabled) {
 }
 
 void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
+#if FREEINK_CAP_POWER_POLICY
+  sleepImpl(gpio, /*sleepCommands=*/true);
+#else
+  // CrossInk's own sleep sequence. scripts/check_sleep_wake_sources.py allows
+  // its direct wake and sleep calls only here, outside the SDK power-policy path.
   disableWiFiBeforeDeepSleep();
 
 #ifdef ENABLE_SERIAL_LOG
@@ -101,31 +136,7 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   logSerial.end();
 #endif
 
-#if !SOC_PM_SUPPORT_EXT1_WAKEUP
-  // Release every configured battery latch. BoardConfig owns the pin mapping;
-  // the collision guard prevents a stale/mismatched profile from driving a
-  // display or SD bus pin low and holding it through sleep.
-  for (const int8_t pin : {BoardConfig::ACTIVE.power.latch0, BoardConfig::ACTIVE.power.latch1}) {
-    if (pin < 0 || BoardConfig::latchConflictsWithBus(pin)) continue;
-    const auto latch = static_cast<gpio_num_t>(pin);
-    gpio_set_direction(latch, GPIO_MODE_OUTPUT);
-    gpio_set_level(latch, 0);
-    gpio_hold_en(latch);
-  }
-#else
-  // Keep configured power latches asserted through deep sleep. The SDK isolates
-  // GPIO pads before sleeping, so an unheld latch can float LOW once external
-  // power is removed and turn a fast wake into a cold boot. This is deliberately
-  // complementary to the C3 path above, where the battery latch must go LOW.
-  for (const int8_t pin : {BoardConfig::ACTIVE.power.latch0, BoardConfig::ACTIVE.power.latch1}) {
-    if (pin < 0 || BoardConfig::latchConflictsWithBus(pin)) continue;
-    const auto latch = static_cast<gpio_num_t>(pin);
-    gpio_hold_dis(latch);
-    gpio_set_direction(latch, GPIO_MODE_OUTPUT);
-    gpio_set_level(latch, 1);
-    gpio_hold_en(latch);
-  }
-#endif
+  setPowerLatchesForSleep();
 
   // Cut the gated peripheral rails (touch/SD/EPD on boards like the Sticky) and
   // hold the enables off through deep sleep — otherwise the GT911 and SD card
@@ -145,7 +156,64 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   freeink::PowerManager::armPowerButtonWakeup();
   gpio_deep_sleep_hold_en();
   esp_deep_sleep_start();
+#endif
 }
+
+void HalPowerManager::startDeepSleepMinimal(HalGPIO& gpio) const {
+#if FREEINK_CAP_POWER_POLICY
+  sleepImpl(gpio, /*sleepCommands=*/false);
+#else
+  startDeepSleep(gpio);
+#endif
+}
+
+#if FREEINK_CAP_POWER_POLICY
+void HalPowerManager::sleepImpl(HalGPIO& gpio, const bool sleepCommands) const {
+  if (sleepCommands) disableWiFiBeforeDeepSleep();
+
+  // A touch controller on an always-on rail goes to sleep, then the shared I2C
+  // bus is released with nothing in flight. Both before the serial teardown
+  // below, so their logs still reach the host. The bus release is GPIO-level
+  // only (it frees a line a slave holds LOW), so even a minimal sleep entry runs
+  // it, and a minimal entry still re-holds the pins a sleeping touch controller
+  // needs.
+  if (sleepCommands) {
+    gpio.prepareForSleep();
+  } else {
+    gpio.prepareForMinimalSleep();
+  }
+  if (!freeink::i2c::releaseSensorBusForSleep()) {
+    LOG_ERR("PWR", "I2C SDA still held LOW after bus recovery");
+  }
+
+#ifdef ENABLE_SERIAL_LOG
+  // Tear down HWCDC so the host sees a clean disconnect (as on other boards).
+  logSerial.end();
+#endif
+
+  setPowerLatchesForSleep();
+
+  // An enable-gated front light goes dark and releases its LEDC channel first, so
+  // the parked-pin holds below take pads no peripheral is driving. No-op on a
+  // light that was never begun (an early re-sleep) or already handed over.
+  Frontlight.prepareForSleep();
+
+  // Display, SD, touch and parked pins to their sleep levels and held there:
+  // after display.deepSleep() (enterDeepSleep() orders that), and with the SDMMC
+  // bus parked LOW and the card's power gated off.
+  freeink::PowerManager::powerDownRailsForSleep();
+
+  // PowerConfig::releaseWaitMaxMs: the bounded release wait below may last
+  // seconds, and nothing from here on needs full speed.
+  if (BoardConfig::powerPolicy().releaseWaitMaxMs != 0) setCpuFrequencyMhz(LOW_POWER_FREQ);
+
+  // Waits (bounded) for the power button to be released, then arms its wake and
+  // sleeps. A button still held after PowerConfig::releaseWaitMaxMs arms the wake
+  // on its release instead, and that boot sleeps again at once
+  // (PowerManager::takeReleaseWake()).
+  freeink::PowerManager::deepSleepUntilPowerButton();
+}
+#endif
 
 bool HalPowerManager::lowBatteryCutoffTripped() {
   if (cutoffTripped) return true;

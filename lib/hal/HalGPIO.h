@@ -91,6 +91,16 @@ class HalGPIO {
   // Probe and start the touch panel after begin(true). No-op once started.
   void startTouch();
 
+  // Deep-sleep entry: sends a touch controller on an always-on rail its sleep
+  // command (TouchConfig::hibernateInSleep; no-op on other boards). Call before
+  // the I2C bus is released.
+  void prepareForSleep();
+  // The GPIO-only part, for a sleep entry that sends no command (a release wake).
+  void prepareForMinimalSleep();
+  // A reset-loop sleep before the touch probe: reset a FocalTech controller on an
+  // always-on rail and send it hibernate once (no-op on other boards).
+  void resetTouchForSleep();
+
   // PowerConfig::powerPinIdleCheck (no-op on boards without it): read the power
   // button's idle level once, early in setup() before anything arms its wake,
   // and log it. Idling between the logic levels, the button is taken out of

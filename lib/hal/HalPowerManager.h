@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <BatteryMonitor.h>
+#include <BoardConfig.h>
 #include <InputManager.h>
 #include <Logging.h>
 #include <Wire.h>
@@ -38,6 +39,11 @@ class HalPowerManager {
   unsigned long lastInputMs = 0;          // noteInput()
   bool cutoffTripped = false;             // lowBatteryCutoffTripped() latch
 
+#if FREEINK_CAP_POWER_POLICY
+  // The SDK sleep path of startDeepSleep() and startDeepSleepMinimal().
+  [[noreturn]] void sleepImpl(HalGPIO& gpio, bool sleepCommands) const;
+#endif
+
  public:
 #if defined(BOARD_HAS_PSRAM)
   static constexpr int LOW_POWER_FREQ = 80;  // MHz
@@ -54,7 +60,18 @@ class HalPowerManager {
 
   // Setup wake up GPIO and enter deep sleep
   // Should be called inside main loop() to handle the currentLockMode
+  // Boards with the SDK power policy (FREEINK_CAP_POWER_POLICY, Silkscreen) sleep
+  // through the SDK's own path: touch controller asleep, sensor bus released,
+  // front light handed over, rails and pins parked, then a bounded power-button
+  // release wait that falls back to a wake on the release. Every other board
+  // keeps CrossInk's own sleep sequence.
   void startDeepSleep(HalGPIO& gpio) const;
+  // Deep sleep without a word to any peripheral (no Wi-Fi teardown, no touch
+  // sleep command): for a boot that sleeps before starting them, or that must
+  // not rerun code that may have crashed it. Pins and rails are parked exactly
+  // as startDeepSleep() does. Boards without the SDK power policy take no such
+  // sleep, and get startDeepSleep().
+  void startDeepSleepMinimal(HalGPIO& gpio) const;
 
   // Battery policy (BoardConfig::powerPolicy(), Silkscreen). Every query below
   // is false (or 0) on boards whose profile sets none of these fields, so their
