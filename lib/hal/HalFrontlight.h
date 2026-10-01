@@ -10,11 +10,15 @@ class HalFrontlight {
  public:
   static HalFrontlight& getInstance() { return instance; }
 
-  // Bring up the PWM channel(s) and apply the given persisted state.
+  // Bring up the PWM channel(s) and apply the given persisted state. With the
+  // load probe, a light the SDK records as absent is not switched on.
   void begin(uint8_t brightness, uint8_t warmth, bool on);
 
   bool present() const { return manager.present(); }
   bool hasColorTemperature() const { return manager.hasColorTemperature(); }
+  // Warmth picks one string (warm at >= 50%) instead of blending two
+  // (FrontlightConfig::colorSelectGpio).
+  bool warmthIsSelection() const;
 
   // Brightness as 0-100 (total light on a warm/cool pair). Setting a value
   // while off leaves the light off; it is applied on the next on().
@@ -25,7 +29,70 @@ class HalFrontlight {
 
   uint8_t brightness() const { return lastBrightness; }
   uint8_t warmth() const { return manager.colorTemperature(); }
-  bool isOn() const { return lit; }
+  // Off after the SDK's LED over-voltage monitor tripped (fault()), even though
+  // the user left it on; switching it on again is the retry. setOn(false) always
+  // clears the user's "on" and re-arms the monitor, faulted or not. Boards
+  // without a monitor never fault, so this is the plain on/off state there.
+  bool isOn() const { return lit && !manager.fault(); }
+  bool fault() const { return manager.fault(); }
+
+  // The switch-on load probe (FrontlightConfig::loadProbeWindowMs); these are
+  // constant false without FREEINK_CAP_FRONTLIGHT_PROBE. The probe decides on the
+  // SDK's monitor timer, after the call that switched the light on has returned;
+  // update() then acts on its result. A switch-on that finds no light leaves it
+  // off, as setOn(false) would, and switching it on again is the retry.
+  //
+  // From the loop task, every pass: finish a switch-on whose probe has decided.
+  // Also run by takeNoLightNotice() and takeRestoreNoLightNotice().
+  void update();
+  // A switch-on (or a colour change while lit) has not decided its load yet:
+  // isOn() reads true, and a fault() now is its result, not an in-use trip.
+  bool switchOnPending() const {
+#if FREEINK_CAP_FRONTLIGHT_PROBE
+    return pending != Pending::None;
+#else
+    return false;
+#endif
+  }
+  // No light answered the last switch-on. Kept across deep sleep, so a wake does
+  // not restore the light into nothing; a cold boot clears it.
+  bool noLightFound() const { return manager.load() == freeink::frontlight::Load::Absent; }
+  // A single-colour light: this string tripped the probe while the other one lit.
+  // Warmth then stays on the other string until a cold boot (a no-light result
+  // keeps the mark).
+  bool stringMissing(const bool warm) const { return manager.stringMissing(warm); }
+  // True once after a switch-on or colour change the user asked for found no
+  // light, so the UI can say so.
+  bool takeNoLightNotice() {
+#if FREEINK_CAP_FRONTLIGHT_PROBE
+    update();
+    const bool notice = noLightNotice;
+    noLightNotice = false;
+    return notice;
+#else
+    return false;
+#endif
+  }
+  // True once after begin() found no light: Restore Light on Wake, the daily
+  // light schedule, or the replay of a lit light after a silent restart. The
+  // boost has just run unloaded, so the UI gives the same message and connect
+  // advice.
+  bool takeRestoreNoLightNotice() {
+#if FREEINK_CAP_FRONTLIGHT_PROBE
+    update();
+    const bool notice = restoreNoLightNotice;
+    restoreNoLightNotice = false;
+    return notice;
+#else
+    return false;
+#endif
+  }
+
+  // Take the light dark and release its pads before deep sleep. No-op except
+  // on an enable-gated light. begin() also runs it from a shutdown handler
+  // before every software restart, so the driver is dark before the reset lets
+  // COLOR_SEL fall to its pull-down.
+  void prepareForSleep() { manager.prepareForSleep(); }
 
  private:
   HalFrontlight() = default;
@@ -35,6 +102,19 @@ class HalFrontlight {
   // the on/off state separate so toggling restores the previous level.
   uint8_t lastBrightness = 60;
   bool lit = false;
+#if FREEINK_CAP_FRONTLIGHT_PROBE
+  // Who asked for the switch-on still deciding its load.
+  enum class Pending : uint8_t { None, User, Restore };
+  Pending pending = Pending::None;
+  bool noLightNotice = false;
+  bool restoreNoLightNotice = false;
+  // After a call that may have switched the light on: its result is settled by
+  // update() once the probe has decided.
+  void noteSwitchOn(Pending who);
+  // A probe that found no light leaves the light off here too, and raises the
+  // notice (the restore one for begin()'s switch-on).
+  void settleSwitchOn(bool userAsked);
+#endif
 
   static HalFrontlight instance;
 };

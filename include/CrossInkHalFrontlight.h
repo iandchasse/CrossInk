@@ -32,12 +32,22 @@ class HalFrontlight {
     return false;
 #endif
   }
+  constexpr bool warmthIsSelection() const { return false; }
   void setBrightness(const uint8_t percent) { lastBrightness = percent > 100 ? 100 : percent; }
   void setWarmth(const uint8_t percent) { lastWarmth = percent > 100 ? 100 : percent; }
   void setOn(const bool on) { lit = on; }
   uint8_t brightness() const { return lastBrightness; }
   uint8_t warmth() const { return lastWarmth; }
   bool isOn() const { return lit; }
+  // No LED monitor or load probe: nothing faults, and every switch-on lights.
+  constexpr bool fault() const { return false; }
+  void update() {}
+  constexpr bool switchOnPending() const { return false; }
+  constexpr bool noLightFound() const { return false; }
+  constexpr bool stringMissing(const bool) const { return false; }
+  bool takeNoLightNotice() { return false; }
+  bool takeRestoreNoLightNotice() { return false; }
+  void prepareForSleep() {}
 
  private:
   uint8_t lastBrightness = 60;
