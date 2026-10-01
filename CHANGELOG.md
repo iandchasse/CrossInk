@@ -30,6 +30,8 @@
 - The on-screen keyboard now uses wider outlined keys with clearer spacing on touch and button devices.
 - Long status titles shorten faster when they do not fit the screen.
 - Leaving an EPUB or TXT reader releases rebuildable font buffers for other screens.
+- Silkscreen: CrossInk now uses the FreeInk SDK's shared Silkscreen branch, which brings keyboard updates to every device: the outer control keys line up with the top row, the German keyboard adds ä and ö, and the French keyboard gains long-press accents (è, ê, à, ç, ù, î and ô).
+- Silkscreen: with the shared SDK, the battery and clock text in screen headers is centred on the visible letters on every device.
 
 ### Fixed
 
@@ -56,6 +58,7 @@
 - Footnote choices can be selected directly on the reading page, with a list fallback for links without a visible target.
 - Changing global font or page layout settings from the pull-down panel on touch devices now updates the open book when it inherits those settings.
 - KOReader authentication now rejects unexpectedly large server responses to avoid crashes.
+- Silkscreen: with the shared SDK, saved settings files replace the old copy only once fully written, and the SD card's cached sectors are written back before sleep and before USB Drive takes over the card, on every device.
 
 ## [v1.6.0] - 2026-09-21
 
