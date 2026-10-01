@@ -33,6 +33,7 @@ class HalFrontlight {
 #endif
   }
   constexpr bool warmthIsSelection() const { return false; }
+  constexpr bool hasColourSelect() const { return false; }
   void setBrightness(const uint8_t percent) { lastBrightness = percent > 100 ? 100 : percent; }
   void setWarmth(const uint8_t percent) { lastWarmth = percent > 100 ? 100 : percent; }
   void setOn(const bool on) { lit = on; }

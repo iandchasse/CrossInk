@@ -17,8 +17,11 @@ class HalFrontlight {
   bool present() const { return manager.present(); }
   bool hasColorTemperature() const { return manager.hasColorTemperature(); }
   // Warmth picks one string (warm at >= 50%) instead of blending two
-  // (FrontlightConfig::colorSelectGpio).
+  // (FrontlightConfig::colorSelectGpio without colorBlendHz, or a string missing).
   bool warmthIsSelection() const;
+  // Both strings sit behind one colour select (FrontlightConfig::colorSelectGpio),
+  // blended or not.
+  bool hasColourSelect() const;
 
   // Brightness as 0-100 (total light on a warm/cool pair). Setting a value
   // while off leaves the light off; it is applied on the next on().

@@ -45,6 +45,7 @@
 - Silkscreen: network screens switch Wi-Fi off as soon as their work is done (update check results, KOReader sign-in and failed syncs, clock sync, a Calibre error, a failed Wi-Fi connection) instead of when you leave them, run at full speed only while they work, and leave sleep to the sleep timeout while they wait for you. The Wi-Fi list and the on-screen keyboard no longer keep the reader awake by themselves.
 - Silkscreen: Nearby stats sync, position sync and file transfer listen or look for another reader for up to 2 minutes, keep the reader awake only while an exchange runs, and switch the radio off on their result screens. Press Sync or Share, pick a found reader, or open the transfer again to restart it.
 - Silkscreen: shortcuts that start Wi-Fi or Nearby (sync progress, file transfer, Calibre, join network, hotspot, nearby position sync) do nothing while the battery reads at its cutoff.
+- Silkscreen: a front light with warm and cool strings now blends them for a warmth between the ends instead of picking one, once both strings have lit since the last reset (`-DSILKSCREEN_FRONTLIGHT_BLEND_HZ=0` in `frontlight_flags` keeps the fixed choice).
 
 ### Fixed
 
