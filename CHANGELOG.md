@@ -15,6 +15,7 @@
 - In-reader menu for X3/X4/X4 Classic have been updated to a modified version of the in-reader menu for touch devices
 - Chapter pages and book progress information is displayed in the frontlight drawer when in the reader for X4 Pro
 - Add a Cover Grid Home theme on devices with PSRAM, showing the current book and six library covers.
+- Silkscreen: add `silkscreen` and `silkscreen-debug` firmware builds for the Silkscreen reader board (ESP32-S3, 4.26" 800x480 panel, touchscreen and eight buttons, SDMMC card slot, USB Drive).
 
 ### Changed
 
