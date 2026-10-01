@@ -23,6 +23,7 @@
 - Silkscreen: on battery the reader sleeps after 15 minutes with no key press and no network client, or after the sleep timeout when that is longer, also on screens that keep it awake and with the timeout set to Never. Automatic page turns keep it awake, but an hour with no key press ends any session on battery.
 - Silkscreen: on battery the reader also sleeps 3 minutes after a wake that gets no key press, a minute after an SD card error, and when the battery reaches its cutoff, stopping any download first. Key presses that Quick Lock rejects do not keep it awake, and its own restarts (the Loading screen) do not reset these limits.
 - Silkscreen: USB Drive ends a few seconds after the USB cable is pulled.
+- Silkscreen: an SD card firmware update asks for USB power instead of starting when the battery is too low to finish it.
 
 ### Changed
 

@@ -2,6 +2,9 @@
 
 #include <Arduino.h>
 #include <GfxRenderer.h>
+#ifndef SIMULATOR
+#include <HalPowerManager.h>
+#endif
 #include <HalStorage.h>
 #include <I18n.h>
 #include <Logging.h>
@@ -67,6 +70,16 @@ void SdFirmwareUpdateActivity::onPickerResult(const ActivityResult& result) {
 }
 
 bool SdFirmwareUpdateActivity::validateFirmware() {
+#ifndef SIMULATOR
+  // PowerConfig::firmwareUpdateMinMv (never on boards without it, or on external
+  // power): a write that browns out halfway is worse than no update. Checked
+  // again right before the write.
+  if (powerManager.firmwareUpdateBlockedByBattery()) {
+    errorMessage = tr(STR_BATTERY_TOO_LOW_FOR_UPDATE);
+    return false;
+  }
+#endif
+
   HalFile file;
   if (!Storage.openFileForRead("FW", firmwarePath.c_str(), file) || !file) {
     errorMessage = tr(STR_FIRMWARE_FILE_OPEN_FAILED);
@@ -152,6 +165,15 @@ void SdFirmwareUpdateActivity::onConfirmationResult(const ActivityResult& result
 }
 
 void SdFirmwareUpdateActivity::performUpdate() {
+#ifndef SIMULATOR
+  if (powerManager.firmwareUpdateBlockedByBattery()) {  // USB may have left during the prompt
+    errorMessage = tr(STR_BATTERY_TOO_LOW_FOR_UPDATE);
+    RenderLock lock(*this);
+    state = State::FAILED;
+    requestUpdate();
+    return;
+  }
+#endif
   LOG_INF("FW", "SD update: %s (%u bytes)", firmwarePath.c_str(), static_cast<unsigned>(firmwareSize));
 
   auto progressCb = +[](size_t written, size_t total, void* ctx) {
