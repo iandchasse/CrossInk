@@ -1,6 +1,9 @@
 #include "OtaUpdateActivity.h"
 
 #include <GfxRenderer.h>
+#ifndef SIMULATOR
+#include <HalPowerManager.h>
+#endif
 #include <I18n.h>
 #include <WiFi.h>
 
@@ -15,6 +18,7 @@
 #include "components/UITheme.h"
 #include "fontIds.h"
 #include "network/OtaUpdater.h"
+#include "network/RadioIdle.h"
 
 namespace {
 bool hasActiveWifiConnection() { return WiFi.status() == WL_CONNECTED && WiFi.localIP() != IPAddress(0, 0, 0, 0); }
@@ -108,12 +112,19 @@ void OtaUpdateActivity::onExit() {
   // Success path reboots via the SHUTTING_DOWN state's plain ESP.restart()
   // (loop() above) so the new firmware boots normally. Back-out paths land
   // here with wifi still active; silent-restart to free the LWIP/mbedTLS
-  // fragmentation, same as the other wifi activities.
-  if (WiFi.getMode() != WIFI_MODE_NULL) {
-    WiFi.disconnect(false);
-    delay(30);
+  // fragmentation, same as the other wifi activities. A radio already switched
+  // off at a result still leaves that fragmentation behind.
+  if (WiFi.getMode() != WIFI_MODE_NULL || radioReleased) {
+    if (WiFi.getMode() != WIFI_MODE_NULL) {
+      WiFi.disconnect(false);
+      delay(30);
+    }
     silentRestart();
   }
+}
+
+bool OtaUpdateActivity::skipLoopDelay() {
+  return !radioidle::enabled() || state == CHECKING_FOR_UPDATE || state == UPDATE_IN_PROGRESS;
 }
 
 void OtaUpdateActivity::render(RenderLock&&) {
@@ -200,6 +211,19 @@ void OtaUpdateActivity::render(RenderLock&&) {
 }
 
 void OtaUpdateActivity::runUpdateInstall() {
+#ifndef SIMULATOR
+  // PowerConfig::firmwareUpdateMinMv (never on boards without it, or on external
+  // power): a write that browns out halfway is worse than no update.
+  if (powerManager.firmwareUpdateBlockedByBattery()) {
+    {
+      RenderLock lock(*this);
+      failureMessage = StrId::STR_BATTERY_TOO_LOW_FOR_UPDATE;
+      state = FAILED;
+    }
+    requestUpdate(true);
+    return;
+  }
+#endif
   {
     RenderLock lock(*this);
     failureMessage = StrId::STR_UPDATE_FAILED;
@@ -252,6 +276,10 @@ void OtaUpdateActivity::runUpdateInstall() {
 }
 
 void OtaUpdateActivity::loop() {
+  // PowerConfig::radioOffWhenIdle: a result screen only waits for the user to
+  // leave, so the radio goes off now instead of when they do.
+  if ((state == NO_UPDATE || state == FAILED) && radioidle::release("OTA")) radioReleased = true;
+
   if ((state == WAITING_CONFIRMATION || state == FAILED || state == NO_UPDATE) &&
       TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
     finish();

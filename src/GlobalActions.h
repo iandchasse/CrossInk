@@ -63,5 +63,11 @@ void enterDeepSleep(bool fromTimeout = false);
 bool handleGlobalPowerButtonAction(CrossPointSettings::SHORT_PWRBTN action,
                                    QuickLockTrigger quickLockTrigger = QuickLockTrigger::None);
 bool dispatchShortcutAction(CrossPointSettings::SHORT_PWRBTN action);
+// PowerConfig::lowBatteryCutoffMv (Silkscreen): a shortcut that would start
+// Wi-Fi or ESP-NOW (or open the file-transfer menu) is refused, and does
+// nothing, while the battery reads at or below the cutoff; loop() sleeps once
+// the reading repeats. Always false for other actions and on other boards.
+bool radioShortcutRefused(CrossPointSettings::SHORT_PWRBTN action);
+bool radioShortcutRefused(CrossPointSettings::LONG_PRESS_MENU_ACTION action);
 bool startGlobalSyncProgress(bool networkBootReady = false,
                              uint8_t readerOrientation = CrossPointSettings::ORIENTATION_COUNT);

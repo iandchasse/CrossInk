@@ -12,6 +12,7 @@
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/RadioIdle.h"
 
 namespace {
 TouchActionButtons::Layout backupActions(const GfxRenderer& renderer, const ThemeMetrics& metrics) {
@@ -34,6 +35,8 @@ void BackupStatsActivity::onEnter() {
 }
 
 void BackupStatsActivity::onExit() { Activity::onExit(); }
+
+bool BackupStatsActivity::skipLoopDelay() { return !radioidle::enabled(); }
 
 void BackupStatsActivity::render(RenderLock&&) {
   const auto& metrics = UITheme::getInstance().getMetrics();

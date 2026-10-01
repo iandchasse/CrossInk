@@ -42,14 +42,8 @@ class FontDownloadActivity : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool preventAutoSleep() override {
-    return state_ == LOADING_MANIFEST || state_ == DOWNLOADING ||
-           // The download is synchronous and blocks the main loop until it
-           // completes, so activityManager.preventAutoSleep() is never polled
-           // during downloading.
-           state_ == COMPLETE || state_ == ERROR;
-  }
-  bool skipLoopDelay() override { return true; }
+  bool preventAutoSleep() override;
+  bool skipLoopDelay() override;
 
  private:
   enum State {
@@ -122,6 +116,9 @@ class FontDownloadActivity : public Activity {
   std::string errorMessage_;
   std::string errorHint_;
   bool cancelRequested_ = false;
+  // COMPLETE/ERROR has been polled by preventAutoSleep() since the manifest
+  // load or download that ended there.
+  bool resultPolled_ = false;
   // Set when a blocking download consumed Home; exit only after its file and
   // network resources have unwound.
   bool goHomeRequested_ = false;

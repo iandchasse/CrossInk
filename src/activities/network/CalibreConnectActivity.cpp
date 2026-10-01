@@ -14,6 +14,7 @@
 #include "components/CompactHeader.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/RadioIdle.h"
 
 namespace {
 constexpr const char* HOSTNAME = "crosspoint";
@@ -59,9 +60,11 @@ void CalibreConnectActivity::onExit() {
 
   MDNS.end();
 
-  if (WiFi.getMode() != WIFI_MODE_NULL) {
-    WiFi.disconnect(false);
-    delay(30);
+  if (WiFi.getMode() != WIFI_MODE_NULL || radioReleased) {
+    if (WiFi.getMode() != WIFI_MODE_NULL) {
+      WiFi.disconnect(false);
+      delay(30);
+    }
     if (returnToReader) {
       silentRestartToReader();
     } else {
@@ -112,6 +115,8 @@ void CalibreConnectActivity::loop() {
   if (mappedInput.wasPressed(MappedInputManager::Button::Back)) {
     exitRequested = true;
   }
+  // The error screen only waits for Back (PowerConfig::radioOffWhenIdle).
+  if (state == CalibreConnectState::ERROR && radioidle::release("CAL")) radioReleased = true;
 
   if (webServer && webServer->isRunning()) {
     const unsigned long timeSinceLastHandleClient = millis() - lastHandleClientTime;

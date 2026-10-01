@@ -31,6 +31,7 @@
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/RadioIdle.h"
 #include "network/WifiUtils.h"
 
 namespace {
@@ -481,6 +482,10 @@ void KOReaderSyncActivity::performSync() {
 }
 
 void KOReaderSyncActivity::performUpload() {
+  if (modemSleepOn) {
+    WiFi.setSleep(false);  // modem sleep can stall the transfer into a timeout
+    modemSleepOn = false;
+  }
   {
     RenderLock lock(*this);
     state = UPLOADING;
@@ -799,6 +804,16 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 }
 
 void KOReaderSyncActivity::loop() {
+  // PowerConfig::radioOffWhenIdle: a failed sync only waits for a key, so its
+  // radio goes off (onExit() still restarts); a result that may still upload
+  // keeps the station in modem sleep.
+  if (state == SYNC_FAILED) {
+    radioidle::release("KOSync");
+  } else if ((state == SHOWING_RESULT || state == NO_REMOTE_PROGRESS) && !modemSleepOn && radioidle::enabled()) {
+    WiFi.setSleep(true);
+    modemSleepOn = true;
+  }
+
   if (consumeInitialConfirmRelease()) {
     return;
   }

@@ -33,7 +33,9 @@ class KeyboardEntryActivity : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool preventAutoSleep() override { return true; }
+  // With PowerConfig::radioOffWhenIdle the user's timeout governs typing (every
+  // key counts as input), not a hold that only the awake ceiling ends.
+  bool preventAutoSleep() override;
 
  private:
   std::string title;

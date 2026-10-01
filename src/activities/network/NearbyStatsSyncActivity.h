@@ -11,6 +11,7 @@
 #include "activities/Activity.h"
 #include "activities/ScreenTransitionRefresh.h"
 #include "activities/reader/GlobalReadingStats.h"
+#include "network/RadioIdle.h"
 
 class NearbyStatsSyncActivity final : public Activity {
  public:
@@ -23,7 +24,11 @@ class NearbyStatsSyncActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool preventAutoSleep() override { return true; }
+  // With PowerConfig::radioOffWhenIdle only while an exchange runs (bounded by
+  // its timeout); listening and the results leave sleep to the user's timeout.
+  bool preventAutoSleep() override {
+    return !radioidle::enabled() || state_ == State::DISCOVERING || state_ == State::SYNCING;
+  }
   bool skipLoopDelay() override { return state_ == State::DISCOVERING || state_ == State::SYNCING; }
 
   void enqueueEspNowPacket(const uint8_t* sourceMac, const uint8_t* data, int length);
@@ -62,6 +67,7 @@ class NearbyStatsSyncActivity final : public Activity {
   uint8_t localStatsSize_ = 0;
 
   uint32_t syncStartedMs_ = 0;
+  uint32_t stateEnteredMs_ = 0;
   uint32_t lastHelloMs_ = 0;
   uint32_t lastStatsSendMs_ = 0;
   std::string peerId_;
@@ -70,6 +76,7 @@ class NearbyStatsSyncActivity final : public Activity {
 
   bool beginEspNow();
   void endEspNow();
+  void stopIdleRadio();
   bool prepareLocalStats();
   void startSync();
   void processEvents();

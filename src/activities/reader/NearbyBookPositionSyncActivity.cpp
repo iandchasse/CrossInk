@@ -774,6 +774,7 @@ void NearbyBookPositionSyncActivity::loop() {
   if (consumeInitialInputRelease()) return;
 
   processEvents();
+  stopIdleRadio();
 
   const auto& headerMetrics = UITheme::getInstance().getMetrics();
   const Rect headerScreen = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
@@ -863,7 +864,31 @@ void NearbyBookPositionSyncActivity::endEspNow() {
   WiFi.mode(WIFI_OFF);
 }
 
+// PowerConfig::radioOffWhenIdle: ESP-NOW (at full radio power) runs only while
+// this screen listens for a peer, up to radioidle::NEARBY_WAIT_MS, and while an
+// exchange runs. A result switches it off (onExit() still restarts to the
+// reader); Share starts it again.
+void NearbyBookPositionSyncActivity::stopIdleRadio() {
+  if (!radioidle::enabled() || WiFi.getMode() == WIFI_MODE_NULL) return;
+  const uint32_t inStateMs = millis() - stateEnteredMs_;
+  if (state_ == State::READY && inStateMs >= radioidle::NEARBY_WAIT_MS) {
+    LOG_INF(LOG_TAG, "No reader for %lu s; radio off", static_cast<unsigned long>(inStateMs / 1000));
+    endEspNow();
+    setError(tr(STR_NEARBY_STOPPED_WAITING));
+  } else if (state_ == State::ERROR || state_ == State::SYNCED ||
+             (state_ == State::SHOWING_RESULT && inStateMs >= radioidle::NEARBY_RESULT_LINGER_MS)) {
+    // A shown result still acks a position the sharer sends again because it
+    // missed the first ack.
+    endEspNow();
+  }
+}
+
 void NearbyBookPositionSyncActivity::startSync() {
+  // The radio went off while the screen waited (PowerConfig::radioOffWhenIdle).
+  if (radioidle::enabled() && WiFi.getMode() == WIFI_MODE_NULL && !beginEspNow()) {
+    setError(tr(STR_NEARBY_POSITION_START_FAILED));
+    return;
+  }
   errorMessage_.clear();
   peerSeen_ = false;
   peerPositionReceived_ = false;
@@ -1264,6 +1289,7 @@ void NearbyBookPositionSyncActivity::returnToReader(const bool suppressBackRelea
 void NearbyBookPositionSyncActivity::setState(const State state) {
   if (state_ == state) return;
   state_ = state;
+  stateEnteredMs_ = millis();
   requestUpdate();
 }
 

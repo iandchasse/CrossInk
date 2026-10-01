@@ -25,6 +25,9 @@ class OtaUpdateActivity : public Activity {
   unsigned int lastUpdaterPercentage = UNINITIALIZED_PERCENTAGE;
   StrId failureMessage = StrId::STR_UPDATE_FAILED;
   OtaUpdater updater;
+  // Wi-Fi was switched off at a result (PowerConfig::radioOffWhenIdle); onExit()
+  // still restarts to clear the heap the radio left.
+  bool radioReleased = false;
 
   void onWifiSelectionComplete(bool success);
   void runUpdateInstall();
@@ -37,5 +40,7 @@ class OtaUpdateActivity : public Activity {
   void loop() override;
   void render(RenderLock&&) override;
   bool preventAutoSleep() override { return state == CHECKING_FOR_UPDATE || state == UPDATE_IN_PROGRESS; }
-  bool skipLoopDelay() override { return true; }  // Prevent power-saving mode
+  // Prevent power-saving mode while the update works; with
+  // PowerConfig::radioOffWhenIdle only then, since a result screen needs no spinning.
+  bool skipLoopDelay() override;
 };

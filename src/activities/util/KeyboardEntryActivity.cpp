@@ -14,6 +14,7 @@
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/RadioIdle.h"
 
 namespace fui = freeink::ui;
 
@@ -163,6 +164,8 @@ void KeyboardEntryActivity::onEnter() {
 }
 
 void KeyboardEntryActivity::onExit() { Activity::onExit(); }
+
+bool KeyboardEntryActivity::preventAutoSleep() { return !radioidle::enabled(); }
 
 const fui::KeyboardLayout& KeyboardEntryActivity::currentLayout() const {
   if (symbols) return fui::builtinKeyboardLayout(layoutId, shifted, true);

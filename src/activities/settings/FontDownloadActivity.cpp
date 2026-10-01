@@ -26,6 +26,7 @@
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
 #include "network/HttpDownloader.h"
+#include "network/RadioIdle.h"
 
 namespace fui = freeink::ui;
 
@@ -195,6 +196,28 @@ void FontDownloadActivity::onEnter() {
                          [this](const ActivityResult& result) { onWifiSelectionComplete(!result.isCancelled); });
 }
 
+bool FontDownloadActivity::preventAutoSleep() {
+  if (state_ != COMPLETE && state_ != ERROR) {
+    resultPolled_ = false;
+    return state_ == LOADING_MANIFEST || state_ == DOWNLOADING;
+  }
+  // The manifest load and the download are synchronous and block the main loop,
+  // so this is first polled on the result, with the idle timer run down by the
+  // work. Refresh it once, then (PowerConfig::radioOffWhenIdle) the user's
+  // timeout governs the result screen; other boards hold it off until left.
+  if (!radioidle::enabled()) return true;
+  const bool refresh = !resultPolled_;
+  resultPolled_ = true;
+  return refresh;
+}
+
+// Spin only while the manifest or a download is in flight
+// (PowerConfig::radioOffWhenIdle; always on other boards). The radio stays on:
+// the lists behind the result screens download again.
+bool FontDownloadActivity::skipLoopDelay() {
+  return !radioidle::enabled() || state_ == LOADING_MANIFEST || state_ == DOWNLOADING;
+}
+
 void FontDownloadActivity::onExit() {
   Activity::onExit();
 
@@ -221,6 +244,7 @@ void FontDownloadActivity::onWifiSelectionComplete(const bool success) {
   {
     RenderLock lock(*this);
     state_ = LOADING_MANIFEST;
+    resultPolled_ = false;
   }
   requestUpdateAndWait();
 
@@ -614,6 +638,7 @@ void FontDownloadActivity::updateAll() {
     {
       RenderLock lock(*this);
       state_ = LOADING_MANIFEST;
+      resultPolled_ = false;
       errorMessage_.clear();
       errorHint_.clear();
     }
@@ -736,6 +761,7 @@ void FontDownloadActivity::returnToFamilyList() {
     {
       RenderLock lock(*this);
       state_ = LOADING_MANIFEST;
+      resultPolled_ = false;
       errorMessage_.clear();
       errorHint_.clear();
     }
@@ -794,6 +820,7 @@ void FontDownloadActivity::downloadFamily(ManifestFamily& family) {
   {
     RenderLock lock(*this);
     state_ = DOWNLOADING;
+    resultPolled_ = false;
     currentFileIndex_ = 0;
     currentFileTotal_ = family.fileCount;
     fileProgress_ = 0;

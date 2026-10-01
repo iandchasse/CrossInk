@@ -14,6 +14,7 @@
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/RadioIdle.h"
 #include "network/WifiUtils.h"
 
 void KOReaderAuthActivity::onWifiSelectionComplete(const bool success) {
@@ -130,6 +131,9 @@ void KOReaderAuthActivity::render(RenderLock&&) {
 
 void KOReaderAuthActivity::loop() {
   if (state == SUCCESS || state == FAILED) {
+    // The result only waits for Back (PowerConfig::radioOffWhenIdle); onExit()
+    // restarts out of the network boot either way.
+    radioidle::release("KOAuth");
     const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
     if (TouchHeaderBackButton::wasTapped(mappedInput, header) ||
         mappedInput.wasPressed(MappedInputManager::Button::Back)) {

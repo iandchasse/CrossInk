@@ -24,6 +24,7 @@
 - Silkscreen: on battery the reader also sleeps 3 minutes after a wake that gets no key press, a minute after an SD card error, and when the battery reaches its cutoff, stopping any download first. Key presses that Quick Lock rejects do not keep it awake, and its own restarts (the Loading screen) do not reset these limits.
 - Silkscreen: USB Drive ends a few seconds after the USB cable is pulled.
 - Silkscreen: an SD card firmware update asks for USB power instead of starting when the battery is too low to finish it.
+- Silkscreen: an online update asks for USB power instead of installing when the battery is too low to finish it.
 
 ### Changed
 
@@ -41,6 +42,9 @@
 - Leaving an EPUB or TXT reader releases rebuildable font buffers for other screens.
 - Silkscreen: CrossInk now uses the FreeInk SDK's shared Silkscreen branch, which brings keyboard updates to every device: the outer control keys line up with the top row, the German keyboard adds ä and ö, and the French keyboard gains long-press accents (è, ê, à, ç, ù, î and ô).
 - Silkscreen: with the shared SDK, the battery and clock text in screen headers is centred on the visible letters on every device.
+- Silkscreen: network screens switch Wi-Fi off as soon as their work is done (update check results, KOReader sign-in and failed syncs, clock sync, a Calibre error, a failed Wi-Fi connection) instead of when you leave them, run at full speed only while they work, and leave sleep to the sleep timeout while they wait for you. The Wi-Fi list and the on-screen keyboard no longer keep the reader awake by themselves.
+- Silkscreen: Nearby stats sync, position sync and file transfer listen or look for another reader for up to 2 minutes, keep the reader awake only while an exchange runs, and switch the radio off on their result screens. Press Sync or Share, pick a found reader, or open the transfer again to restart it.
+- Silkscreen: shortcuts that start Wi-Fi or Nearby (sync progress, file transfer, Calibre, join network, hotspot, nearby position sync) do nothing while the battery reads at its cutoff.
 
 ### Fixed
 

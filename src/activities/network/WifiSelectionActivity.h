@@ -164,5 +164,7 @@ class WifiSelectionActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool preventAutoSleep() override { return true; }
+  // While a scan or a connection attempt runs; always on boards without
+  // PowerConfig::radioOffWhenIdle.
+  bool preventAutoSleep() override;
 };

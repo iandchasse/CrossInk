@@ -12,6 +12,7 @@
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/RadioIdle.h"
 #include "util/BookCacheUtils.h"
 
 namespace {
@@ -103,6 +104,8 @@ void ClearCacheActivity::render(RenderLock&&) {
     return;
   }
 }
+
+bool ClearCacheActivity::skipLoopDelay() { return !radioidle::enabled() || state == CLEARING; }
 
 void ClearCacheActivity::clearCache() {
   // Open .crosspoint directory

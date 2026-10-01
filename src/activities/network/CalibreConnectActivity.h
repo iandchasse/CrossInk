@@ -30,6 +30,9 @@ class CalibreConnectActivity final : public Activity {
   unsigned long lastProcessedCompleteAt = 0;  // Track which server value we've already processed
   bool exitRequested = false;
   bool returnToReader = false;
+  // Wi-Fi was switched off on the error screen (PowerConfig::radioOffWhenIdle);
+  // onExit() still restarts out of the network boot.
+  bool radioReleased = false;
 
   void renderServerRunning() const;
 

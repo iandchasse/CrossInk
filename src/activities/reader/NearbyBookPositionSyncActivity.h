@@ -13,6 +13,7 @@
 #include "ProgressMapper.h"
 #include "activities/Activity.h"
 #include "activities/ScreenTransitionRefresh.h"
+#include "network/RadioIdle.h"
 
 class NearbyBookPositionSyncActivity final : public Activity {
  public:
@@ -29,7 +30,12 @@ class NearbyBookPositionSyncActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool preventAutoSleep() override { return true; }
+  // With PowerConfig::radioOffWhenIdle only while an exchange runs (bounded by
+  // its timeout); listening and the results leave sleep to the user's timeout.
+  bool preventAutoSleep() override {
+    return !radioidle::enabled() || state_ == State::DISCOVERING || state_ == State::SYNCING ||
+           state_ == State::APPLYING;
+  }
   bool isReaderActivity() const override { return true; }
   bool allowPowerAsConfirmInReaderMode() const override { return true; }
   bool skipLoopDelay() override {
@@ -112,6 +118,7 @@ class NearbyBookPositionSyncActivity final : public Activity {
   std::array<uint8_t, 6> peerDeviceMac_ = {};
 
   uint32_t syncStartedMs_ = 0;
+  uint32_t stateEnteredMs_ = 0;
   uint32_t lastHelloMs_ = 0;
   uint32_t lastPositionSendMs_ = 0;
 
@@ -119,6 +126,7 @@ class NearbyBookPositionSyncActivity final : public Activity {
   bool ensureEpubLoaded();
   bool beginEspNow();
   void endEspNow();
+  void stopIdleRadio();
   void startSync();
   void processEvents();
   void handleEvent(const SyncEvent& event);

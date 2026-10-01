@@ -23,6 +23,7 @@
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/RadioIdle.h"
 
 #if defined(ARDUINO_ARCH_ESP32) && !defined(SIMULATOR)
 #include <esp_system.h>
@@ -143,6 +144,14 @@ void NearbyBookTransferActivity::onExit() {
   Activity::onExit();
 }
 
+// With PowerConfig::radioOffWhenIdle only while a peer search or a transfer
+// runs (each bounded by its timeout); listening, the prompts and the results
+// leave sleep to the user's timeout.
+bool NearbyBookTransferActivity::preventAutoSleep() {
+  return !radioidle::enabled() || state_ == State::Discovering || state_ == State::WaitingForApproval ||
+         state_ == State::Validating || state_ == State::Sending || state_ == State::Receiving;
+}
+
 bool NearbyBookTransferActivity::skipLoopDelay() {
   return state_ == State::Discovering || state_ == State::WaitingForApproval || state_ == State::Sending ||
          state_ == State::Receiving;
@@ -215,6 +224,7 @@ bool NearbyBookTransferActivity::sendAdvertisement(const uint8_t* destination) {
 
 void NearbyBookTransferActivity::selectPeer() {
   if (peerCount_ == 0 || selectedIndex_ < 0 || selectedIndex_ >= peerCount_) return;
+  if (!startRadio()) return;  // the list may have outlasted the search's radio (stopIdleRadio())
   peerMac_ = peers_[selectedIndex_].mac;
   retryCount_ = 0;
   setState(State::WaitingForApproval);
@@ -544,6 +554,7 @@ void NearbyBookTransferActivity::setState(const State state) {
   uiReady_ = false;
   app_.clearTapFlash();
   lastUiMs_ = millis();
+  stateEnteredMs_ = lastUiMs_;
   requestUpdate();
 }
 
@@ -628,6 +639,44 @@ void NearbyBookTransferActivity::updateTimers() {
     resendPending();
   } else {
     sendComplete();
+  }
+}
+
+// PowerConfig::radioOffWhenIdle: ESP-NOW (at full radio power) runs only while
+// this screen waits for a sender or searches for receivers, each up to
+// radioidle::NEARBY_WAIT_MS, while an offer waits for an answer the sender still
+// expects, and while a transfer runs. A result switches it off; exitAfterRadio()
+// still restarts.
+void NearbyBookTransferActivity::stopIdleRadio() {
+  if (!radioidle::enabled() || !transport_.started()) return;
+  const uint32_t inStateMs = millis() - stateEnteredMs_;
+  // The sender gives up on an unanswered offer after this long.
+  constexpr uint32_t OFFER_WAIT_MS = MAX_APPROVAL_RETRIES * RETRY_INTERVAL_MS * 2;
+  switch (state_) {
+    case State::Listening:
+      if (inStateMs >= radioidle::NEARBY_WAIT_MS) setError(tr(STR_NEARBY_STOPPED_WAITING));
+      break;
+    case State::Discovering:
+      if (inStateMs >= radioidle::NEARBY_WAIT_MS) setError(tr(STR_NEARBY_POSITION_NO_READER));
+      break;
+    case State::DeviceList:
+      // Keep the list; selectPeer() starts the radio again.
+      if (inStateMs >= radioidle::NEARBY_WAIT_MS) stopRadio();
+      break;
+    case State::OfferPrompt:
+    case State::CollisionPrompt:
+      if (inStateMs >= OFFER_WAIT_MS) setError(tr(STR_NEARBY_TRANSFER_TIMEOUT));
+      break;
+    case State::Success:
+      // A receiver answers a sender that resends Complete because it missed the
+      // result.
+      if (mode_ == Mode::Send || inStateMs >= radioidle::NEARBY_RESULT_LINGER_MS) stopRadio();
+      break;
+    case State::Error:
+      stopRadio();
+      break;
+    default:
+      break;
   }
 }
 
@@ -752,6 +801,7 @@ void NearbyBookTransferActivity::loop() {
   sendPendingAccept();
   processPackets();
   updateTimers();
+  stopIdleRadio();
 
   if (TouchHeaderBackButton::wasTapped(mappedInput, renderer) ||
       mappedInput.wasReleased(MappedInputManager::Button::Back)) {

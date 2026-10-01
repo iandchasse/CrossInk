@@ -10,7 +10,9 @@ class BackupStatsActivity final : public Activity {
   void onEnter() override;
   void onExit() override;
   void loop() override;
-  bool skipLoopDelay() override { return true; }
+  // The backup runs inside loop(), so no later pass finds it working: with
+  // PowerConfig::radioOffWhenIdle the result screens take the normal loop delay.
+  bool skipLoopDelay() override;
   void render(RenderLock&&) override;
 
  private:

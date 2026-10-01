@@ -612,8 +612,48 @@ void notifyQuickLockChanged() {
   }
 }
 
+namespace {
+// radioShortcutRefused()'s battery check (HalPowerManager::radioStartBlockedByBattery()).
+bool refuseRadioStartOnBattery() {
+#if FREEINK_CAP_POWER_POLICY
+  return powerManager.radioStartBlockedByBattery();  // logs the reading
+#else
+  return false;
+#endif
+}
+}  // namespace
+
+bool radioShortcutRefused(const CrossPointSettings::SHORT_PWRBTN action) {
+  switch (action) {
+    case CrossPointSettings::SHORT_PWRBTN::SYNC_PROGRESS:
+    case CrossPointSettings::SHORT_PWRBTN::NEARBY_POSITION_SYNC:
+    case CrossPointSettings::SHORT_PWRBTN::FILE_TRANSFER:
+    case CrossPointSettings::SHORT_PWRBTN::CALIBRE_WIRELESS:
+    case CrossPointSettings::SHORT_PWRBTN::JOIN_NETWORK:
+    case CrossPointSettings::SHORT_PWRBTN::CREATE_HOTSPOT:
+      return refuseRadioStartOnBattery();
+    default:
+      return false;
+  }
+}
+
+bool radioShortcutRefused(const CrossPointSettings::LONG_PRESS_MENU_ACTION action) {
+  switch (action) {
+    case CrossPointSettings::LONG_MENU_SYNC_PROGRESS:
+    case CrossPointSettings::LONG_MENU_FILE_TRANSFER:
+    case CrossPointSettings::LONG_MENU_CALIBRE_WIRELESS:
+    case CrossPointSettings::LONG_MENU_JOIN_NETWORK:
+    case CrossPointSettings::LONG_MENU_CREATE_HOTSPOT:
+      return refuseRadioStartOnBattery();
+    default:
+      return false;
+  }
+}
+
 bool handleGlobalPowerButtonAction(const CrossPointSettings::SHORT_PWRBTN action,
                                    const QuickLockTrigger quickLockTrigger) {
+  // A refused radio shortcut is consumed, so no reader handles it instead.
+  if (radioShortcutRefused(action)) return true;
   switch (action) {
     case CrossPointSettings::SHORT_PWRBTN::SLEEP:
     case CrossPointSettings::SHORT_PWRBTN::SLEEP_ONLY:
@@ -709,6 +749,7 @@ bool handleGlobalPowerButtonAction(const CrossPointSettings::SHORT_PWRBTN action
 
 bool dispatchShortcutAction(const CrossPointSettings::SHORT_PWRBTN action) {
   if (action == CrossPointSettings::SHORT_PWRBTN::READING_STATS && !SETTINGS.shouldTrackReadingStats()) return false;
+  if (radioShortcutRefused(action)) return true;
   // An EPUB reader may have a per-book orientation that is restored during
   // teardown. Let it hand off Sync Progress before the global restart drops
   // that transient setting.

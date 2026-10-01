@@ -27,7 +27,7 @@ class NearbyBookTransferActivity final : public Activity {
   void onExit() override;
   void loop() override;
   void render(RenderLock&&) override;
-  bool preventAutoSleep() override { return true; }
+  bool preventAutoSleep() override;
   bool skipLoopDelay() override;
 
  private:
@@ -85,6 +85,7 @@ class NearbyBookTransferActivity final : public Activity {
   uint32_t sessionId_ = 0;
   uint32_t lastActionMs_ = 0;
   uint32_t lastUiMs_ = 0;
+  uint32_t stateEnteredMs_ = 0;
   uint8_t retryCount_ = 0;
 
   std::string offeredFileName_;
@@ -132,6 +133,7 @@ class NearbyBookTransferActivity final : public Activity {
   void openReceivedFile();
   void chooseDestinationFolder();
   void updateTimers();
+  void stopIdleRadio();
   void updateNavigation();
   void maybeRefreshProgress();
   bool isMenuState() const;

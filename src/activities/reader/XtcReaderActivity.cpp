@@ -1039,6 +1039,7 @@ bool XtcReaderActivity::supportsQuickAction(const CrossPointSettings::SHORT_PWRB
 }
 
 bool XtcReaderActivity::executeReaderShortcutAction(const CrossPointSettings::SHORT_PWRBTN action) {
+  if (radioShortcutRefused(action)) return true;
   switch (action) {
     case CrossPointSettings::SHORT_PWRBTN::PAGE_TURN:
       shortcutPageTurnPending = true;
@@ -1076,7 +1077,9 @@ bool XtcReaderActivity::executeReaderShortcutAction(const CrossPointSettings::SH
 }
 
 bool XtcReaderActivity::executeLongPressBackAction() {
-  switch (static_cast<CrossPointSettings::LONG_PRESS_MENU_ACTION>(SETTINGS.longPressBackAction)) {
+  const auto action = static_cast<CrossPointSettings::LONG_PRESS_MENU_ACTION>(SETTINGS.longPressBackAction);
+  if (radioShortcutRefused(action)) return true;
+  switch (action) {
     case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_SLEEP:
       enterDeepSleep();
       return true;

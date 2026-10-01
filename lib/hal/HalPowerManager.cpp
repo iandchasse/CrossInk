@@ -377,6 +377,22 @@ bool HalPowerManager::releaseIdleRadio(const char* tag) {
   return true;
 }
 
+bool HalPowerManager::radioStartBlockedByBattery() {
+  const uint16_t cutoffMv = BoardConfig::powerPolicy().lowBatteryCutoffMv;
+  if (cutoffMv == 0) return false;
+  if (lowBatteryCutoffTripped()) return true;
+  // lowBatteryCutoffTripped() has just taken a reading, or repeats the last one
+  // within the second; this asks for that reading and judges it against the
+  // cutoff itself, without the radio allowance, since the radio would add load.
+  static const BatteryMonitor battery;
+  bool known = false;
+  uint16_t mv = 0;
+  (void)battery.isBelowCutoff(&known, &mv, WiFi.getMode() != WIFI_MODE_NULL);
+  if (!known || mv > cutoffMv) return false;
+  LOG_INF("PWR", "Battery at %u mV, at or below the %u mV cutoff; not starting the radio", mv, cutoffMv);
+  return true;
+}
+
 bool HalPowerManager::firmwareUpdateBlockedByBattery() const {
   const uint16_t minMv = BoardConfig::powerPolicy().firmwareUpdateMinMv;
   if (minMv == 0) return false;

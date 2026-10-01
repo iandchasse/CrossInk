@@ -15,6 +15,7 @@
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#include "network/RadioIdle.h"
 
 void ClockSyncActivity::onEnter() {
   Activity::onEnter();
@@ -40,6 +41,8 @@ void ClockSyncActivity::onExit() {
     WiFi.mode(WIFI_OFF);
   }
 }
+
+bool ClockSyncActivity::skipLoopDelay() { return !radioidle::enabled() || state == SYNCING; }
 
 void ClockSyncActivity::launchWifiSelection() {
   LOG_INF("CLK", "Manual sync requested without WiFi, launching WiFi selection");
@@ -93,6 +96,9 @@ void ClockSyncActivity::loop() {
     // requestUpdateAndWait below forces the render before we block on WiFi.
     requestUpdateAndWait();
     runSync();
+    // The result screen only waits for Back: a radio this screen brought up goes
+    // off now (PowerConfig::radioOffWhenIdle), not when the user leaves.
+    if (shouldTearDownWifiOnExit) radioidle::release("CLK");
     return;
   }
 

@@ -4182,6 +4182,11 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuAction action, const 
       break;
     }
     case EpubReaderMenuAction::SYNC: {
+      // Every reader path to the sync (menu, shortcuts, Quick Actions) ends here.
+      if (radioShortcutRefused(CrossPointSettings::SHORT_PWRBTN::SYNC_PROGRESS)) {
+        requestUpdate();
+        break;
+      }
       if (!KOREADER_STORE.hasCredentials()) {
         pauseReadingPaceTimer("koreader_settings");
         startActivityForResult(std::make_unique<KOReaderSettingsActivity>(renderer, mappedInput),
@@ -4225,6 +4230,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuAction action, const 
       break;
     }
     case EpubReaderMenuAction::NEARBY_POSITION_SYNC: {
+      if (radioShortcutRefused(CrossPointSettings::SHORT_PWRBTN::NEARBY_POSITION_SYNC)) {
+        requestUpdate();
+        break;
+      }
       const int currentPage = section ? section->currentPage : nextPageNumber;
       const int totalPages = section ? section->estimatedTotalPages() : std::max(1, cachedChapterTotalPageCount);
       std::optional<uint16_t> paragraphIndex;
@@ -4996,6 +5005,7 @@ void EpubReaderActivity::executeReaderQuickAction(CrossPointSettings::LONG_PRESS
                                                   const bool dictionaryLookupFramebufferContainsPage,
                                                   const QuickLockTrigger quickLockTrigger) {
   clearPendingManualPageTurns();
+  if (radioShortcutRefused(action)) return;
   switch (action) {
     case CrossPointSettings::LONG_MENU_SLEEP:
       enterDeepSleep();

@@ -171,6 +171,14 @@ class HalPowerManager {
   // did; the caller still restarts on exit to clear the heap the radio left.
   static bool releaseIdleRadio(const char* tag);
 
+  // PowerConfig::lowBatteryCutoffMv (always false on boards without one): on the
+  // cell, the last battery reading was at or below the cutoff, or the cutoff has
+  // tripped. loop() sleeps once BatteryMonitor::CUTOFF_SAMPLES readings in a row
+  // are that low; until then a shortcut must not start Wi-Fi or ESP-NOW, whose
+  // load only drains the cell further. At most one reading a second; call from
+  // the loop task.
+  bool radioStartBlockedByBattery();
+
   // True when writing a firmware image now could brown out: on battery below
   // PowerConfig::firmwareUpdateMinMv (less PowerConfig::cutoffRadioAllowanceMv
   // while the radio is on). False on boards without the check, on external

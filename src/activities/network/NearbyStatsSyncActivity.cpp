@@ -244,6 +244,7 @@ void NearbyStatsSyncActivity::onExit() {
 
 void NearbyStatsSyncActivity::loop() {
   processEvents();
+  stopIdleRadio();
 
   if (TouchHeaderBackButton::wasTapped(mappedInput, renderer) ||
       mappedInput.wasPressed(MappedInputManager::Button::Back)) {
@@ -315,6 +316,22 @@ void NearbyStatsSyncActivity::endEspNow() {
   WiFi.mode(WIFI_OFF);
 }
 
+// PowerConfig::radioOffWhenIdle: ESP-NOW (at full radio power) runs only while
+// this screen listens for a peer, up to radioidle::NEARBY_WAIT_MS, and while an
+// exchange runs. A result switches it off; Sync starts it again.
+void NearbyStatsSyncActivity::stopIdleRadio() {
+  if (!radioidle::enabled() || WiFi.getMode() == WIFI_MODE_NULL) return;
+  const uint32_t inStateMs = millis() - stateEnteredMs_;
+  if (state_ == State::READY && inStateMs >= radioidle::NEARBY_WAIT_MS) {
+    LOG_INF(LOG_TAG, "No reader for %lu s; radio off", static_cast<unsigned long>(inStateMs / 1000));
+    endEspNow();
+    setError(tr(STR_NEARBY_STOPPED_WAITING));
+  } else if (state_ == State::ERROR || (state_ == State::SYNCED && inStateMs >= radioidle::NEARBY_RESULT_LINGER_MS)) {
+    // A synced peer may still resend its stats until it sees this reader's ack.
+    endEspNow();
+  }
+}
+
 bool NearbyStatsSyncActivity::prepareLocalStats() {
   localStatsReady_ = false;
   if (!ensureSyncedStatsDirectory()) {
@@ -335,6 +352,11 @@ bool NearbyStatsSyncActivity::prepareLocalStats() {
 }
 
 void NearbyStatsSyncActivity::startSync() {
+  // The radio went off while the screen waited (PowerConfig::radioOffWhenIdle).
+  if (radioidle::enabled() && WiFi.getMode() == WIFI_MODE_NULL && !beginEspNow()) {
+    setError("Could not start nearby sync");
+    return;
+  }
   errorMessage_.clear();
   peerSeen_ = false;
   peerStatsSaved_ = false;
@@ -616,6 +638,7 @@ void NearbyStatsSyncActivity::updateSyncProgress() {
 void NearbyStatsSyncActivity::setState(const State state) {
   if (state_ == state) return;
   state_ = state;
+  stateEnteredMs_ = millis();
   requestUpdate();
 }
 

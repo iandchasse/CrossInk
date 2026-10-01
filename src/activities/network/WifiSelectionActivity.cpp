@@ -24,6 +24,7 @@
 #include "components/UIThemeTokens.h"
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
+#include "network/RadioIdle.h"
 
 namespace fui = freeink::ui;
 
@@ -838,7 +839,20 @@ void WifiSelectionActivity::checkConnectionStatus() {
   }
 }
 
+bool WifiSelectionActivity::preventAutoSleep() {
+  if (!radioidle::enabled()) return true;
+  // With PowerConfig::radioOffWhenIdle, a screen that waits for the user (the
+  // network list, a prompt, a failed or finished connection) leaves sleep to the
+  // user's timeout.
+  return state == WifiSelectionState::AUTO_CONNECTING || state == WifiSelectionState::SCANNING ||
+         state == WifiSelectionState::CONNECTING;
+}
+
 void WifiSelectionActivity::loop() {
+  // PowerConfig::radioOffWhenIdle: a failed connection only waits for a key, and
+  // every way on from it switches Wi-Fi off first; do that now.
+  if (state == WifiSelectionState::CONNECTION_FAILED) radioidle::release("WIFI");
+
   if (TouchHeaderBackButton::wasTapped(mappedInput, renderer)) {
     switch (state) {
       case WifiSelectionState::SCANNING:
