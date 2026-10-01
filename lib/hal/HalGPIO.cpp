@@ -183,6 +183,11 @@ void HalGPIO::update() {
     delay(BUTTON_DEBOUNCE_REPOLL_MS);
     inputMgr.update();
   }
+  // Boards with an analog charge-status ladder sample it here, rate-limited by
+  // the SDK; every other caller (setup, render task) only reads its cache.
+  if (BoardConfig::hasChargeStatusLadder()) {
+    BatteryMonitor::pollChargeStatus();
+  }
 
   usbStateChanged = false;
   const unsigned long now = millis();
@@ -360,6 +365,21 @@ static bool usbHostSofActive() {
 #endif
 
 bool HalGPIO::isUsbConnected() const {
+  if (BoardConfig::hasChargeStatusLadder()) {
+    // No VBUS sense: infer USB from the decoded charge-status ladder (charger idle,
+    // charging or complete), not isCharging(), which a full cell on a charger
+    // reads as false. Until it decodes (about 1.5 s after boot, or about
+    // 8.5-9.5 s with the cell already charged, because Complete needs 8 stable
+    // samples to rule out the no-battery blink), and during the no-battery blink,
+    // keep the last known answer, which starts as "not connected" at boot. Once a
+    // decoded state has been lost (readings stuck outside every window), report
+    // "not connected", the conservative answer for battery-only rules.
+    static const BatteryMonitor ladderBattery;
+    bool known = false;
+    const bool present = ladderBattery.isExternalPowerPresent(&known);
+    if (known) return present;
+    return BatteryMonitor::chargeStatusLost() ? false : lastUsbConnected;
+  }
 #if FREEINK_DEVICE_X3
   if (deviceIsX3()) {
     // X3 has no USB-detect pin; infer external power from the gauge's charge

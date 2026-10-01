@@ -142,7 +142,9 @@ class HalGPIO {
   // Should only be called when wakeup reason is PowerButton.
   bool verifyPowerButtonWakeup(bool shortPressWakes, uint16_t longHoldMs);
 
-  // Check if USB is connected
+  // Check if USB is connected. Boards with an analog charge-status ladder
+  // (Silkscreen) answer from its decoded state, which update() polls, so a
+  // data-less wall charger counts too.
   bool isUsbConnected() const;
 
   // Return the latest loop-owned sample. Before the first update(), fall back

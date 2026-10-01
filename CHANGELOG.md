@@ -18,6 +18,7 @@
 - Silkscreen: add `silkscreen` and `silkscreen-debug` firmware builds for the Silkscreen reader board (ESP32-S3, 4.26" 800x480 panel, touchscreen and eight buttons, SDMMC card slot, USB Drive).
 - Silkscreen: the front light checks for a connected light each time it is switched on and stays off if none answers; waking and the light schedule then leave it off until a light is found.
 - Silkscreen: the clock is set from the network again on the next Wi-Fi connection after the clock chip loses its time.
+- Silkscreen: the battery icon shows charging on any USB supply, wall chargers included, read from the charger's status output.
 
 ### Changed
 
