@@ -1854,7 +1854,13 @@ void loop() {
     if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {
       // If we've been inactive for a while, increase the delay to save power
       powerManager.setPowerSaving(true);  // Lower CPU frequency after extended inactivity
+#ifdef SIMULATOR
       delay(50);
+#else
+      // ADC-ladder keys (Silkscreen) end the wait early on a raw contact, so a
+      // short tap is not lost between passes; other boards wait the full 50 ms.
+      gpio.idleDelay(50);
+#endif
     } else {
       // Short delay to prevent tight loop while still being responsive
       delay(10);

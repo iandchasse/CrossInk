@@ -63,6 +63,7 @@
 - Changing global font or page layout settings from the pull-down panel on touch devices now updates the open book when it inherits those settings.
 - KOReader authentication now rejects unexpectedly large server responses to avoid crashes.
 - Silkscreen: with the shared SDK, saved settings files replace the old copy only once fully written, and the SD card's cached sectors are written back before sleep and before USB Drive takes over the card, on every device.
+- Silkscreen: short key taps are no longer missed while the reader is idle.
 
 ## [v1.6.0] - 2026-09-21
 

@@ -218,6 +218,40 @@ unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
 
 unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPowerButtonHeldTime(); }
 
+bool HalGPIO::rawInputActive() {
+  if (inputMgr.isPowerButtonPhysicallyPressed()) return true;
+  // The ladder decoder's own released rule, from one sample per ladder; the
+  // oversampled decode stays with the debounced poll.
+  if (BoardConfig::hasAdcLadders()) return inputMgr.adcLadderContact();
+  InputManager::ButtonAdcSample g1{}, g2{};
+  inputMgr.readButtonAdc(g1, g2);
+  // ADC ladders idle at the full-scale rail (~4095); Xteink button bands sit below 3900. A decoded key also
+  // counts, for ladder keys that read close to the rail.
+  constexpr int kIdleRailMin = 4000;
+  const auto active = [](const InputManager::ButtonAdcSample& g) {
+    return g.button >= 0 || (g.raw >= 0 && g.raw < kIdleRailMin);
+  };
+  return active(g1) || active(g2);
+}
+
+void HalGPIO::idleDelay(const unsigned long ms) {
+  // The ladder decoder commits a key only after two clean samples at least 5 ms
+  // apart, so a tap shorter than one idle wait could land between two loop
+  // passes, or in a single sample, and be lost. Wake the loop on the raw
+  // contact instead; its next passes sample the key until it commits. Other
+  // boards keep the flat wait, with update()'s debounce re-poll.
+  if (!BoardConfig::hasAdcLadders()) {
+    delay(ms);
+    return;
+  }
+  constexpr unsigned long IDLE_SLICE_MS = 10;
+  const unsigned long idleStart = millis();
+  while (millis() - idleStart < ms) {
+    delay(IDLE_SLICE_MS);
+    if (rawInputActive()) return;
+  }
+}
+
 #if CROSSINK_APP_CAP_TOUCH
 bool HalGPIO::hasTouch() const { return inputMgr.hasTouch(); }
 
