@@ -139,9 +139,44 @@ bool detectX3DisplayIsUc8279() {
 
 #endif  // FREEINK_DEVICE_X4 || FREEINK_DEVICE_X3
 
+#if FREEINK_CAP_ADC_LADDERS
+// PowerConfig::ladderPresenceProbe: a key ladder built without its pull-up floats,
+// and InputManager has switched it off.
+void logLadderPresence() {
+  if (!BoardConfig::powerPolicy().ladderPresenceProbe) return;
+  const InputManager::LadderPresence p = InputManager::ladderPresence();
+  for (uint8_t i = 0; i < 2; ++i) {
+    if (p.pin[i] < 0) continue;
+    const bool absent = (p.absentMask & (1u << i)) != 0;
+    if (p.probed && absent) {
+      LOG_INF("HW", "Key ladder IO%d has no pull-up (%u mV pulled down, %u mV pulled up): its keys are off", p.pin[i],
+              p.pullDownMv[i], p.pullUpMv[i]);
+    } else if (p.probed) {
+      LOG_DBG("HW", "Key ladder IO%d fitted (%u mV pulled down, %u mV pulled up)", p.pin[i], p.pullDownMv[i],
+              p.pullUpMv[i]);
+    } else if (absent) {
+      LOG_DBG("HW", "Key ladder IO%d off: no pull-up, found before the sleep", p.pin[i]);
+    }
+  }
+}
+#endif
+
+#if FREEINK_CAP_PROBE_IDENTITY
+// TouchConfig::requireFocalTechId: this boot's probe refused the device at the
+// touch address. If that is a genuine tail whose id the check does not know, it
+// is never hibernated and draws its Monitor current in every sleep, so say so.
+void logRefusedTouchId(const InputManager& input) {
+  if (!input.touchIdRefused()) return;
+  LOG_ERR("HW",
+          "Device at 0x%02X is not a FocalTech touch controller (chip id 0x%02X); nothing was written to it and it "
+          "is not put to sleep",
+          BoardConfig::ACTIVE.touch.i2cAddress, input.refusedTouchId());
+}
+#endif
+
 }  // namespace
 
-void HalGPIO::begin() {
+void HalGPIO::begin(const bool deferTouch) {
 #if FREEINK_DEVICE_X4 || FREEINK_DEVICE_X3
 #ifdef FORCE_DEVICE_X3
   _deviceType = DeviceType::X3;
@@ -171,7 +206,54 @@ void HalGPIO::begin() {
     pinMode(UART0_RXD, INPUT);
   }
 #endif
-  inputMgr.begin();
+  inputMgr.begin(/*startTouch=*/!deferTouch);
+#if FREEINK_CAP_ADC_LADDERS
+  logLadderPresence();
+#endif
+#if FREEINK_CAP_PROBE_IDENTITY
+  if (!deferTouch) logRefusedTouchId(inputMgr);
+#endif
+}
+
+void HalGPIO::startTouch() {
+  inputMgr.startTouch();
+#if FREEINK_CAP_PROBE_IDENTITY
+  logRefusedTouchId(inputMgr);
+#endif
+}
+
+void HalGPIO::checkPowerButtonIdle() {
+#if FREEINK_CAP_POWER_POLICY
+  if (!BoardConfig::powerPolicy().powerPinIdleCheck) return;
+  const auto check = freeink::PowerManager::checkPowerPinIdle();
+  switch (check.idle) {
+    case freeink::PowerManager::PowerPinIdle::Undefined:
+      LOG_ERR("PWR", "Power button IO%d idles at %u mV, between the logic levels (R36 and R72 both fitted?)", check.pin,
+              check.mv);
+      LOG_ERR("PWR", "Power button off for this session; sleep has no wake source, the reset button starts the board");
+      break;
+    case freeink::PowerManager::PowerPinIdle::High:
+      LOG_INF("PWR", "Power button IO%d held at boot (%u mV)", check.pin, check.mv);
+      break;
+    case freeink::PowerManager::PowerPinIdle::Low:
+      LOG_DBG("PWR", "Power button IO%d idles at %u mV", check.pin, check.mv);
+      break;
+    case freeink::PowerManager::PowerPinIdle::NotChecked:
+      break;
+  }
+#endif
+}
+
+bool HalGPIO::powerButtonFaulted(uint16_t* const mv) const {
+#if FREEINK_CAP_POWER_POLICY
+  const auto check = freeink::PowerManager::powerPinCheck();
+  if (check.idle != freeink::PowerManager::PowerPinIdle::Undefined) return false;
+  if (mv) *mv = check.mv;
+  return true;
+#else
+  (void)mv;
+  return false;
+#endif
 }
 
 void HalGPIO::update() {
@@ -254,6 +336,8 @@ void HalGPIO::idleDelay(const unsigned long ms) {
 
 #if CROSSINK_APP_CAP_TOUCH
 bool HalGPIO::hasTouch() const { return inputMgr.hasTouch(); }
+
+bool HalGPIO::hasFrontButtons() const { return !hasTouch() || BoardConfig::ACTIVE.touch.buttonsAlongsideTouch; }
 
 bool HalGPIO::supportsMultiTouch() const { return inputMgr.supportsMultiTouch(); }
 

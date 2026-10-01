@@ -85,8 +85,20 @@ class HalGPIO {
   // profile, not the X3/X4 runtime detection.
   bool hasEdgeSideButtons() const;
 
-  // Start button GPIO and setup SPI for screen and SD card
-  void begin();
+  // Start button GPIO and setup SPI for screen and SD card. deferTouch leaves the
+  // touch probe to startTouch(), so a wake can be judged before any I2C traffic.
+  void begin(bool deferTouch = false);
+  // Probe and start the touch panel after begin(true). No-op once started.
+  void startTouch();
+
+  // PowerConfig::powerPinIdleCheck (no-op on boards without it): read the power
+  // button's idle level once, early in setup() before anything arms its wake,
+  // and log it. Idling between the logic levels, the button is taken out of
+  // service for the session, so no sleep can arm its wake (powerButtonFaulted()).
+  void checkPowerButtonIdle();
+  // This boot's checkPowerButtonIdle() found the power button between the logic
+  // levels; mv (optional) gets what it read. False on boards without the check.
+  bool powerButtonFaulted(uint16_t* mv = nullptr) const;
 
   // Button input methods
   void update();
@@ -108,6 +120,11 @@ class HalGPIO {
   void idleDelay(unsigned long ms);
 #if CROSSINK_APP_CAP_TOUCH
   bool hasTouch() const;
+  // Physical navigation keys are fitted: every board without a working touch
+  // panel (!hasTouch()), and touch boards that keep their keys
+  // (TouchConfig::buttonsAlongsideTouch, Silkscreen). Key-only UI (button
+  // hints, front-button remap, key settings) keys off this, not !hasTouch().
+  bool hasFrontButtons() const;
   bool supportsMultiTouch() const;
   TouchSnapshot getTouchSnapshot() const;
   bool wasCompletedMultiTouchSwipe(CompletedMultiTouchSwipe& swipe) const;
@@ -134,6 +151,7 @@ class HalGPIO {
   bool wasTouchActivity() const;
 #else
   constexpr bool hasTouch() const { return false; }
+  constexpr bool hasFrontButtons() const { return true; }
   constexpr bool supportsMultiTouch() const { return false; }
   constexpr TouchSnapshot getTouchSnapshot() const { return {}; }
   constexpr bool wasCompletedMultiTouchSwipe(CompletedMultiTouchSwipe&) const { return false; }
