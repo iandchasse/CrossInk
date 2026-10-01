@@ -1118,6 +1118,34 @@ static bool handleFrontlightTrip() {
   return true;
 }
 
+#if FREEINK_CAP_FRONTLIGHT_PROBE
+// FrontlightConfig::loadProbeWindowMs (Silkscreen), from every loop() pass, so
+// each switch-on's load probe settles while the device is awake:
+// - a tripped light is switched off and saved so (handleFrontlightTrip());
+// - a switch-on the user asked for that found no light is saved as off, as
+//   HalFrontlight has already left it, so the saved state matches the light;
+// - a single-colour light keeps the saved warmth on the string that is there.
+//   The SDK marks the missing string until a cold boot, which (like Restore
+//   Light on Wake) would otherwise select it again. Only a warmth that selects
+//   the missing string changes.
+// A restore at wake that found no light keeps the saved "on": a cold boot clears
+// the SDK's record, so a later restore may try again. From the loop task only.
+static void settleFrontlight() {
+  handleFrontlightTrip();
+  if (Frontlight.takeNoLightNotice() && SETTINGS.frontlightOn != 0) {
+    SETTINGS.frontlightOn = 0;
+    activityManager.persistGlobalSettings();
+  }
+  uint8_t warmth = SETTINGS.frontlightWarmth;
+  if (Frontlight.stringMissing(true) && warmth >= 50) warmth = 0;
+  if (Frontlight.stringMissing(false) && warmth < 50) warmth = 100;
+  if (warmth == SETTINGS.frontlightWarmth) return;
+  LOG_INF("LIGHT", "Warmth saved as %u%%: the %s string is missing", warmth, warmth == 0 ? "warm" : "cool");
+  SETTINGS.frontlightWarmth = warmth;
+  activityManager.persistGlobalSettings();
+}
+#endif
+
 // Enter deep sleep mode
 void enterDeepSleep(bool fromTimeout) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
@@ -1881,6 +1909,9 @@ void loop() {
   }
 
   renderer.setFadingFix(SETTINGS.fadingFix);
+#if FREEINK_CAP_FRONTLIGHT_PROBE
+  settleFrontlight();
+#endif
 
   // ROM logging works even when Arduino Serial reports no connected listener.
   if ((Serial || FREEINK_LOG_TRANSPORT == FREEINK_LOG_TRANSPORT_ROM_PRINTF) && millis() - lastMemPrint >= 10000) {
