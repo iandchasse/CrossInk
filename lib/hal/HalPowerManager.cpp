@@ -7,6 +7,7 @@
 #include <esp_sleep.h>
 #include <soc/soc_caps.h>
 
+#include <algorithm>
 #include <cassert>
 
 #include "HalGPIO.h"
@@ -144,6 +145,86 @@ void HalPowerManager::startDeepSleep(HalGPIO& gpio) const {
   freeink::PowerManager::armPowerButtonWakeup();
   gpio_deep_sleep_hold_en();
   esp_deep_sleep_start();
+}
+
+bool HalPowerManager::lowBatteryCutoffTripped() {
+  if (cutoffTripped) return true;
+  const uint16_t cutoffMv = BoardConfig::powerPolicy().lowBatteryCutoffMv;
+  if (cutoffMv == 0) return false;
+  static const BatteryMonitor cutoffBattery;
+  const bool radioOn = WiFi.getMode() != WIFI_MODE_NULL;
+  uint16_t mv = 0;
+  if (!cutoffBattery.isBelowCutoff(nullptr, &mv, radioOn)) return false;
+  cutoffTripped = true;
+  LOG_ERR("PWR", "Battery at %u mV%s, below the %u mV cutoff; sleeping", mv, radioOn ? " with Wi-Fi on" : "", cutoffMv);
+  return true;
+}
+
+unsigned long HalPowerManager::awakeCeilingMs(const unsigned long sleepTimeoutMs) {
+  const unsigned long profileMs = BoardConfig::powerPolicy().awakeCeilingMin * 60UL * 1000UL;
+  if (profileMs == 0) return 0;
+  return std::max(profileMs, sleepTimeoutMs);
+}
+
+bool HalPowerManager::awakeCeilingPassed(const unsigned long sleepTimeoutMs) const {
+  const unsigned long ceilingMs = awakeCeilingMs(sleepTimeoutMs);
+  return ceilingMs > 0 && msSinceInput() >= ceilingMs && msSinceClientTraffic() >= ceilingMs && !gpio.isUsbConnected();
+}
+
+bool HalPowerManager::awakeInputCapPassed() const {
+  const unsigned long capMs = BoardConfig::powerPolicy().awakeInputCapMin * 60UL * 1000UL;
+  return capMs > 0 && msSinceInput() >= capMs && !gpio.isUsbConnected();
+}
+
+bool HalPowerManager::backgroundNetworkMustStop(const unsigned long sleepTimeoutMs) {
+  return lowBatteryCutoffTripped() || awakeCeilingPassed(sleepTimeoutMs) || awakeInputCapPassed();
+}
+
+bool HalPowerManager::radioOffWhenIdle() { return BoardConfig::powerPolicy().radioOffWhenIdle; }
+
+bool HalPowerManager::releaseIdleRadio(const char* tag) {
+  if (!radioOffWhenIdle() || WiFi.getMode() == WIFI_MODE_NULL) return false;
+  WiFi.disconnect(true);
+  WiFi.mode(WIFI_OFF);
+  LOG_DBG(tag, "Work done; Wi-Fi off");
+  return true;
+}
+
+bool HalPowerManager::firmwareUpdateBlockedByBattery() const {
+  const uint16_t minMv = BoardConfig::powerPolicy().firmwareUpdateMinMv;
+  if (minMv == 0) return false;
+  const BatteryMonitor battery;
+  bool known = false;
+  if (battery.isExternalPowerPresent(&known) && known) return false;  // USB carries the write
+  const uint16_t mv = battery.readMillivoltsAveraged(16);
+  if (mv < BatteryMonitor::CELL_PRESENT_MIN_MV) return false;  // no cell: USB powers the board
+  const uint16_t allowanceMv = WiFi.getMode() != WIFI_MODE_NULL ? BoardConfig::powerPolicy().cutoffRadioAllowanceMv : 0;
+  if (mv + allowanceMv >= minMv) return false;
+  LOG_ERR("PWR", "Battery at %u mV (+%u mV radio allowance), below the %u mV a firmware write needs", mv, allowanceMv,
+          minMv);
+  return true;
+}
+
+bool HalPowerManager::noChargeableCell() const {
+  if (!BoardConfig::powerPolicy().noChargeableCellNotice) return false;
+  const unsigned long now = millis();
+  if (_noCellPolledMs != 0 && now - _noCellPolledMs < BATTERY_POLL_MS) return _noCellCached;
+  _noCellPolledMs = now != 0 ? now : 1;
+  // The charger's no-battery blink decides by itself: the charger then holds P+
+  // between its recharge threshold and 4.2 V, so P+ cannot show the missing cell.
+  bool noCell = BatteryMonitor::chargeStatus() == BoardConfig::ChargeState::NoBattery;
+  if (noCell) {
+    if (!_noCellCached) LOG_INF("PWR", "Charger's no-battery blink: no chargeable cell");
+  } else if (gpio.isUsbConnected()) {
+    // Set below CELL_PRESENT_MIN_MV, cleared only at NO_CELL_CLEAR_MV, so a flat
+    // cell charging up through the threshold does not flip the label.
+    static const BatteryMonitor battery;
+    const uint16_t mv = battery.readMillivoltsAveraged(4);
+    noCell = mv < (_noCellCached ? NO_CELL_CLEAR_MV : BatteryMonitor::CELL_PRESENT_MIN_MV);
+    if (noCell && !_noCellCached) LOG_INF("PWR", "External power, battery %u mV: no chargeable cell", mv);
+  }
+  _noCellCached = noCell;
+  return _noCellCached;
 }
 
 uint16_t HalPowerManager::getBatteryPercentage() const {

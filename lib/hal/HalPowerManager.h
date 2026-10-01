@@ -28,10 +28,15 @@ class HalPowerManager {
   mutable int _batteryCachedPercent = 0;  // Last read battery percentage * 10 (0-1000); callers divide by 10 (ADC/X4
                                           // path only — I2C/X3 path stores 0-100 directly)
   mutable unsigned long _batteryLastPollMs = 0;  // Timestamp of last battery read in milliseconds
+  mutable bool _noCellCached = false;            // noChargeableCell()'s last answer
+  mutable unsigned long _noCellPolledMs = 0;     // and when it was read, 0 = never
 
   enum LockMode { None, NormalSpeed };
   LockMode currentLockMode = None;
   SemaphoreHandle_t modeMutex = nullptr;  // Protect access to currentLockMode
+  unsigned long lastClientTrafficMs = 0;  // noteClientTraffic()
+  unsigned long lastInputMs = 0;          // noteInput()
+  bool cutoffTripped = false;             // lowBatteryCutoffTripped() latch
 
  public:
 #if defined(BOARD_HAS_PSRAM)
@@ -51,8 +56,74 @@ class HalPowerManager {
   // Should be called inside main loop() to handle the currentLockMode
   void startDeepSleep(HalGPIO& gpio) const;
 
+  // Battery policy (BoardConfig::powerPolicy(), Silkscreen). Every query below
+  // is false (or 0) on boards whose profile sets none of these fields, so their
+  // callers change nothing there.
+  //
+  // A network client talked to the device (web server request, WebSocket
+  // frame, or an automatic page turn). The awake ceiling (awakeCeilingMs())
+  // counts idle time from the later of this and the last input.
+  void noteClientTraffic() { lastClientTrafficMs = millis(); }
+  unsigned long msSinceClientTraffic() const { return millis() - lastClientTrafficMs; }
+
+  // A key, touch or tilt input the user meant (loop(), which also starts this
+  // clock on its first pass). The awake ceiling, the input cap and the wake and
+  // storage-error timeouts count from it. Kept apart from loop()'s inactivity
+  // timer, which screens that hold auto-sleep off reset on every pass.
+  void noteInput() { lastInputMs = millis(); }
+  unsigned long msSinceInput() const { return millis() - lastInputMs; }
+
+  // The awake ceiling in ms: the longer of PowerConfig::awakeCeilingMin and the
+  // user's sleep timeout (sleepTimeoutMs, 0 = Never), so it bounds Never and the
+  // screens that hold auto-sleep off without cutting short a timeout the user
+  // chose. 0 on boards without a ceiling.
+  static unsigned long awakeCeilingMs(unsigned long sleepTimeoutMs);
+  // On battery, no input and no client traffic for awakeCeilingMs() (always
+  // false on boards without a ceiling).
+  bool awakeCeilingPassed(unsigned long sleepTimeoutMs) const;
+  // PowerConfig::awakeInputCapMin (always false on boards without one): on
+  // battery, no input for the cap, whatever the client traffic.
+  bool awakeInputCapPassed() const;
+
+  // PowerConfig::lowBatteryCutoffMv, the awake ceiling and awakeInputCapMin
+  // (always false on boards without them): network work nobody is waiting on
+  // must stop or not start. Such work blocks loop(), whose cutoff, ceiling and
+  // cap checks cannot run meanwhile; loop() sleeps on them once it returns.
+  // sleepTimeoutMs as for awakeCeilingMs(). Call from the loop task.
+  bool backgroundNetworkMustStop(unsigned long sleepTimeoutMs);
+
+  // PowerConfig::lowBatteryCutoffMv (always false on boards without one): true
+  // once BatteryMonitor::isBelowCutoff() fires (with the radio allowance while
+  // Wi-Fi is on), and from then on for the session, so a reading that recovers
+  // when a transfer's load stops cannot undo it. At most one reading a second.
+  // Call from the loop task, including a blocking transfer's callbacks (which
+  // abort on it); loop() then sleeps.
+  bool lowBatteryCutoffTripped();
+
+  // PowerConfig::radioOffWhenIdle: a screen whose work has ended stops skipping
+  // the loop delay, and a network screen turns Wi-Fi off then instead of on exit.
+  static bool radioOffWhenIdle();
+  // With radioOffWhenIdle, switch Wi-Fi off now if it is on. Returns true when it
+  // did; the caller still restarts on exit to clear the heap the radio left.
+  static bool releaseIdleRadio(const char* tag);
+
+  // True when writing a firmware image now could brown out: on battery below
+  // PowerConfig::firmwareUpdateMinMv (less PowerConfig::cutoffRadioAllowanceMv
+  // while the radio is on). False on boards without the check, on external
+  // power, and with no cell fitted.
+  bool firmwareUpdateBlockedByBattery() const;
+
   // Get battery percentage (range 0-100)
   uint16_t getBatteryPercentage() const;
+
+  // PowerConfig::noChargeableCellNotice: the charge-status ladder shows the
+  // charger's no-battery blink, or external power runs the board and the battery
+  // reads below BatteryMonitor::CELL_PRESENT_MIN_MV (until it reads
+  // NO_CELL_CLEAR_MV again), so there is no cell or one too flat to charge;
+  // battery displays say that instead of a charge state. Always false on boards
+  // without the field. Reads at most once per BATTERY_POLL_MS.
+  bool noChargeableCell() const;
+  static constexpr uint16_t NO_CELL_CLEAR_MV = BatteryMonitor::CELL_PRESENT_MIN_MV + 100;
 
 #if CROSSINK_BATTERY_DIAG_LOG
   // Raw battery telemetry for the diagnostic log, kept behind the flag so
