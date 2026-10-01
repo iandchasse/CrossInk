@@ -1070,9 +1070,34 @@ void mirrorWakeShortPressToNvs() {
 #endif
 }
 
+// FrontlightConfig::monitorAdc (Silkscreen): a light whose LED over-voltage
+// monitor tripped is switched off and saved as off, so no wake, restart or power
+// cycle turns the boost on into the fault again; the user switching it on is the
+// retry. A switch-on still deciding its load (FrontlightConfig::
+// loadProbeWindowMs) is not a trip: HalFrontlight settles it. Returns true when
+// it switched a tripped light off. From the loop task only (the trip itself
+// happens on the SDK's monitor timer). Nothing trips on other boards.
+static bool handleFrontlightTrip() {
+  if (!Frontlight.present()) return false;
+  Frontlight.update();
+  if (!Frontlight.fault() || Frontlight.switchOnPending()) return false;
+  Frontlight.setOn(false);
+  LOG_ERR("LIGHT", "Front light tripped its LED over-voltage monitor; switched off until switched on again");
+  if (SETTINGS.frontlightOn != 0) {
+    SETTINGS.frontlightOn = 0;
+    activityManager.persistGlobalSettings();
+  }
+  return true;
+}
+
 // Enter deep sleep mode
 void enterDeepSleep(bool fromTimeout) {
   HalPowerManager::Lock powerLock;  // Ensure we are at normal CPU frequency for sleep preparation
+  handleFrontlightTrip();
+  // An enable-gated front light (Silkscreen) goes dark now rather than at the
+  // end: nothing on the way down needs it. The saved light state (Restore Light
+  // on Wake) is unchanged; a no-op on other lights.
+  Frontlight.prepareForSleep();
   APP_STATE.lastSleepFromReader = activityManager.isReaderActivity();
 
   const bool isQuickResumeSleep =
@@ -1122,7 +1147,9 @@ void enterDeepSleep(bool fromTimeout) {
   powerManager.startDeepSleep(gpio);
 }
 
-void setupDisplayAndFonts(const bool seamless, const bool loadReaderResources, const bool useReaderRenderStack) {
+// The panel-controller probe some boards need before display.begin() (and before
+// a sleep that sends the panel its deep-sleep command without the driver).
+static void resolvePanelController() {
 #if !defined(SIMULATOR) && !FREEINK_MCU_C3
   // C3 X3/X4 detection already runs in HalGPIO::begin() before SPI owns the
   // panel pins. S3 boards initialize display SPI inside display.begin(), so an
@@ -1133,8 +1160,15 @@ void setupDisplayAndFonts(const bool seamless, const bool loadReaderResources, c
     if (freeink::applyXteinkDisplayController()) {
       LOG_DBG("MAIN", "Panel controller: UltraChip UC81xx variant detected");
     }
+#if FREEINK_CAP_DISPLAY_PROBE_POLICY
+    display.logController();
+#endif
   }
 #endif
+}
+
+void setupDisplayAndFonts(const bool seamless, const bool loadReaderResources, const bool useReaderRenderStack) {
+  resolvePanelController();
 
 #ifdef SIMULATOR
   (void)seamless;
@@ -1178,6 +1212,80 @@ void setupDisplayAndFonts(const bool seamless, const bool loadReaderResources, c
   }
 }
 
+// Boot-time sleep decisions of the SDK power policy (FREEINK_CAP_POWER_POLICY,
+// Silkscreen). Without it every PowerConfig field is zero, so other boards
+// compile none of them.
+#if FREEINK_CAP_POWER_POLICY
+// PowerConfig::abnormalResetLimit: after that many panics, watchdog resets,
+// brown-outs or aborted sleep entries in a row, go back to deep sleep at once,
+// before SD, touch, the panel or the radio start and without their drivers (any
+// of them may be what crashed). A crash or brown-out loop then costs one short
+// boot per power-button press instead of boot after boot at tens of mA; the
+// press's deep-sleep wake starts a new count.
+static void sleepIfResetLoop() {
+  if (!HalPowerManager::abnormalResetLimitReached()) return;
+  // No sleep entry has put the panel or a touch controller on an always-on rail
+  // to sleep since the crash, and a crash after a fast refresh leaves the panel's
+  // analog block on. Reset each and send its sleep command without its driver.
+  // The controller is resolved first so the panel gets its own command; after a
+  // crash that is a probe, which is only a reset and a register read.
+  resolvePanelController();
+  display.sleepWithoutDriver();
+  gpio.resetTouchForSleep();
+  powerManager.startDeepSleepMinimal(gpio);
+}
+
+// Low-battery cutoff at boot (PowerConfig::lowBatteryCutoffMv): a board below the
+// cutoff goes back to sleep before SD or the panel draw any current. Never on
+// external power or without a chargeable cell.
+static void sleepIfBatteryEmptyAtBoot() {
+  if (!HalPowerManager::batteryEmptyAtBoot()) return;
+  if (esp_reset_reason() != ESP_RST_DEEPSLEEP) {
+    // No sleep entry put the panel into deep sleep before this boot (power-on,
+    // brown-out, crash), so it may still be in normal mode. Begin it without a
+    // refresh and send it the deep-sleep command.
+    resolvePanelController();
+    display.begin(/*seamless=*/true);
+    display.deepSleep();
+  }
+  Storage.shutdown();
+  powerManager.startDeepSleep(gpio);
+}
+
+// PowerConfig::powerPinIdleCheck: the power button cannot wake the board (its
+// input idles between the logic levels, HalGPIO::checkPowerButtonIdle()), so the
+// reader stops on a message saying why. While external power is present it stays
+// there, so the board can still be flashed; on the cell (or once USB is
+// unplugged) it sleeps. That sleep has no wake source, and the reset button
+// starts the board again. Does nothing unless the check found the fault; call it
+// before the display is set up.
+static void haltOnPowerButtonFault() {
+  uint16_t mv = 0;
+  if (!gpio.powerButtonFaulted(&mv)) return;
+  setupDisplayAndFonts(/*seamless=*/false, /*loadReaderResources=*/false, /*useReaderRenderStack=*/false);
+  {
+    RenderLock lock;
+    char message[224];
+    snprintf(message, sizeof(message), tr(STR_POWER_BUTTON_FAULT), static_cast<unsigned>(mv / 1000U),
+             static_cast<unsigned>(mv % 1000U / 100U));
+    const int padding = UITheme::getInstance().getMetrics().contentSidePadding;
+    const Rect textArea{padding, 0, renderer.getScreenWidth() - padding * 2, renderer.getScreenHeight()};
+    renderer.clearScreen();
+    UITheme::drawCenteredWrappedTextAtCenter(renderer, textArea, UI_10_FONT_ID, renderer.getScreenHeight() / 2, message,
+                                             8);
+    renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+  }
+  // The charge-status ladder decodes about 1.5 s after boot, or up to about 9.5 s
+  // with the cell already charged; until then the supply is unknown.
+  constexpr unsigned long USB_DECODE_WAIT_MS = 12000;
+  HalPowerManager::waitWhileOnExternalPower(USB_DECODE_WAIT_MS);
+  LOG_ERR("PWR", "Power button fault: sleeping with no wake source");
+  display.deepSleep();
+  Storage.shutdown();
+  powerManager.startDeepSleep(gpio);
+}
+#endif
+
 void setup() {
 #ifdef SIMULATOR
   SimulatorLifecycle::restoreSilentRebootToken(silentRebootMagic, silentRebootTarget, silentRebootPayload);
@@ -1213,6 +1321,19 @@ void setup() {
 #endif
 #endif
 
+#if FREEINK_CAP_POWER_POLICY
+  // PowerConfig::releaseWaitMaxMs: the last sleep began with the power button
+  // still held and woke on its release, which asks for nothing. Sleep again
+  // before any peripheral starts.
+  if (HalPowerManager::takeReleaseWake()) {
+    LOG_DBG("MAIN", "Woke on the power button's release; sleeping again");
+    powerManager.startDeepSleepMinimal(gpio);
+  }
+  // PowerConfig::powerPinIdleCheck: read the power button's idle level before
+  // anything can arm its wake (haltOnPowerButtonFault() reports a fault).
+  gpio.checkPowerButtonIdle();
+#endif
+
   HalSystem::begin();
   // checkPanic() clears the watchdog capture marker after a successful SD
   // dump, so retain the boot classification for the later activity route.
@@ -1241,7 +1362,18 @@ void setup() {
     clearSilentRestartReaderPageBuild();
   }
 
+#if FREEINK_CAP_POWER_POLICY
+  sleepIfResetLoop();
+#endif
+#ifdef SIMULATOR
   gpio.begin();
+#else
+  // PowerConfig::earlyWakeDecision: the touch probe (a reset pulse, a 300 ms
+  // settle and I2C reads that wake a hibernated controller) waits until the
+  // wake below has been judged.
+  const bool deferTouch = BoardConfig::powerPolicy().earlyWakeDecision;
+  gpio.begin(deferTouch);
+#endif
   // Sticky shares Confirm and Power on one GPIO. Emit Power first so the
   // configured shortcut wins; MappedInputManager mirrors it back to Confirm
   // only on screens that explicitly allow the fallback.
@@ -1256,6 +1388,8 @@ void setup() {
     LOG_DBG("MAIN", "Power-button wake not held through verification, sleeping");
     powerManager.startDeepSleep(gpio);
   }
+  // This boot stays up: start the touch probe deferred above.
+  if (deferTouch) gpio.startTouch();
 #endif
 
 #ifndef SIMULATOR
@@ -1295,6 +1429,11 @@ void setup() {
     case HalGPIO::WakeupReason::AfterUSBPower:
       // TEMP: continue booting while diagnosing post-flash/reset behavior.
       // Normal behavior is to go back to sleep when USB power causes a cold boot.
+      // Silkscreen must keep booting here whatever this becomes: it has no
+      // hardware off (3V3 is live whenever USB or a cell is present), and after
+      // its battery protection trips it restarts only once USB is plugged in.
+      // Its USB presence comes from the charge-status ladder, which has not
+      // decoded this early, so such a boot classifies as Other today.
       LOG_INF("BOOT", "AfterUSBPower route: TEMP continuing boot instead of deep sleep");
       break;
     case HalGPIO::WakeupReason::AfterFlash:
@@ -1307,10 +1446,17 @@ void setup() {
       break;
   }
 
+#if FREEINK_CAP_POWER_POLICY
+  sleepIfBatteryEmptyAtBoot();
+#endif
+
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
   if (!Storage.begin()) {
     LOG_ERR("MAIN", "SD card initialization failed");
+#if FREEINK_CAP_POWER_POLICY
+    haltOnPowerButtonFault();
+#endif
     setupDisplayAndFonts(isSilentReboot, !isNetworkResume, useReaderRenderStack);
     activityManager.goToFullScreenMessage("SD card error", EpdFontFamily::BOLD);
     return;
@@ -1340,6 +1486,9 @@ void setup() {
   }
   UITheme::getInstance().reload();
   ButtonNavigator::setMappedInputManager(mappedInputManager);
+#if FREEINK_CAP_POWER_POLICY
+  haltOnPowerButtonFault();  // in the saved language, before the light or the panel start
+#endif
   logBootHeap("boot state ready");
   // Silent restarts are invisible recovery steps, so they always retain the
   // current light state rather than applying wake or schedule policy.
@@ -1580,6 +1729,11 @@ void loop() {
   mappedInputManager.update();
 #ifdef SIMULATOR
   simulatorHomeKeyInput.update();
+#endif
+#if FREEINK_CAP_POWER_POLICY
+  // PowerConfig::abnormalResetLimit: a boot that stays up a minute ends the run
+  // of abnormal resets sleepIfResetLoop() counts.
+  HalPowerManager::endAbnormalResetRunWhenHealthy();
 #endif
   if (activityManager.requiresExclusiveStorageLoop()) {
     // Keep the serial endpoint responsive so Inky receives ERR:not_on_home,

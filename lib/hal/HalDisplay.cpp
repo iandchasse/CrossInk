@@ -1,5 +1,10 @@
 #include <HalDisplay.h>
 #include <HalGPIO.h>
+#include <Logging.h>
+#include <PowerManager.h>
+#if FREEINK_CAP_DISPLAY_PROBE_POLICY
+#include <XteinkDetect.h>
+#endif
 
 #include "HalSpiBus.h"
 
@@ -116,6 +121,38 @@ void HalDisplay::deepSleep() {
   HalSpiBus::Lock spiLock;
   einkDisplay.deepSleep();
 }
+
+void HalDisplay::sleepWithoutDriver() {
+  if (freeink::PowerManager::sleepPanelWithoutDriver()) LOG_DBG("DISP", "Panel reset and asleep without its driver");
+}
+
+#if FREEINK_CAP_DISPLAY_PROBE_POLICY
+void HalDisplay::logController() const {
+  const char* source = "not resolved";
+  switch (freeink::displayControllerSource()) {
+    case freeink::DisplayControllerSource::Probed:
+      source = "probed";
+      break;
+    case freeink::DisplayControllerSource::Cached:
+      source = "kept from the probe before the sleep";
+      break;
+    case freeink::DisplayControllerSource::Forced:
+      source = "forced by the build";
+      break;
+    case freeink::DisplayControllerSource::NotResolved:
+      break;
+  }
+  const char* controller = BoardConfig::controllerPartName(BoardConfig::ACTIVE.displayController);
+  const auto& probe = freeink::getXteinkDisplayProbeDiag();
+  if (!probe.valid) {
+    LOG_INF("DISP", "Panel controller %s (%s)", controller, source);
+    return;
+  }
+  LOG_INF("DISP", "Panel controller %s (%s): VER %02X %02X %02X %02X %02X, FLG %02X, variant %02X", controller, source,
+          probe.ver[0], probe.ver[1], probe.ver[2], probe.ver[3], probe.ver[4], probe.flg,
+          BoardConfig::ACTIVE.displayControllerVariant);
+}
+#endif
 
 uint8_t* HalDisplay::getFrameBuffer() const { return einkDisplay.getFrameBuffer(); }
 

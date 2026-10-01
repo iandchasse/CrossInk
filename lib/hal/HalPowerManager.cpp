@@ -6,6 +6,7 @@
 #include <SharedI2c.h>
 #include <WiFi.h>
 #include <esp_sleep.h>
+#include <esp_system.h>
 #include <soc/soc_caps.h>
 
 #include <algorithm>
@@ -214,6 +215,79 @@ void HalPowerManager::sleepImpl(HalGPIO& gpio, const bool sleepCommands) const {
   freeink::PowerManager::deepSleepUntilPowerButton();
 }
 #endif
+
+bool HalPowerManager::takeReleaseWake() {
+  return BoardConfig::powerPolicy().releaseWaitMaxMs != 0 && freeink::PowerManager::takeReleaseWake();
+}
+
+bool HalPowerManager::abnormalResetLimitReached() {
+  const uint8_t limit = BoardConfig::powerPolicy().abnormalResetLimit;
+  if (limit == 0) return false;
+  const auto aborted = freeink::PowerManager::takeAbortedSleepInfo();
+  if (aborted.aborted) {
+    LOG_ERR("PWR", "The last deep-sleep entry aborted (wake cause %d, power pin %d)", aborted.wakeupCause,
+            aborted.wakePinLevel);
+  }
+  const uint8_t count = freeink::PowerManager::countAbnormalResets(aborted.aborted);
+  if (count < limit) {
+    if (count > 0) LOG_INF("PWR", "Abnormal reset %u in a row (limit %u)", count, limit);
+    return false;
+  }
+  LOG_ERR("PWR", "%u abnormal resets in a row; sleeping until the power button", count);
+  freeink::PowerManager::clearAbnormalResets();
+  return true;
+}
+
+void HalPowerManager::endAbnormalResetRunWhenHealthy() {
+  if (BoardConfig::powerPolicy().abnormalResetLimit == 0) return;
+  static bool runEnded = false;
+  if (runEnded || millis() < HEALTHY_UPTIME_MS) return;
+  runEnded = true;
+  freeink::PowerManager::clearAbnormalResets();
+}
+
+bool HalPowerManager::batteryEmptyAtBoot() {
+  const uint16_t cutoffMv = BoardConfig::powerPolicy().lowBatteryCutoffMv;
+  if (cutoffMv == 0) return false;
+  constexpr uint16_t QUICK_CHECK_MARGIN_MV = 100;
+  const BatteryMonitor battery;
+  const uint16_t quickMv = battery.readMillivoltsAveraged(16);
+  if (quickMv >= cutoffMv + QUICK_CHECK_MARGIN_MV) return false;
+
+  // After a cold power-on the divider's reservoir capacitor is still charging,
+  // and the charge-status ladder needs its settle time before a first sample.
+  const unsigned long dividerSettledAt = esp_reset_reason() == ESP_RST_POWERON ? 2500 : 0;
+  const unsigned long ladderSettledAt =
+      BoardConfig::hasChargeStatusLadder() ? BoardConfig::ACTIVE.chargeLadder.settleAfterBootMs : 0;
+  const unsigned long waitUntil = std::max(dividerSettledAt, ladderSettledAt);
+  LOG_INF("PWR", "Battery reads %u mV at boot; checking it against the %u mV cutoff", quickMv, cutoffMv);
+  while (millis() < waitUntil) delay(10);
+
+  bool below = false;
+  for (uint8_t i = 0; i < BatteryMonitor::CUTOFF_SAMPLES; ++i) {
+    if (i > 0) delay(1010);  // BatteryMonitor takes at most one reading per second
+    BatteryMonitor::pollChargeStatus();
+    bool known = false;
+    uint16_t mv = 0;
+    below = battery.isBelowCutoff(&known, &mv);
+    if (!known || mv > cutoffMv) break;  // external power, no chargeable cell, or above the cutoff
+  }
+  if (!below) return false;
+  LOG_ERR("PWR", "Battery below the %u mV cutoff at boot; sleeping", cutoffMv);
+  return true;
+}
+
+void HalPowerManager::waitWhileOnExternalPower(const unsigned long undecodedMaxMs) {
+  const BatteryMonitor battery;
+  const unsigned long since = millis();
+  for (;;) {
+    BatteryMonitor::pollChargeStatus();
+    bool known = false;
+    const bool external = battery.isExternalPowerPresent(&known);
+    if (known ? !external : millis() - since >= undecodedMaxMs) return;
+    delay(100);
+  }
+}
 
 bool HalPowerManager::lowBatteryCutoffTripped() {
   if (cutoffTripped) return true;

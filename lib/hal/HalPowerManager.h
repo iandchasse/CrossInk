@@ -73,6 +73,42 @@ class HalPowerManager {
   // sleep, and get startDeepSleep().
   void startDeepSleepMinimal(HalGPIO& gpio) const;
 
+  // Boot-time sleep decisions (BoardConfig::powerPolicy(), Silkscreen). Each is
+  // false, or a no-op, on boards whose profile sets none of these fields.
+  //
+  // PowerConfig::releaseWaitMaxMs: the last sleep began with the power button
+  // still held and woke on its release, which asks for nothing. True once; call
+  // first thing in setup(), then sleep again with startDeepSleepMinimal().
+  static bool takeReleaseWake();
+
+  // PowerConfig::abnormalResetLimit: counts this boot in the run of abnormal
+  // resets (panic, watchdog, brown-out, aborted sleep entry), and logs an aborted
+  // last sleep entry. True when the run has reached the limit; the run is then
+  // cleared and the caller sleeps at once, before storage, touch, the panel or
+  // the radio start. Call once, early in setup().
+  static bool abnormalResetLimitReached();
+  // From loop(): once this boot has been up HEALTHY_UPTIME_MS, the run of
+  // abnormal resets ends.
+  static void endAbnormalResetRunWhenHealthy();
+  static constexpr unsigned long HEALTHY_UPTIME_MS = 60UL * 1000UL;
+
+  // PowerConfig::lowBatteryCutoffMv: the battery is below the cutoff at boot. A
+  // normal boot pays for one averaged reading; only a reading near the cutoff
+  // waits for the divider and the charge-status ladder to settle, then takes
+  // BatteryMonitor::CUTOFF_SAMPLES readings a second apart. Never true on
+  // external power or without a chargeable cell (BatteryMonitor::isBelowCutoff()).
+  // Call after begin() and before storage, the panel or the radio start; the
+  // caller then sleeps.
+  static bool batteryEmptyAtBoot();
+
+  // For a screen that must stay up while external power is present (so the board
+  // can still be flashed) and end on the cell: returns once the battery monitor
+  // reports no external power, or once undecodedMaxMs have passed while it cannot
+  // tell (a charge-status ladder decodes about 1.5 s after boot, or up to about
+  // 9.5 s with the cell already charged). From the loop task (it polls the
+  // ladder).
+  static void waitWhileOnExternalPower(unsigned long undecodedMaxMs);
+
   // Battery policy (BoardConfig::powerPolicy(), Silkscreen). Every query below
   // is false (or 0) on boards whose profile sets none of these fields, so their
   // callers change nothing there.

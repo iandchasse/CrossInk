@@ -66,6 +66,18 @@ class HalDisplay {
 
   // Power management
   void deepSleep();
+  // Put the panel into deep sleep without its driver, for a sleep entry that must
+  // not run the display code (a reset loop): a hardware reset, then the
+  // controller's own deep-sleep command bit-banged on the display pins. Only on a
+  // profile whose supported controller sits on an always-on rail (Silkscreen);
+  // a no-op elsewhere. Needs no begin(); resolve the controller first.
+  void sleepWithoutDriver();
+#if FREEINK_CAP_DISPLAY_PROBE_POLICY
+  // DisplayProbeConfig boards: log the controller this boot chose and how, with
+  // the probe's IDs (VER byte 2 is an UltraChip part's LUT_VER), for tuning a
+  // panel. Call after the controller probe.
+  void logController() const;
+#endif
 
   // Access to frame buffer
   uint8_t* getFrameBuffer() const;

@@ -19,6 +19,7 @@
 - Silkscreen: the front light checks for a connected light each time it is switched on and stays off if none answers; waking and the light schedule then leave it off until a light is found.
 - Silkscreen: the clock is set from the network again on the next Wi-Fi connection after the clock chip loses its time.
 - Silkscreen: the battery icon shows charging on any USB supply, wall chargers included, read from the charger's status output.
+- Silkscreen: the reader goes straight back to sleep after a wake caused only by releasing a held power button, after three crashes or brown-outs in a row, and when the battery is below its cutoff at boot, and the touchscreen starts only once a wake has been accepted. A power button whose input cannot wake the board is reported on screen.
 
 ### Changed
 
