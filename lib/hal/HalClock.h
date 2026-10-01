@@ -40,6 +40,16 @@ class HalClock {
   // True if an RTC is present on this device
   bool isAvailable() const { return _available; }
 
+  // True if the RTC is present and holds a valid time. Reads the RTC (not the
+  // cache): false while the oscillator-stop / voltage-low flag is set, i.e.
+  // until the time has been set again.
+  bool hasValidTime() const;
+
+  // SensorsConfig::rtcResyncWhenInvalid (false on boards without it): the RTC
+  // has no backup supply and has lost its time, so the next Wi-Fi connection
+  // should set it again even after an earlier sync.
+  bool needsResync() const;
+
   // Get current hour (0-23) and minute (0-59).
   // Returns false if RTC is not available.
   bool getTime(uint8_t& hour, uint8_t& minute) const;

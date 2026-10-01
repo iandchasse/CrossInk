@@ -1,5 +1,6 @@
 #include "HalClock.h"
 
+#include <BoardConfig.h>
 #include <DateFormatting.h>
 #include <Logging.h>
 #include <WiFi.h>
@@ -68,6 +69,26 @@ void adjustDateByDays(uint16_t& year, uint8_t& month, uint8_t& day, const int da
 void HalClock::begin() {
   _available = _sdkRtc.begin();
   LOG_INF("CLK", _available ? "SDK RTC found" : "RTC not found");
+  // SensorsConfig::rtcIdentityCheck (0 on boards without it).
+  if (_sdkRtc.rejectedAddress() != 0) {
+    LOG_ERR("CLK", "Device at 0x%02X is not the RTC (no DS3231 register pattern); nothing was written to it",
+            _sdkRtc.rejectedAddress());
+  }
+  // Boards whose RTC has no backup supply lose the time routinely; say so, since
+  // the clock stays hidden until NTP or a manual set restores it.
+  if (needsResync()) {
+    LOG_INF("CLK", "RTC time invalid (oscillator stopped); it is set again on the next Wi-Fi connection");
+  }
+}
+
+bool HalClock::hasValidTime() const {
+  if (!_available) return false;
+  Rtc::DateTime dt;
+  return _sdkRtc.now(dt);
+}
+
+bool HalClock::needsResync() const {
+  return BoardConfig::ACTIVE.sensors.rtcResyncWhenInvalid && _available && !hasValidTime();
 }
 
 bool HalClock::getTime(uint8_t& hour, uint8_t& minute) const {

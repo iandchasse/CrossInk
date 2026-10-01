@@ -748,8 +748,14 @@ void WifiSelectionActivity::checkConnectionStatus() {
 #endif
 
     // Sync RTC from NTP on the first successful WiFi connection only. Users can force a re-sync from
-    // Settings > System > Device > Sync Date/Time Now.
-    if (halClock.isAvailable() && (!SETTINGS.clockHasBeenSynced || !SETTINGS.clockDateHasBeenSynced)) {
+    // Settings > System > Device > Sync Date/Time Now. Boards whose RTC has no backup supply lose the
+    // time routinely, so they also re-sync whenever it is invalid.
+#ifndef SIMULATOR
+    const bool clockLost = halClock.needsResync();
+#else
+    constexpr bool clockLost = false;
+#endif
+    if (halClock.isAvailable() && (!SETTINGS.clockHasBeenSynced || !SETTINGS.clockDateHasBeenSynced || clockLost)) {
       if (halClock.syncFromNTP()) {
         SETTINGS.clockHasBeenSynced = 1;
         SETTINGS.clockDateHasBeenSynced = 1;
