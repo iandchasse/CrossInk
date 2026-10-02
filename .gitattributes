@@ -1,1 +1,2 @@
-.github/workflows/*.lock.yml linguist-generated=true
+.github/workflows/*.lock.yml linguist-generated=true# The Silkscreen build script runs under Git Bash, which rejects CRLF: keep it LF where core.autocrlf is set.
+scripts/silkscreen/*.sh text eol=lf

@@ -208,6 +208,11 @@ Then rebuild `silkscreen`, `x4-pro`, `x4-classic` and the C3 and Sticky builds. 
 
 The branch takes CrossInk by merge, never by rebase: older commits pin SDK commits that must stay reachable. Merge `crossink/development` about once a week. It moves fast: September 2026 brought 429 commits, with `main.cpp`, `SettingsList.h` and `ActivityManager.cpp` among the most touched, and about five SDK pin moves a week. Expect conflicts in `src/main.cpp`, `lib/hal/HalPowerManager.*` and `HalGPIO.*`, the settings files, `platformio.ini` and `CHANGELOG.md`.
 
+The whole multi-repo procedure (the shared SDK line first, then CrossPoint, then this repo, then the pins, builds,
+review and records) is `crosspoint-reader/docs/silkscreen/UPSTREAM-SYNC.md`; a Claude Code session in
+`silkscreen-firmware/` runs it as the saved workflow `silkscreen-upstream-sync`. Its step 0,
+`crosspoint-reader/scripts/silkscreen/upstream_status.sh`, reports what this repo would take.
+
 **Each sync:**
 
 1. `git fetch crossink`, then `git rev-list --left-right --count crossink/development...silkscreen` to see what comes in.
@@ -220,7 +225,9 @@ The branch takes CrossInk by merge, never by rebase: older commits pin SDK commi
 4. `git -C freeink-sdk fetch silkscreen-sdk`, then `git submodule update`, then the check under [The shared SDK](#the-shared-sdk).
 5. **CHANGELOG:** move every "Silkscreen:" line back under `## [Unreleased]`. A CrossInk release commit renames `[Unreleased]` to its version and sweeps our lines into it. Recreate `[Unreleased]` if the merge left none.
 6. **Re-run the [drain checklist](#drain-checklist)** on what the merge brought.
-7. **Build:**
+7. **Build** with `scripts/silkscreen/build_matrix.sh` (`--full` adds `silkscreen-debug`, `x4-pro-debug` and the
+   Sticky proxy). It builds the `silkscreen` envs from the real config first and the proxy envs after them, because a
+   proxy config wipes `.pio/build`. What it covers:
    - `silkscreen` and `silkscreen-debug`, with the guard, the size check and the touch-gate audit;
    - `x4-pro` and `x4-classic`;
    - the C3 and Sticky builds: the real `default` and `sticky` where CrossInk's core is installed, the proxies otherwise.
