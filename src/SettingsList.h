@@ -1087,8 +1087,15 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
     }
   }
   if (hasTouch) {
+    // Sunlight Fading Fix is hidden on touch boards without front keys. A board
+    // that keeps its keys alongside touch (Silkscreen) keeps the row; without its
+    // optional touch panel it never gets here.
+    const bool keepFadingFix = deviceHasFrontButtons(gpio);
     v.erase(std::remove_if(v.begin(), v.end(),
-                           [](const SettingInfo& s) { return s.nameId == StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION; }),
+                           [keepFadingFix](const SettingInfo& s) {
+                             return s.nameId == StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION ||
+                                    (!keepFadingFix && s.nameId == StrId::STR_SUNLIGHT_FADING_FIX);
+                           }),
             v.end());
 
     const auto themeIt =
@@ -1097,14 +1104,6 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
       removeEnumRawValue(*themeIt, static_cast<uint8_t>(CrossPointSettings::UI_THEME::CLASSIC));
       removeEnumRawValue(*themeIt, static_cast<uint8_t>(CrossPointSettings::UI_THEME::ROUNDEDRAFF));
     }
-  }
-  // Hidden on touch boards without front keys. A board that keeps its keys
-  // alongside touch (Silkscreen) keeps the row whether or not its optional touch
-  // panel answered the probe; elsewhere this is the touch test above.
-  if (!deviceHasFrontButtons(gpio)) {
-    v.erase(std::remove_if(v.begin(), v.end(),
-                           [](const SettingInfo& s) { return s.nameId == StrId::STR_SUNLIGHT_FADING_FIX; }),
-            v.end());
   }
   if (!gpio.hasHomeKey()) {
     v.erase(std::remove_if(v.begin(), v.end(),

@@ -72,13 +72,13 @@ CrossInk follows freeink-sdk's rule that feature code never keys off a device na
   - `BaseTheme::showsNoBattery()`.
 - **Cross-board changes.** Two kinds reach every board:
   - What the shared SDK brings: keyboard layouts and edge keys, glyph-centred header text, atomic settings writes, and SdFat write-back before sleep and USB Drive. Each has a "Silkscreen:" CHANGELOG line.
-  - Size, mostly runtime-gated code and English strings. Against S2, on this host's proxy core and including the two later SDK moves, flash grew by:
-    - x4-pro: +5.4 KB;
-    - x4-classic: +3.2 KB;
+  - Size, mostly runtime-gated code and English strings. Against S2, on this host's proxy core and including the three later SDK moves, flash changed by (at the port review):
+    - x4-pro: -5.3 KB (GCC now inlines the settings catalog differently there);
+    - x4-classic: +3.3 KB;
     - the C3 proxy: +3.5 KB;
-    - the Sticky proxy: +3.6 KB.
+    - the Sticky proxy: +3.2 KB.
 
-    RAM grew by 24-40 B.
+    RAM grew by 24-40 B. `getSettingsList()` is sensitive to this: a second `std::remove_if` over the catalog once made GCC outline `getBaseSettingsList()`'s lambda as well as inline it (+8 KB on every touch build), so a new condition goes into an existing erase.
 
   Behaviour on other boards is otherwise unchanged. `HalPowerManager::startDeepSleep()` on x4-pro and x4-classic was checked instruction-identical across the S4 change.
 
@@ -153,7 +153,7 @@ pio run -e silkscreen -t upload
   - before it, the sleep-source guard;
   - after it, CrossInk's `check_firmware_size.py`, `check_app_touch_gate.py` and `rename_firmware.py` (`firmware-silkscreen.bin`). The touch-gate audit returns at once on a touch build, as designed.
 - **Version.** Settings shows `1.6.0-silkscreen`. The debug env shows `1.6.0-<branch>+<hash>`, which on this branch reads `1.6.0-silkscreen+<hash>`.
-- **Size at `41c02221`:** 5,921,701 B (90.4 % of the 6.25 MB app slot) and 114,976 B of static RAM.
+- **Size at the port review:** 5,911,177 B (90.2 % of the 6.25 MB app slot) and 114,992 B of static RAM.
 - **Local hooks.** Set these under `[silkscreen]` in `platformio.local.ini` (gitignored), as in CrossPoint:
   - `frontlight_flags =` drops the light; `-DSILKSCREEN_FRONTLIGHT_BLEND_HZ=0` keeps the fixed warm/cool choice;
   - `display_flags = -DSILKSCREEN_DISPLAY_CONTROLLER=uc8279` (or `ssd1677`) skips the panel probe;
