@@ -443,9 +443,10 @@ void FrontlightPanelActivity::loop() {
                                        [this] { adjustBrightness(-BRIGHTNESS_STEP); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right},
                                        [this] { adjustBrightness(BRIGHTNESS_STEP); });
-  // Warmth otherwise has touch controls only: a board with front keys gets
-  // Up/Down for it. Touch-only boards are unchanged.
-  if (Frontlight.hasColorTemperature() && deviceHasFrontButtons(gpio)) {
+  // Warmth otherwise has touch controls only: a board that keeps its front keys
+  // alongside touch (Silkscreen, by its profile) gets Up/Down for it. Touch-only
+  // boards are unchanged, also when their touch panel fails its probe.
+  if (Frontlight.hasColorTemperature() && boardHasFrontButtons()) {
     buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this] { stepWarmthByKey(true); });
     buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this] { stepWarmthByKey(false); });
   }

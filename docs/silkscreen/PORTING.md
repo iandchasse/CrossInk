@@ -90,9 +90,17 @@ The user's decisions for this port:
   - the Cover Grid home;
   - Controls > Front Buttons (`SettingsList.h`, `SettingsActivity::rebuildSettingsLists()`, `ControlsOptionsActivity`);
   - Quick Actions' Long Back and Long Menu triggers;
-  - the key help in File Browser, Nearby transfer and Home.
+  - the key help in File Browser, Nearby transfer and Home;
+  - Settings > Display > Sunlight Fading Fix (`getSettingsList()`), so Silkscreen keeps the row whether or not its touch panel answered, as in CrossPoint.
 
-  The rest of CrossInk's touch UI is unchanged. The remap screen keeps its touch header.
+  These routed gates use `deviceHasFrontButtons(gpio)`, which equals the old `!gpio.hasTouch()` on every other board. The two gates the port added, Light Controls in Settings > Display > Frontlight and the light panel's Up/Down warmth keys, use `boardHasFrontButtons()` (the board profile) instead, so an X4 Pro whose touch panel fails its probe gains neither.
+
+  The rest of CrossInk's touch UI is unchanged. The remap screen keeps its touch header. These key hints stay touch-gated on purpose, so with the touch panel fitted Silkscreen does not show them, although the keys work:
+  - the side-button hints (`BaseTheme`/`LyraTheme::drawSideButtonHints()`, the keyboard's `>` `<`): their only caller is the keyboard, whose touch layout (56-px keys) starts at about y 430-490 in portrait, under the hints' fixed 345-506 band at the right edge, so they would cover its top-right keys; the key layout without touch starts below them;
+  - IntervalSelection's front and side step hints and its hint band, which share the room of its touch step buttons;
+  - the keyboard's key tips and hint lines (`hasTouchHardware()`), which share the room of the taller touch keyboard.
+
+  `STR_FRONT_BTN_FOLLOW_ORIENTATION` in `getSettingsList()`'s touch erase names no setting in CrossInk; the front-key orientation setting is `frontButtonOrientationAware` under Controls > Front Buttons, which is routed.
 - **Network OTA and the Nearby screens kept**, reworked with battery limits on Silkscreen only ([POWER.md §3.1](POWER.md#31-network-screens-aw-02), CI-06).
   - OTA queries `uxjulia/CrossInk`'s releases, which carry no `firmware-silkscreen` asset, so a check ends at "no update".
   - Pointing it at a private feed is a `-DCROSSINK_OTA_RELEASE_URL=...` build flag (`src/network/OtaUpdater.cpp`).
@@ -302,7 +310,7 @@ CrossInk keys a few layout and naming choices on device macros. Silkscreen gets 
 - `src/activities/reader/EpubReaderActivity.cpp` `publisherPageNumberX()`: no landscape-CCW offset; that is X4 Pro and X4 Classic only.
 - `src/components/UIThemeTokens.h` `listScrollInset`: 0.
 - `src/activities/boot_sleep/SleepActivity.cpp`: the sleep popup shows, as on every board but the X4 Pro and X4 Classic.
-- `src/activities/settings/SettingsActivity.cpp`: the Sunlight Fading Fix row stays, as in CrossPoint.
+- `src/activities/settings/SettingsActivity.cpp`: the Sunlight Fading Fix row's X4 Pro / X4 Classic device-macro gate leaves it in; its touch gate in `src/SettingsList.h` is routed (above), so the row stays on Silkscreen with or without the touch panel, as in CrossPoint.
 - `src/main.cpp`: the recovery chord is Up + Power, which on Silkscreen is a ladder key, not a strap pin.
 
 ## Bring-up checklist (real board)

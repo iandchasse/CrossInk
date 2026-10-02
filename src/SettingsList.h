@@ -1088,10 +1088,7 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   }
   if (hasTouch) {
     v.erase(std::remove_if(v.begin(), v.end(),
-                           [](const SettingInfo& s) {
-                             return s.nameId == StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION ||
-                                    s.nameId == StrId::STR_SUNLIGHT_FADING_FIX;
-                           }),
+                           [](const SettingInfo& s) { return s.nameId == StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION; }),
             v.end());
 
     const auto themeIt =
@@ -1100,6 +1097,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
       removeEnumRawValue(*themeIt, static_cast<uint8_t>(CrossPointSettings::UI_THEME::CLASSIC));
       removeEnumRawValue(*themeIt, static_cast<uint8_t>(CrossPointSettings::UI_THEME::ROUNDEDRAFF));
     }
+  }
+  // Hidden on touch boards without front keys. A board that keeps its keys
+  // alongside touch (Silkscreen) keeps the row whether or not its optional touch
+  // panel answered the probe; elsewhere this is the touch test above.
+  if (!deviceHasFrontButtons(gpio)) {
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](const SettingInfo& s) { return s.nameId == StrId::STR_SUNLIGHT_FADING_FIX; }),
+            v.end());
   }
   if (!gpio.hasHomeKey()) {
     v.erase(std::remove_if(v.begin(), v.end(),
@@ -1424,9 +1429,11 @@ inline std::vector<SettingInfo> buildDisplayFrontlightSettingsList(const std::ve
     if (it != allSettings.end()) settings.push_back(*it);
   };
 
-  // The light panel otherwise opens by touch gestures only; a board with front
-  // keys (Silkscreen) reaches it here.
-  if (Frontlight.present() && deviceHasFrontButtons(gpio)) {
+  // The light panel otherwise opens by touch gestures only; a board that keeps
+  // its front keys alongside touch (Silkscreen) reaches it here. Decided by the
+  // board profile, not the touch probe, so a touch panel that fails its probe
+  // adds nothing on other boards.
+  if (Frontlight.present() && boardHasFrontButtons()) {
     settings.push_back(SettingInfo::Action(StrId::STR_FRONTLIGHT_CONTROLS, SettingAction::FrontlightPanel));
   }
   addDisplaySetting(StrId::STR_RESTORE_LIGHT_ON_WAKE);
