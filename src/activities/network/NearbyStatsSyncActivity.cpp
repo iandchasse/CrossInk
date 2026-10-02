@@ -354,7 +354,7 @@ bool NearbyStatsSyncActivity::prepareLocalStats() {
 void NearbyStatsSyncActivity::startSync() {
   // The radio went off while the screen waited (PowerConfig::radioOffWhenIdle).
   if (radioidle::enabled() && WiFi.getMode() == WIFI_MODE_NULL && !beginEspNow()) {
-    setError("Could not start nearby sync");
+    setError(tr(STR_NEARBY_STATS_START_FAILED));
     return;
   }
   errorMessage_.clear();

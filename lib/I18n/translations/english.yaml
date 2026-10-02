@@ -923,3 +923,4 @@ STR_FRONTLIGHT_NOT_DETECTED: "No front light detected. Wait about 10 s before co
 STR_FRONTLIGHT_COOL_ONLY: "Cool light only: no warm light detected"
 STR_FRONTLIGHT_WARM_ONLY: "Warm light only: no cool light detected"
 STR_NO_BATTERY: "No battery"
+STR_NEARBY_STATS_START_FAILED: "Could not start nearby sync"
