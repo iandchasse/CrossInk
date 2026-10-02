@@ -339,19 +339,9 @@ unsigned long HalGPIO::getHeldTime() const { return inputMgr.getHeldTime(); }
 unsigned long HalGPIO::getPowerButtonHeldTime() const { return inputMgr.getPowerButtonHeldTime(); }
 
 bool HalGPIO::rawInputActive() {
-  if (inputMgr.isPowerButtonPhysicallyPressed()) return true;
   // The ladder decoder's own released rule, from one sample per ladder; the
   // oversampled decode stays with the debounced poll.
-  if (BoardConfig::hasAdcLadders()) return inputMgr.adcLadderContact();
-  InputManager::ButtonAdcSample g1{}, g2{};
-  inputMgr.readButtonAdc(g1, g2);
-  // ADC ladders idle at the full-scale rail (~4095); Xteink button bands sit below 3900. A decoded key also
-  // counts, for ladder keys that read close to the rail.
-  constexpr int kIdleRailMin = 4000;
-  const auto active = [](const InputManager::ButtonAdcSample& g) {
-    return g.button >= 0 || (g.raw >= 0 && g.raw < kIdleRailMin);
-  };
-  return active(g1) || active(g2);
+  return inputMgr.isPowerButtonPhysicallyPressed() || inputMgr.adcLadderContact();
 }
 
 void HalGPIO::idleDelay(const unsigned long ms) {

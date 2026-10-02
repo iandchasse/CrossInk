@@ -119,10 +119,11 @@ class HalGPIO {
   bool wasAnyReleased() const;
   unsigned long getHeldTime() const;
   unsigned long getPowerButtonHeldTime() const;
-  // True when any button contact is closed right now, read straight from the
-  // hardware (an ADC ladder off its released level, or the power GPIO
-  // asserted), without going through the debounced state. Cheap enough to call
-  // every few ms: one conversion per idle ladder on InputStyle::AdcLadders boards.
+  // For InputStyle::AdcLadders boards (Silkscreen; idleDelay()'s early exit):
+  // true when a key contact is closed right now, read straight from the hardware
+  // (an ADC ladder off its released level, or the power GPIO asserted), without
+  // going through the debounced state. Cheap enough to call every few ms: one
+  // conversion per idle ladder.
   bool rawInputActive();
   // The low-power loop's wait between input polls. On InputStyle::AdcLadders
   // boards (Silkscreen) it waits in short slices and returns early on a raw key
