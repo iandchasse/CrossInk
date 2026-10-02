@@ -340,6 +340,7 @@ CrossInk keys a few layout and naming choices on device macros. Silkscreen gets 
    - **Restore with no light:** with Restore Light on Wake on, or inside the daily schedule's window, unplug the light while asleep and wake. The restore tries once, and the popup follows the first screen. The next wake logs `Frontlight not restored` and leaves the boost off. A power cycle tries once again.
    - **Single-string light:** it lights the string that is there; the panel says "Warm light only" or "Cool light only" and pins the warmth.
    - **Light Controls** (Settings > Display > Frontlight): Left/Right set the brightness, Up/Down the warmth, Confirm switches the light, Back closes it, and the light is saved on exit.
+   - **Shortcut with the panel open:** with no light fitted and Short Power set to Toggle Frontlight, open Light Controls and press Power. The panel's "No front light detected" note shows, Left/Right only set the level and do not relight the boost, and after closing the panel and rebooting the light reads off. In the reader's light overlay (reader details), the same press shows the popup at once.
    - **Blend:** warmth 30-70 % mixes the strings, and the first switch-on after a reset lights each string through its probe window.
    - **Ghost wake:** it never lights the LEDs.
    - **Sleep:** the light goes dark at the start of sleep entry.

@@ -232,6 +232,14 @@ void FrontlightPanelActivity::noteSwitchOnResult() {
 }
 
 void FrontlightPanelActivity::syncLightState() {
+  // A switch-on started elsewhere while the panel is open (a Toggle Frontlight
+  // shortcut): the panel owns its notice (showsFrontlightNotice()), so it takes
+  // the result here, shows the note and leaves the light saved as off on close.
+  if (!context.showReaderDetails && !awaitingSwitchOnResult && Frontlight.switchOnPending()) {
+    awaitingSwitchOnResult = true;
+    lightOn = true;
+    requestUpdate();
+  }
   if (awaitingSwitchOnResult && !Frontlight.switchOnPending()) noteSwitchOnResult();
 }
 

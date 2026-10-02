@@ -134,6 +134,8 @@ class FrontlightPanelActivity final : public Activity {
   // the overlay back to the current screen.
   bool handleHomeGesture() override;
   bool requiresFreshBackdrop() const override { return true; }
-  // The panel shows a switch-on's "no light" result itself (noteSwitchOnResult()).
-  bool showsFrontlightNotice() const override { return true; }
+  // The panel shows a switch-on's "no light" result itself (noteSwitchOnResult()),
+  // except in reader-details mode, which has no light rows: main.cpp's popup
+  // shows it there and saves the light as off at once.
+  bool showsFrontlightNotice() const override { return !context.showReaderDetails; }
 };
