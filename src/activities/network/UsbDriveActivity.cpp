@@ -6,7 +6,6 @@
 #include <LibraryBuilder.h>
 #include <SdCardFontSystem.h>
 #ifndef SIMULATOR
-#include <BatteryMonitor.h>
 #include <BoardConfig.h>
 #include <HalPowerManager.h>
 #endif
@@ -217,7 +216,7 @@ void UsbDriveActivity::renderMessage(const char* message, const char* detail) co
 bool UsbDriveActivity::cablePulledOnBattery() {
   if (!BoardConfig::hasChargeStatusLadder()) return false;
   using BoardConfig::ChargeState;
-  const ChargeState charge = BatteryMonitor::chargeStatus();
+  const ChargeState charge = HalPowerManager::chargeState();
   if (charge == ChargeState::ExternalIdle || charge == ChargeState::Charging || charge == ChargeState::Complete) {
     sawExternalPower = true;
   }

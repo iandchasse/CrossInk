@@ -197,6 +197,12 @@ class HalPowerManager {
   bool noChargeableCell() const;
   static constexpr uint16_t NO_CELL_CLEAR_MV = BatteryMonitor::CELL_PRESENT_MIN_MV + 100;
 
+  // The charge-status ladder's decoded state (BoardConfig::hasChargeStatusLadder(),
+  // Silkscreen), as BatteryMonitor last debounced it from HalGPIO::update(): Unknown
+  // until it decodes and once it is lost, and always Unknown on boards without
+  // the ladder. Reads no ADC.
+  static BoardConfig::ChargeState chargeState() { return BatteryMonitor::chargeStatus(); }
+
 #if CROSSINK_BATTERY_DIAG_LOG
   // Raw battery telemetry for the diagnostic log, kept behind the flag so
   // shipping builds carry neither the struct nor the extra I2C traffic.
