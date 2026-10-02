@@ -22,7 +22,7 @@ The hardware is described in `de-link_pcb/docs/HARDWARE.md` ([iandchasse/silkscr
 
 - CrossInk `development` at `9dd334d3` (2026-09-29), as cloned.
 - freeink-sdk at the shared Silkscreen SDK head, `468b8e2f` ([The shared SDK](#the-shared-sdk)).
-- The last CrossPoint `silkscreen` commit ported is `92973915` (2026-10-01).
+- The last CrossPoint `silkscreen` commit ported is `28fdd857` (2026-10-01).
 
 ## Status
 
@@ -39,13 +39,17 @@ Every stage has landed in these local commits on `silkscreen`. **Nothing has run
 | S6 Awake limits | `647fc531`, `47e8e470`, `7cc2982d`, `37d61efe` | The battery awake limits in `loop()`: the cutoff, the ceiling, the input cap, the wake-no-input and SD-error sleeps. Quick Lock input accounting, the clocks carried across silent restarts, client traffic, the USB Drive cable pull, the downloader's cutoff abort, the SD firmware floor, the front-light settle. SDK moved to `3a42533`. |
 | S7 Radio | `3312a1eb`, `c369039e` | Network screens release the radio and stop spinning when their work ends. The Nearby windows. Radio shortcuts refused near empty. The OTA install floor. The SDK moved to `dae5523`, which blends the light's warm and cool strings. |
 | S8 UI | `41c02221` | The front-key gates routed through `hasFrontButtons()`. Light Controls in Settings. The no-light popup and the light panel's notes. The "No battery" label. |
-| S9 Docs | this commit | `docs/silkscreen/`. |
+| S9 Docs | `f429fae7` | `docs/silkscreen/`. |
+| Port review | `ff68feee`, `381440c8`, `51fb86d3`, `b65fb929`, `f0ffb481`, `e4a755b6`, `e4982497` and the docs commit after them | The SDK moved to `468b8e2`, which checks a blend's second string while lit and lets the rail settle before COLOR_SEL moves at a switch-off or sleep mid-probe. The charge state is read through the power HAL; `rawInputActive()` is kept to the ladder boards. A silent restart on USB no longer sleeps on its first pass; Quick Lock and held chords no longer spin at full clock. The light panel takes over a switch-on started elsewhere. Sunlight Fading Fix stays with touch; Light Controls and the panel's warmth keys follow the board profile. The Nearby stats restart error is translated. |
 
 CrossPoint commits after the last review (`b605f87d`) were taken as follows:
 
 - `5d58fdc0`, the ceiling rule: ported in `838b27b1` and `647fc531`;
 - `4566ddcd` and `16e42656`, the SSD1677 drive values: through the SDK move in `37d61efe`;
-- `92973915`, the front-light blend: in `c369039e`.
+- `92973915`, the front-light blend: in `c369039e`;
+- `36ee5cfc`, the front-light key shortcuts and the power double-click: its SDK move in `ff68feee`, and the panel's takeover of a switch-on started elsewhere in `f0ffb481`. Its Short Power > Toggle Frontlight, Long-press Confirm > Frontlight and double-click toggle stay CrossPoint's: CrossInk has its own Toggle Frontlight and shortcut actions;
+- `8127e3e8`, the battery checks before the chord returns: CrossInk has had them since `647fc531` (CI-02), and `b65fb929` adds the held-chord wait;
+- `6b4f807d` (test firmware formatting) and `28fdd857` (CrossPoint's own docs): nothing to port.
 
 **Battery use.** The image has carried every drain rule since S6, but none has been measured. Run C2 and C6 of the [bring-up checklist](#bring-up-checklist-real-board) before relying on it.
 
@@ -126,13 +130,13 @@ The user's decisions for this port:
 | Sleep tail | Every board through the SDK path | Silkscreen only. Other boards keep CrossInk's tail, the guard's one exception |
 | Sleep guard | `scripts/check_sleep_wake_sources.sh`, run by CI | `scripts/check_sleep_wake_sources.py`, a pre-build script of the Silkscreen envs, also standalone |
 | Wake rule | An RTC word (`sleepWakePolicy`); the first wake after power-on waits for the settings | CrossInk's NVS mirror (`readWakeShortPressFromNvs()`): every wake is decided before SD |
-| Battery checks in `loop()` | After the loop's early returns; CrossPoint has no Quick Lock | Before every early return (CI-02), since CrossInk's Quick Lock and chords return early |
+| Battery checks in `loop()` | Before the wake-release and screenshot-chord returns since `8127e3e8`; CrossPoint has no Quick Lock | Before every early return (CI-02), since CrossInk's Quick Lock and chords return early; the Quick Lock branch idles and held chords wait 10 ms |
 | Quick Lock, silent-restart clocks, radio shortcuts | n/a (CrossPoint has none of them) | CI-03, CI-04, CI-05 |
 | Nearby (ESP-NOW) | n/a | Kept, with 2-min listen and discover windows (CI-06) |
 | Client traffic | All requests except WebDAV polling methods and the plugin-job poll | All requests except WebDAV polling methods and `handleNotFound()` answers (captive probes); also automatic page turns and a USB host using the drive |
 | Plugin system, loan clock | Drain rules (`4505ceec`) | Not in CrossInk: rows marked not applicable in POWER.md |
 | Upload cutoff | Web uploads poll the cutoff | WebSocket uploads covered; a blocking multipart upload is not (no upstream #3732) |
-| Front-light key path | Settings > Display > Frontlight opens the panel; Long-press Confirm > Frontlight; Short Power > Toggle Frontlight | Settings > Display > Frontlight > Light Controls (`SettingAction::FrontlightPanel`, `ActivityManager::pushFrontlightPanel()`); CrossInk's own shortcuts |
+| Front-light key path | Settings > Display > Frontlight opens the panel; Long-press Confirm > Frontlight and Short Power > Toggle Frontlight (both since `36ee5cfc`) | Settings > Display > Frontlight > Light Controls (`SettingAction::FrontlightPanel`, `ActivityManager::pushFrontlightPanel()`); CrossInk's own shortcuts |
 | Restore at wake | Restore Light on Wake | Also CrossInk's daily light schedule; a brightness change from 0 while lit is a probed switch-on |
 | Reader overlay | `xteinkClassPanel()` honours `x4ClassPanel` | No counterpart; check gray levels by eye (C12) |
 | Version | Upstream's version string | `1.6.0-silkscreen` (`scripts/git_branch.py`), file `firmware-silkscreen.bin` |
@@ -158,8 +162,8 @@ pio run -e silkscreen -t upload
   A default env goes in the same file: `[platformio]` `default_envs = silkscreen`.
 - **Two cores.** pioarduino keeps one Arduino framework package installed. Switching between a Silkscreen env (3.3.11) and any other env (3.3.7) makes PlatformIO reinstall the framework, so batch builds by core.
 - **The other envs on this Windows host.** They were built only through a scratch proxy config that changes nothing but `[base]`'s platform (55.03.37 → 55.03.311), plus two proxies on `base`: a C3 one with `default`'s flags and an S3 one with `sticky`'s. The 3.3.7 framework would replace the shared 3.3.11 copy that CrossPoint builds with, and `[firmware_tuned]`'s `custom_sdkconfig` cannot run here. Confirm the real images on a host with CrossInk's core: `pio run -e default -e sticky -e x4-pro -e x4-classic`.
-- **Windows.** Run PlatformIO with `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8` (CrossInk's scripts print UTF-8), and keep `core.longpaths=true`.
-- **Formatting:** `bin/clang-format-fix -g`, which formats the changed lines only. Never mass-reformat.
+- **Windows.** Run PlatformIO with `PYTHONUTF8=1` and `PYTHONIOENCODING=utf-8` (CrossInk's scripts print UTF-8), and keep `core.longpaths=true`. Run one PlatformIO command at a time: the platform may reinstall a tool package or its Python dependencies when it starts, and a second `pio` process running beside it can leave them half-installed (once, a `pio check` beside a build removed `tool-esptoolpy`, `urllib3` and `esptool` from PlatformIO's environment).
+- **Formatting:** `bin/clang-format-fix -g` reformats, as whole files, the tracked C/C++ files whose working tree differs from the index; run it before `git add`. A new file is formatted only once it is tracked: `git add -N` it first, or run clang-format on it directly. Never mass-reformat.
 
 ## Repository layout and remotes
 
@@ -221,6 +225,7 @@ The branch takes CrossInk by merge, never by rebase: older commits pin SDK commi
    - `x4-pro` and `x4-classic`;
    - the C3 and Sticky builds: the real `default` and `sticky` where CrossInk's core is installed, the proxies otherwise.
    - On a host with a C++ compiler, also the simulator envs and the `test/` CMake suite ([Simulator and host tests](#simulator-and-host-tests)).
+   - Where CrossInk's core is installed, CI's cppcheck step over the `default_envs`: `pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high`.
 8. Commit the merge. List the commits it takes and each conflict's resolution.
 9. **Measure:** spot-check the sleep current (MEAS-01) whenever the merge changed sleep, boot, `loop()` or network code.
 
@@ -241,7 +246,7 @@ The branch takes CrossInk by merge, never by rebase: older commits pin SDK commi
 
 ```bash
 git fetch crosspoint
-git log --oneline 92973915..crosspoint/silkscreen -- . ':!src/activities/testsuite' ':!scripts/check_test_firmware.sh'
+git log --oneline 28fdd857..crosspoint/silkscreen -- . ':!src/activities/testsuite' ':!scripts/check_test_firmware.sh'
 ```
 
 Port new drain fixes and board behaviour, update [POWER.md §3](POWER.md#3-firmware-rules-and-where-they-live)'s anchors, and move the "last CrossPoint commit ported" at the top of this file. CrossPoint's own uncommitted work is not ported until it lands as a commit.
@@ -374,10 +379,7 @@ CrossInk keys a few layout and naming choices on device macros. Silkscreen gets 
 
 ## Simulator and host tests
 
-This host has no C++ compiler, so neither the simulator nor the `test/` CMake suite has run since the port began. Every change was written to compile there, through the gates above. Two `test/` targets touch changed files:
-
-- `firmware_board_tag` compiles `src/network/FirmwareBoardTag.cpp`, built for Sticky, so the new Silkscreen branch is never reached;
-- `option_popup` includes `BaseTheme.h`, which gained declarations only, with types the header already uses.
+This host has no C++ compiler, so neither the simulator nor the `test/` CMake suite has run since the port began. Every change was written to compile there, through the gates above. One `test/` target compiles a changed file: `firmware_board_tag` builds `src/network/FirmwareBoardTag.cpp` for Sticky, so the new Silkscreen branch is never reached. `option_popup` gets `BaseTheme.h` and `UITheme.h` from its own stubs (`test/option_popup/stubs`), not the changed `src` headers.
 
 On Linux or macOS (or WSL; see `docs/simulator.md` for the macOS-only paths), run:
 
@@ -405,6 +407,7 @@ It differs from Silkscreen in three ways:
 
 - **The bring-up checklist** on a real board, then the fixes it finds (the plan's S10 stage).
 - **Real-core builds:** `pio run -e default -e sticky -e x4-pro -e x4-classic` on 55.03.37, then `pio run -e silkscreen`.
+- **CI's cppcheck step,** never run on this host: `pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high` (the `default_envs`). A standalone cppcheck 2.20 run with the X4 Pro's defines flagged board-constant folds in port code: `knownConditionTrueFalse` at `UsbDriveActivity::loop()`'s `cablePulledOnBattery() || batteryLimitReached()` and `cablePulledOnBattery()`'s `hasChargeStatusLadder()` test, and at `HalFrontlight.h`'s `noLightFound()` and `stringMissing()`; and `functionStatic` for `UsbDriveActivity::batteryLimitReached()`. That run also flags unchanged upstream files, so it does not prove CI fails. If `pio check` reports them, add `// cppcheck-suppress knownConditionTrueFalse` above each line, as `LyraCarouselTheme.cpp` does, and make `batteryLimitReached()` static.
 - **The simulator and host tests**, on Linux or macOS.
 - **Open items carried from the stages:**
   - The multipart-upload cutoff gap (BAT-01), until CrossInk takes upstream #3732.

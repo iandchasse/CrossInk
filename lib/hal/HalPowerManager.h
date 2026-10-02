@@ -119,10 +119,11 @@ class HalPowerManager {
   void noteClientTraffic() { lastClientTrafficMs = millis(); }
   unsigned long msSinceClientTraffic() const { return millis() - lastClientTrafficMs; }
 
-  // A key, touch or tilt input the user meant (loop(), which also starts this
-  // clock on its first pass). The awake ceiling, the input cap and the wake and
-  // storage-error timeouts count from it. Kept apart from loop()'s inactivity
-  // timer, which screens that hold auto-sleep off reset on every pass.
+  // A key, touch or tilt input the user meant (noteBatteryInput() in main.cpp);
+  // resumeAwakeClocks() starts this clock in setup(). The awake ceiling, the input
+  // cap and the wake and storage-error timeouts count from it. Kept apart from
+  // loop()'s inactivity timer, which screens that hold auto-sleep off reset on
+  // every pass.
   void noteInput() { lastInputMs = millis(); }
   unsigned long msSinceInput() const { return millis() - lastInputMs; }
 
