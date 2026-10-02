@@ -26,6 +26,7 @@ RTC_NOINIT_ATTR uint32_t awakeCarryMagic;
 RTC_NOINIT_ATTR uint32_t awakeCarrySinceInputMs;
 RTC_NOINIT_ATTR uint32_t awakeCarrySinceTrafficMs;
 RTC_NOINIT_ATTR uint32_t awakeCarryWakeNoInputArmed;
+RTC_NOINIT_ATTR uint32_t awakeCarryUsbConnected;
 constexpr uint32_t AWAKE_CARRY_MAGIC = 0x41574B43;  // "AWKC"
 #endif
 
@@ -318,6 +319,7 @@ void HalPowerManager::carryAwakeClocks(const bool wakeNoInputArmed) const {
   awakeCarrySinceInputMs = msSinceInput();
   awakeCarrySinceTrafficMs = msSinceClientTraffic();
   awakeCarryWakeNoInputArmed = wakeNoInputArmed ? 1 : 0;
+  awakeCarryUsbConnected = gpio.isUsbConnected() ? 1 : 0;
   awakeCarryMagic = AWAKE_CARRY_MAGIC;
 #else
   (void)wakeNoInputArmed;
@@ -338,6 +340,12 @@ bool HalPowerManager::resumeAwakeClocks() {
   // time is longer than this boot's uptime.
   lastInputMs = now - awakeCarrySinceInputMs;
   lastClientTrafficMs = now - awakeCarrySinceTrafficMs;
+  // The battery limits run from the first loop() pass, before the charge-status
+  // ladder has decoded (about 1.5 s, or about 9.5 s for Complete), while
+  // isUsbConnected() still says "not connected". Restarted on external power,
+  // it says "connected" until then, so carried clocks cannot sleep the board
+  // on the cable.
+  if (awakeCarryUsbConnected == 1) gpio.seedUsbConnected(true);
   LOG_DBG("PWR", "Awake clocks resumed after a restart: input %lu s ago, client traffic %lu s ago",
           static_cast<unsigned long>(awakeCarrySinceInputMs / 1000U),
           static_cast<unsigned long>(awakeCarrySinceTrafficMs / 1000U));

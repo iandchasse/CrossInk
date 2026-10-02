@@ -128,12 +128,14 @@ class HalPowerManager {
 
   // A silent restart (SilentRestart.h) continues the session, so these clocks
   // carry across it: carryAwakeClocks() right before the ESP.restart() keeps how
-  // long ago the last input and client traffic were, plus whether the caller's
-  // PowerConfig::wakeNoInputTimeoutS wait was still armed, in RTC memory.
-  // resumeAwakeClocks(), once from setup(), starts the clocks: where they were
-  // after a silent restart, or now otherwise. It returns the carried armed flag
-  // (false when nothing was carried). Without the SDK power policy nothing is
-  // carried and the clocks just start.
+  // long ago the last input and client traffic were, whether the caller's
+  // PowerConfig::wakeNoInputTimeoutS wait was still armed, and whether external
+  // power was present, in RTC memory. resumeAwakeClocks(), once from setup()
+  // after gpio.begin(), starts the clocks: where they were after a silent
+  // restart, or now otherwise. After a restart on external power it seeds
+  // HalGPIO's USB answer until the charge-status ladder decodes. It returns the
+  // carried armed flag (false when nothing was carried). Without the SDK power
+  // policy nothing is carried and the clocks just start.
   void carryAwakeClocks(bool wakeNoInputArmed) const;
   bool resumeAwakeClocks();
 

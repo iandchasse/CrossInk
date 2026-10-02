@@ -1929,6 +1929,22 @@ static void sleepOnBatteryAwakeLimits() {
     enterDeepSleep(true);
   }
 }
+
+// loop()'s idle wait, for the passes that return before reaching it: Quick
+// Lock, and a chord held down. Without it such a pass spins at full clock until
+// the lock's timeout or the awake ceiling ends it.
+static void idleWaitBeforeEarlyReturn(const unsigned long lastActivityTime) {
+  if (millis() - lastActivityTime >= HalPowerManager::IDLE_POWER_SAVING_MS) {
+    powerManager.setPowerSaving(true);
+#ifdef SIMULATOR
+    delay(50);
+#else
+    gpio.idleDelay(50);  // ends early on a key contact, so unlock taps are sampled
+#endif
+  } else {
+    delay(10);
+  }
+}
 #endif
 
 void loop() {
@@ -2047,6 +2063,9 @@ void loop() {
     ScreenshotUtil::takeScreenshot(renderer);
   }
   if (screenshotChordResult.consumeInput) {
+#if FREEINK_CAP_POWER_POLICY
+    delay(10);  // held: do not spin while the chord's keys stay down
+#endif
     return;
   }
 
@@ -2057,6 +2076,9 @@ void loop() {
       touchscreenEscapeHatch, modalOwnsInput);
   if (dispatchButtonShortcut(sideButtonShortcutResult) || sideButtonShortcutResult.consumeInput) {
     lastActivityTime = millis();
+#if FREEINK_CAP_POWER_POLICY
+    delay(10);  // held: do not spin while the chord's keys stay down
+#endif
     return;
   }
 
@@ -2116,12 +2138,20 @@ void loop() {
       lastActivityTime = millis();
     }
     mappedInputManager.clearInjectedReleases();
+#if FREEINK_CAP_POWER_POLICY
+    idleWaitBeforeEarlyReturn(lastActivityTime);
+#endif
     return;
   }
 
   // The entire chord is consumed until both buttons are released, so the
   // Power release cannot also run its ordinary short-press action.
-  if (shortcutResult.consumeInput) return;
+  if (shortcutResult.consumeInput) {
+#if FREEINK_CAP_POWER_POLICY
+    delay(10);  // held: do not spin while the chord's keys stay down
+#endif
+    return;
+  }
 
 #ifdef SIMULATOR
   if (gpio.consumeSimulatorSleepRequest()) {

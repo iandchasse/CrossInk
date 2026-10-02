@@ -189,6 +189,12 @@ class HalGPIO {
   // to a direct probe so setup-time callers still report external power.
   bool isUsbConnectedCached() const;
 
+  // Charge-status ladder boards only: the answer isUsbConnected() keeps until the
+  // ladder first decodes, instead of "not connected". For a silent restart on
+  // external power (HalPowerManager::resumeAwakeClocks()); call before the first
+  // update().
+  void seedUsbConnected(bool connected) { lastUsbConnected = connected; }
+
   // Whether a cold boot with no USB detected can be trusted to mean a held
   // power button on the active board's power topology.
   bool coldBootImpliesPowerButton() const;
