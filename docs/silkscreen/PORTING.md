@@ -21,7 +21,7 @@ The hardware is described in `de-link_pcb/docs/HARDWARE.md` ([iandchasse/silkscr
 **Base:**
 
 - CrossInk `development` at `9dd334d3` (2026-09-29), as cloned.
-- freeink-sdk at the shared Silkscreen SDK head, `dae55238` ([The shared SDK](#the-shared-sdk)).
+- freeink-sdk at the shared Silkscreen SDK head, `468b8e2f` ([The shared SDK](#the-shared-sdk)).
 - The last CrossPoint `silkscreen` commit ported is `92973915` (2026-10-01).
 
 ## Status
@@ -173,7 +173,7 @@ pio run -e silkscreen -t upload
 
 There is one Silkscreen SDK line: the branch `silkscreen` of `silkscreen-firmware/crosspoint-reader/freeink-sdk`, published as `iandchasse/freeink-sdk`. CrossPoint owns it. CrossInk's gitlink is **always that branch's head**: never a commit that is not on it, and never CrossInk's own pre-merge PR pins.
 
-**Check:** these two must print the same commit (today `dae552383ea51ff3395a6c6bfad56793bdc379e2`):
+**Check:** these two must print the same commit (today `468b8e2f8e83c7c92a51ff887e48bff8bcdcbabb`):
 
 ```bash
 git ls-tree HEAD freeink-sdk

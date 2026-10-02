@@ -51,6 +51,7 @@
 - Silkscreen: Nearby stats sync, position sync and file transfer listen or look for another reader for up to 2 minutes, keep the reader awake only while an exchange runs, and switch the radio off on their result screens. Press Sync or Share, pick a found reader, or open the transfer again to restart it.
 - Silkscreen: shortcuts that start Wi-Fi or Nearby (sync progress, file transfer, Calibre, join network, hotspot, nearby position sync) do nothing while the battery reads at its cutoff.
 - Silkscreen: a front light with warm and cool strings now blends them for a warmth between the ends instead of picking one, once both strings have lit since the last reset (`-DSILKSCREEN_FRONTLIGHT_BLEND_HZ=0` in `frontlight_flags` keeps the fixed choice).
+- Silkscreen: the first warmth change after a wake that needs the light's other colour shows that colour for half a second while its string is checked, instead of going dark first; switching the light off or sleeping during the check waits for the light's power to settle before the colour changes.
 
 ### Fixed
 
