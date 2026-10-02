@@ -216,6 +216,12 @@ review and records) is `crosspoint-reader/docs/silkscreen/UPSTREAM-SYNC.md`; a C
 `silkscreen-firmware/` runs it as the saved workflow `silkscreen-upstream-sync`. Its step 0,
 `crosspoint-reader/scripts/silkscreen/upstream_status.sh`, reports what this repo would take.
 
+**Sync records.** One row per sync, beside the row in CrossPoint's PORTING.md "Upstream merges" table:
+
+| CrossInk commits | `crossink/development` | SDK gitlink | What it brought |
+|---|---|---|---|
+| `1dcf47d9`, `332fb4ac`, and the `docs:` commit after them | Nothing new: `9dd334d3`, as cloned | `468b8e2` to `3d1c39a`, the shared line's merge of `bbd528c` | CrossPoint's sync to upstream `5b1f0605` (`ad1b5ce8`, #3824). Only the SDK move: `bbd528c` changes ContentProtection and the OPDS parser, and CrossInk links neither (it has no plugin system and parses OPDS with its own `lib/OpdsParser`), so there is nothing to port and no CHANGELOG line. REQUIREMENTS.md refreshed from CrossPoint `8cb94736`. |
+
 **Each sync:**
 
 1. `git fetch crossink`, then `git rev-list --left-right --count crossink/development...silkscreen` to see what comes in.
@@ -236,7 +242,7 @@ review and records) is `crosspoint-reader/docs/silkscreen/UPSTREAM-SYNC.md`; a C
    - the C3 and Sticky builds: the real `default` and `sticky` where CrossInk's core is installed, the proxies otherwise.
    - On a host with a C++ compiler, also the simulator envs and the `test/` CMake suite ([Simulator and host tests](#simulator-and-host-tests)).
    - Where CrossInk's core is installed, CI's cppcheck step over the `default_envs`: `pio check --fail-on-defect low --fail-on-defect medium --fail-on-defect high`.
-8. Commit the merge. List the commits it takes and each conflict's resolution.
+8. Commit the merge. List the commits it takes and each conflict's resolution. Add the sync's row to the sync records above.
 9. **Measure:** spot-check the sleep current (MEAS-01) whenever the merge changed sleep, boot, `loop()` or network code.
 
 **Upstream features that bring CrossPoint's rules with them.** CrossInk takes upstream CrossPoint selectively. When one of these arrives, port CrossPoint's counterpart in the same merge:
