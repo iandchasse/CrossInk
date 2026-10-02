@@ -1160,23 +1160,54 @@ static bool handleFrontlightTrip() {
 }
 
 #if FREEINK_CAP_FRONTLIGHT_PROBE
+// "No front light detected. Wait about 10 s before connecting a light." The
+// boost has just run with no load, or a trip took it off near its over-voltage
+// level, and a light plugged in before its output has fallen discharges it
+// through one string.
+static void showFrontlightNotFound() {
+  RenderLock lock;
+  GUI.drawWrappedPopup(renderer, tr(STR_FRONTLIGHT_NOT_DETECTED), 3);
+}
+
 // FrontlightConfig::loadProbeWindowMs (Silkscreen), from every loop() pass, so
 // each switch-on's load probe settles while the device is awake:
 // - a tripped light is switched off and saved so (handleFrontlightTrip());
 // - a switch-on the user asked for that found no light is saved as off, as
-//   HalFrontlight has already left it, so the saved state matches the light;
+//   HalFrontlight has already left it, so the saved state matches the light. A
+//   screen that shows the result itself (Activity::showsFrontlightNotice(), the
+//   light panel, which saves the light on exit) takes it instead;
+// - a restore at wake that found no light (Restore Light on Wake, the daily
+//   light schedule, or a silent restart's replay) keeps the saved "on": a cold
+//   boot clears the SDK's record, so a later restore may try again;
 // - a single-colour light keeps the saved warmth on the string that is there.
 //   The SDK marks the missing string until a cold boot, which (like Restore
 //   Light on Wake) would otherwise select it again. Only a warmth that selects
 //   the missing string changes.
-// A restore at wake that found no light keeps the saved "on": a cold boot clears
-// the SDK's record, so a later restore may try again. From the loop task only.
+// Each of the first three shows "No front light detected" (showFrontlightNotFound()).
+// The light controls stay where they are, so switching it on again is the retry.
+// The popup waits for the second loop pass, once the first pass has started the
+// first screen's render, which it must not go under. The screen is first drawn
+// again from the settled state, so a light shown on while its switch-on was still
+// deciding does not stay on beside the popup. From the loop task only.
 static void settleFrontlight() {
-  handleFrontlightTrip();
-  if (Frontlight.takeNoLightNotice() && SETTINGS.frontlightOn != 0) {
-    SETTINGS.frontlightOn = 0;
-    activityManager.persistGlobalSettings();
+  static bool firstPassDone = false;
+  static bool noticeDue = false;
+  if (handleFrontlightTrip()) noticeDue = true;
+  if (Frontlight.takeRestoreNoLightNotice()) noticeDue = true;
+  if (!activityManager.showsFrontlightNotice() && Frontlight.takeNoLightNotice()) {
+    if (SETTINGS.frontlightOn != 0) {
+      SETTINGS.frontlightOn = 0;
+      activityManager.persistGlobalSettings();
+    }
+    noticeDue = true;
   }
+  if (noticeDue && firstPassDone) {
+    noticeDue = false;
+    (void)activityManager.requestUpdateAndWait();
+    showFrontlightNotFound();
+  }
+  firstPassDone = true;
+
   uint8_t warmth = SETTINGS.frontlightWarmth;
   if (Frontlight.stringMissing(true) && warmth >= 50) warmth = 0;
   if (Frontlight.stringMissing(false) && warmth < 50) warmth = 100;

@@ -21,6 +21,7 @@
 #include "ClockOffsetActivity.h"
 #include "ClockSyncActivity.h"
 #include "CrossPointSettings.h"
+#include "DeviceCapabilities.h"
 #include "FontSelectionActivity.h"
 #if CROSSINK_SCALABLE_FONTS
 #include "TtfRenderOptionsActivity.h"
@@ -37,6 +38,7 @@
 #include "SettingsList.h"
 #include "SilentRestart.h"
 #include "StatusBarSettingsActivity.h"
+#include "activities/ActivityManager.h"
 #include "activities/network/WifiSelectionActivity.h"
 #include "activities/reader/GlobalReadingStats.h"
 #include "activities/util/ConfirmationActivity.h"
@@ -350,18 +352,18 @@ void SettingsActivity::rebuildSettingsLists() {
   const size_t expectedSideButtonCount =
       controlsSideButtonBaseCount + (hasSideButtonChordSetting(allSettings) ? 1u : 0u);
 #if CROSSINK_APP_CAP_TOUCH
-  if (!gpio.hasTouch()) {
+  const bool hasFrontButtons = deviceHasFrontButtons(gpio);
+  if (hasFrontButtons) {
     controlsFrontButtonSettings = buildControlsFrontButtonSettingsList(allSettings);
   }
   controlsSideButtonSettings = buildControlsSideButtonSettingsList(allSettings);
 
-  const bool hasTouch = gpio.hasTouch();
   const bool hasHomeKey = gpio.hasHomeKey();
-  const size_t expectedControlsCount = controlsParentBaseCount - (hasTouch ? 1u : 0u) + (hasHomeKey ? 1u : 0u) +
+  const size_t expectedControlsCount = controlsParentBaseCount - (hasFrontButtons ? 0u : 1u) + (hasHomeKey ? 1u : 0u) +
                                        (hasSettingByName(allSettings, StrId::STR_TILT_PAGE_TURN) ? 1u : 0u) +
                                        (hasSettingByName(allSettings, StrId::STR_TILT_PAGE_TURN_DIRECTION) ? 1u : 0u) +
                                        (hasSettingByName(allSettings, StrId::STR_NEXT_PAGE) ? 1u : 0u);
-  const size_t expectedFrontButtonCount = hasTouch ? 0u : controlsFrontButtonCount;
+  const size_t expectedFrontButtonCount = hasFrontButtons ? controlsFrontButtonCount : 0u;
 #else
   controlsFrontButtonSettings = buildControlsFrontButtonSettingsList(allSettings);
   controlsSideButtonSettings = buildControlsSideButtonSettingsList(allSettings);
@@ -1180,6 +1182,13 @@ void SettingsActivity::toggleCurrentSetting() {
         break;
       case SettingAction::ClockSync:
         startActivityForResult(std::make_unique<ClockSyncActivity>(renderer, mappedInput), resultHandler);
+        break;
+      case SettingAction::FrontlightPanel:
+#if FREEINK_CAP_FRONTLIGHT
+        // Listed only with a light fitted. The panel saves its own changes on the
+        // way out. Builds without a light do not link the panel through here.
+        activityManager.pushFrontlightPanel(*this);
+#endif
         break;
       case SettingAction::QuickActions:
         startActivityForResult(std::make_unique<QuickActionsActivity>(renderer, mappedInput), resultHandler);

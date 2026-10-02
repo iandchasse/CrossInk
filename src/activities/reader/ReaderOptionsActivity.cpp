@@ -8,6 +8,7 @@
 #include <iterator>
 
 #include "CrossPointSettings.h"
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
 #include "SettingsList.h"
@@ -709,7 +710,7 @@ void ReaderOptionsActivity::onRowEvent(const fui::ActionEvent& event, void* user
 
 void ReaderOptionsActivity::buildOptionsScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouchHardware(), false);
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, deviceHasFrontButtons(gpio), false);
   screen.setContentMargin(fui::Insets{
       static_cast<int16_t>(safe.y + metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput)),
       static_cast<int16_t>(renderer.getScreenWidth() - safe.x - safe.width),
@@ -817,7 +818,7 @@ void ReaderOptionsActivity::render(RenderLock&&) {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
-  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouchHardware(), false);
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, deviceHasFrontButtons(gpio), false);
   header.x = safe.x;
   header.width = safe.width;
   if (mappedInput.hasTouchHardware()) {

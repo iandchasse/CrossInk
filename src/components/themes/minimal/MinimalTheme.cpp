@@ -18,6 +18,7 @@
 #include <string>
 #include <vector>
 
+#include "DeviceCapabilities.h"
 #include "RecentBooksStore.h"
 #include "activities/reader/BookReadingStats.h"
 #include "activities/reader/GlobalReadingStats.h"
@@ -416,7 +417,7 @@ void MinimalTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char
 
   renderer.fillRect(rect.x, rect.y, rect.width, rect.height, false);
   const bool showBatteryPercentage =
-      SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
+      SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS || showsNoBattery();
   const int batteryX = rect.x + rect.width - StatusBarMetrics::sideInset - MinimalMetrics::values.batteryWidth;
   const int batteryY = rect.y + UITheme::getTopStatusBarInset(renderer) + homeHeaderTopInset;
   if (showStatus) {
@@ -638,7 +639,7 @@ Rect MinimalTheme::buttonMenuPanelRect(const GfxRenderer& renderer, const int bu
 
 void MinimalTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                    const char* btn4, const bool allowInvertedText) const {
-  if (gpio.hasTouch()) {
+  if (!deviceHasFrontButtons(gpio)) {
     homeButtonHintSelection = -1;
     return;
   }

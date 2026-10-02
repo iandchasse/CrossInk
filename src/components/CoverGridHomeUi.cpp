@@ -8,6 +8,7 @@
 #include <cstdio>
 #include <utility>
 
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "UITheme.h"
 #include "components/icons/listIcons.h"
@@ -86,18 +87,18 @@ void CoverGridHomeUi::screenFn(UiScreen& screen, void* user) { static_cast<Cover
 void CoverGridHomeUi::draw(UiScreen& screen) {
   coverCache.prepare();
   const auto& theme = screen.theme();
-  const auto safe = UITheme::getInstance().getScreenSafeArea(renderer, !BoardConfig::hasTouch());
+  const auto safe = UITheme::getInstance().getScreenSafeArea(renderer, boardHasFrontButtons());
   screen.setContentMarginFromScreen(fui::Insets{
       static_cast<int16_t>(safe.y), static_cast<int16_t>(renderer.getScreenWidth() - safe.x - safe.width),
       static_cast<int16_t>(renderer.getScreenHeight() - safe.y - safe.height), static_cast<int16_t>(safe.x)});
   const int16_t hInset = std::max<int16_t>(
       0, static_cast<int16_t>(UITheme::getInstance().getMetrics().headerSidePadding - COVER_CELL_INSET - safe.x));
   const int16_t topInset =
-      BoardConfig::hasTouch() ? static_cast<int16_t>(theme.spaceLg) : static_cast<int16_t>(theme.spaceSm + 4);
+      !boardHasFrontButtons() ? static_cast<int16_t>(theme.spaceLg) : static_cast<int16_t>(theme.spaceSm + 4);
   screen.insetContent(fui::Insets{topInset, hInset, theme.spaceSm, hInset});
   const bool landscape = renderer.getScreenWidth() > renderer.getScreenHeight();
   screen.takeTop(UITheme::getInstance().getMetrics().batteryBarHeight, theme.spaceSm);
-  const int16_t tabGap = BoardConfig::hasTouch() ? theme.spaceSm : static_cast<int16_t>(4);
+  const int16_t tabGap = !boardHasFrontButtons() ? theme.spaceSm : static_cast<int16_t>(4);
   auto tabRect = screen.takeBottom(72, tabGap);
   if (books->empty()) {
     drawTabs(screen, tabRect.inset(fui::Insets{0, COVER_CELL_INSET, 0, COVER_CELL_INSET}));
@@ -185,7 +186,7 @@ void CoverGridHomeUi::drawCurrent(UiScreen& screen, fui::Rect rect, const int co
   };
   fui::bookCard(screen.frame(), rect, card);
 
-  if (selected == 0 && !BoardConfig::hasTouch()) {
+  if (selected == 0 && boardHasFrontButtons()) {
     const int16_t barHeight = card.coverSize.height;
     screen.target().fill(fui::Rect{static_cast<int16_t>(rect.x - 9),
                                    static_cast<int16_t>(rect.y + (rect.height - barHeight) / 2), 3, barHeight},

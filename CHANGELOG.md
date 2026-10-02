@@ -25,6 +25,10 @@
 - Silkscreen: USB Drive ends a few seconds after the USB cable is pulled.
 - Silkscreen: an SD card firmware update asks for USB power instead of starting when the battery is too low to finish it.
 - Silkscreen: an online update asks for USB power instead of installing when the battery is too low to finish it.
+- Silkscreen: with a touchscreen fitted, the reader keeps what its buttons need, as without one: the button hints along the bottom of the screen, the Front Buttons settings (remapping, orientation, long-press actions) and the long-press Back and Menu triggers in Quick Actions.
+- Silkscreen: Settings > Display > Frontlight > Light Controls opens the front light panel from the buttons: Left and Right set the brightness, Up and Down the warmth, Confirm switches the light on or off.
+- Silkscreen: when switching the front light on, or restoring it at wake or on the light schedule, finds no light, or the light trips, the reader says "No front light detected. Wait about 10 s before connecting a light." The light panel shows this under the brightness, and says when only the warm or the cool light is fitted, keeping the warmth on that light.
+- Silkscreen: on USB with no battery, or one too flat to charge, the battery shows "No battery" with an empty icon instead of a percentage and the charging bolt.
 
 ### Changed
 

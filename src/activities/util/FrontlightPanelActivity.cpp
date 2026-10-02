@@ -9,6 +9,7 @@
 #include <cstdio>
 
 #include "CrossPointSettings.h"
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "activities/ActivityManager.h"
 #include "activities/RenderLock.h"
@@ -74,7 +75,13 @@ void FrontlightPanelActivity::onEnter() {
   // The HAL is the live source of truth; SETTINGS only mirrors it for boot.
   brightness = Frontlight.brightness();
   warmth = Frontlight.warmth();
+  // A single-colour light: warmth is the string that lights, and that is saved.
+  if (warmthLocked()) warmth = Frontlight.stringMissing(true) ? 0 : 100;
   lightOn = Frontlight.isOn();
+#if FREEINK_CAP_FRONTLIGHT_PROBE
+  // Also after a switch-on elsewhere, or a restore at wake, found no light.
+  noLightNote = !lightOn && Frontlight.noLightFound();
+#endif
   initialInversion = SETTINGS.screenInverted;
   initialTouchscreenDisabled = SETTINGS.disableReaderTouchscreen;
   pendingTouchscreenDisabled = initialTouchscreenDisabled;
@@ -129,17 +136,20 @@ void FrontlightPanelActivity::onBrightnessEvent(const fui::ActionEvent& event, v
   self->brightness = percentFromPermille(event.dragPermille);
   Frontlight.setBrightness(self->brightness);
   // Adjusting brightness while off is an obvious "I want light" intent.
-  if (!self->lightOn) {
+  if (!self->lightOn && self->levelSwitchesOn()) {
     self->lightOn = true;
     Frontlight.setOn(true);
   }
+  // Also a level raised from 0 while on, which lights the light again.
+  self->noteSwitchOnResult();
 }
 
 void FrontlightPanelActivity::onWarmthEvent(const fui::ActionEvent& event, void* user) {
   auto* self = static_cast<FrontlightPanelActivity*>(user);
-  if (event.dragPermille < 0) return;
+  if (event.dragPermille < 0 || self->warmthLocked()) return;
   self->warmth = percentFromPermille(event.dragPermille);
   Frontlight.setWarmth(self->warmth);
+  self->noteSwitchOnResult();
 }
 
 void FrontlightPanelActivity::onBrightnessStepEvent(const fui::ActionEvent& event, void* user) {
@@ -169,28 +179,91 @@ void FrontlightPanelActivity::adjustBrightness(const int delta) {
   if (next == brightness) return;
   brightness = static_cast<uint8_t>(next);
   Frontlight.setBrightness(brightness);
-  if (!lightOn) {
+  if (!lightOn && levelSwitchesOn()) {
     lightOn = true;
     Frontlight.setOn(true);
   }
+  noteSwitchOnResult();
   requestUpdate();
 }
 
 void FrontlightPanelActivity::adjustWarmth(const int delta) {
+  if (warmthLocked()) return;
   int next = static_cast<int>(warmth) + delta;
   if (next < 0) next = 0;
   if (next > 100) next = 100;
   if (next == warmth) return;
   warmth = static_cast<uint8_t>(next);
   Frontlight.setWarmth(warmth);
+  noteSwitchOnResult();
   requestUpdate();
 }
 
+void FrontlightPanelActivity::stepWarmthByKey(const bool warmer) {
+  if (!Frontlight.warmthIsSelection()) {
+    adjustWarmth(warmer ? BRIGHTNESS_STEP : -BRIGHTNESS_STEP);
+    return;
+  }
+  const uint8_t target = warmer ? 100 : 0;
+  if (warmth != target) adjustWarmth(static_cast<int>(target) - static_cast<int>(warmth));
+}
+
 void FrontlightPanelActivity::toggleLight() {
-  lightOn = !lightOn;
+  // From the live state: a light the LED monitor switched off reads off, so the
+  // first press is the retry.
+  lightOn = !Frontlight.isOn();
   Frontlight.setOn(lightOn);
+  noteSwitchOnResult();
   requestUpdate();
 }
+
+#if FREEINK_CAP_FRONTLIGHT_PROBE
+void FrontlightPanelActivity::noteSwitchOnResult() {
+  if (Frontlight.takeNoLightNotice()) {
+    noLightNote = true;
+    lightOn = false;
+  } else if (Frontlight.isOn()) {
+    noLightNote = false;
+  }
+  awaitingSwitchOnResult = Frontlight.switchOnPending();
+  // A colour change can find a string missing, which pins the warmth row.
+  if (warmthLocked()) warmth = Frontlight.stringMissing(true) ? 0 : 100;
+  requestUpdate();
+}
+
+void FrontlightPanelActivity::syncLightState() {
+  if (awaitingSwitchOnResult && !Frontlight.switchOnPending()) noteSwitchOnResult();
+}
+
+bool FrontlightPanelActivity::warmthLocked() const {
+  return Frontlight.stringMissing(true) || Frontlight.stringMissing(false);
+}
+
+const char* FrontlightPanelActivity::singleStringNote() {
+  if (Frontlight.stringMissing(true)) return tr(STR_FRONTLIGHT_COOL_ONLY);
+  if (Frontlight.stringMissing(false)) return tr(STR_FRONTLIGHT_WARM_ONLY);
+  return nullptr;
+}
+
+fui::TextStyle FrontlightPanelActivity::noteStyle(const fui::ThemeTokens& tokens) {
+  fui::TextStyle style = tokens.smallText;
+  style.maxLines = 3;
+  return style;
+}
+
+int16_t FrontlightPanelActivity::noteHeight(const fui::ThemeTokens& tokens, const char* text) const {
+  // Wrapped inside the rows' side inset (buildPanelScreen's sideInset) on both sides.
+  const auto width = static_cast<int16_t>(renderer.getScreenWidth() - tokens.spaceLg * 4);
+  return fui::measureWrappedText(uiTarget, text, noteStyle(tokens), width).height;
+}
+
+void FrontlightPanelActivity::drawNote(UiApp::ScreenType& screen, const char* text) const {
+  const auto& theme = screen.theme();
+  const fui::Insets sideInset{0, static_cast<int16_t>(theme.spaceLg * 2), 0, static_cast<int16_t>(theme.spaceLg * 2)};
+  const fui::Rect rect = screen.takeTop(noteHeight(theme, text), theme.spaceMd).inset(sideInset);
+  screen.target().text(rect, text, noteStyle(theme));
+}
+#endif
 
 void FrontlightPanelActivity::toggleReaderTouchscreen() {
   pendingTouchscreenDisabled = !pendingTouchscreenDisabled;
@@ -305,6 +378,9 @@ bool FrontlightPanelActivity::handleHomeGesture() {
 
 void FrontlightPanelActivity::loop() {
   if (optionPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
+#if FREEINK_CAP_FRONTLIGHT_PROBE
+  syncLightState();
+#endif
 
   // A power-button shortcut can change the light globally while this panel is
   // open. Keep the panel's state and eventual persistence in sync.
@@ -359,6 +435,12 @@ void FrontlightPanelActivity::loop() {
                                        [this] { adjustBrightness(-BRIGHTNESS_STEP); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right},
                                        [this] { adjustBrightness(BRIGHTNESS_STEP); });
+  // Warmth otherwise has touch controls only: a board with front keys gets
+  // Up/Down for it. Touch-only boards are unchanged.
+  if (Frontlight.hasColorTemperature() && deviceHasFrontButtons(gpio)) {
+    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Up}, [this] { stepWarmthByKey(true); });
+    buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Down}, [this] { stepWarmthByKey(false); });
+  }
 }
 
 Rect FrontlightPanelActivity::homeButtonRect() const {
@@ -391,8 +473,14 @@ int FrontlightPanelActivity::computePanelBottom() const {
   y += tokens.spaceLg;                     // leading spacer
   y += tokens.rowHeight + tokens.spaceSm;  // brightness label + frontlight toggle row
   y += tokens.rowHeight + tokens.spaceLg;  // brightness slider
+#if FREEINK_CAP_FRONTLIGHT_PROBE
+  if (noLightNote) y += noteHeight(tokens, tr(STR_FRONTLIGHT_NOT_DETECTED)) + tokens.spaceMd;
+#endif
   if (Frontlight.hasColorTemperature()) {
     y += lh + tokens.spaceSm + tokens.rowHeight + tokens.spaceLg;  // warmth label + slider
+#if FREEINK_CAP_FRONTLIGHT_PROBE
+    if (const char* note = singleStringNote()) y += noteHeight(tokens, note) + tokens.spaceMd;
+#endif
   }
   y += tokens.spaceLg + ACTION_BAR_HEIGHT;  // trailing padding + actions
   const auto sheet = frontlightSheetProps();
@@ -496,7 +584,9 @@ void FrontlightPanelActivity::buildPanelScreen(UiApp::ScreenType& screen) {
   // whole bottom toggle row, shrinking the panel.
   const fui::Rect headerRow = screen.takeTop(rowH, theme.spaceSm).inset(sideInset);
   snprintf(line, sizeof(line), "%s  %u%%", tr(STR_BRIGHTNESS), static_cast<unsigned>(brightness));
-  const fui::BitmapRef lightIcon = fui::bitmapFromIcon(lightOn ? icon_lightbulb_28 : icon_lightbulb_off_28);
+  // From the live state: the LED monitor or a load probe can switch the light off
+  // while the panel is open.
+  const fui::BitmapRef lightIcon = fui::bitmapFromIcon(Frontlight.isOn() ? icon_lightbulb_28 : icon_lightbulb_off_28);
   const int16_t iconW = static_cast<int16_t>(lightIcon.width);
   const int16_t iconH = static_cast<int16_t>(lightIcon.height);
   const fui::Rect iconRect{static_cast<int16_t>(headerRow.x + headerRow.width - iconW),
@@ -517,12 +607,19 @@ void FrontlightPanelActivity::buildPanelScreen(UiApp::ScreenType& screen) {
 
   addStepSlider(screen, screen.takeTop(theme.rowHeight, theme.spaceLg).inset(sideInset), brightness, ACTION_BRIGHTNESS,
                 ACTION_BRIGHTNESS_STEP);
+#if FREEINK_CAP_FRONTLIGHT_PROBE
+  if (noLightNote) drawNote(screen, tr(STR_FRONTLIGHT_NOT_DETECTED));
+#endif
 
   if (Frontlight.hasColorTemperature()) {
     snprintf(line, sizeof(line), "%s  %u%%", tr(STR_WARMTH), static_cast<unsigned>(warmth));
     screen.target().text(screen.takeTop(lh, theme.spaceSm).inset(sideInset), line, theme.bodyText);
     addStepSlider(screen, screen.takeTop(theme.rowHeight, theme.spaceLg).inset(sideInset), warmth, ACTION_WARMTH,
                   ACTION_WARMTH_STEP);
+#if FREEINK_CAP_FRONTLIGHT_PROBE
+    // A single-colour light: warmth is pinned to the string there is.
+    if (const char* note = singleStringNote()) drawNote(screen, note);
+#endif
   }
 
   screen.spacer(theme.spaceLg);

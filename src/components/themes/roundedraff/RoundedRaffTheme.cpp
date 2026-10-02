@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "DeviceCapabilities.h"
 #include "RecentBooksStore.h"
 #include "components/TouchRegistry.h"
 #include "components/UITheme.h"
@@ -403,7 +404,7 @@ void RoundedRaffTheme::drawList(const GfxRenderer& renderer, Rect rect, int item
 
 void RoundedRaffTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                        const char* btn4, const bool allowInvertedText) const {
-  if (gpio.hasTouch()) return;
+  if (!deviceHasFrontButtons(gpio)) return;
 
   const GfxRenderer::Orientation origOrientation = renderer.getOrientation();
   const bool invertText = allowInvertedText && origOrientation == GfxRenderer::Orientation::PortraitInverted;

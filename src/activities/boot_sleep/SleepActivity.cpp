@@ -76,9 +76,11 @@ void hideOverlayBatteryStrip(const GfxRenderer& renderer) {
   // This keeps chapter/progress text readable while removing the battery glance target.
   static constexpr int bookmarkReserveWidth = 13;  // bookmark width + gap from BaseTheme::drawReaderStatusBar()
   static constexpr int batteryPercentSpacing = 4;  // matches BaseTheme::batteryPercentSpacing
-  const int clearWidth =
-      bookmarkReserveWidth + metrics.batteryWidth +
-      (showBatteryPercentage ? batteryPercentSpacing + renderer.getTextWidth(SMALL_FONT_ID, "100%") : 0);
+  // The widest label the bar shows: "100%", or the no-battery message in its place.
+  char percentText[8];
+  const char* batteryText = BaseTheme::batteryLabel(percentText, sizeof(percentText), 100, showBatteryPercentage);
+  const int clearWidth = bookmarkReserveWidth + metrics.batteryWidth +
+                         (batteryText ? batteryPercentSpacing + renderer.getTextWidth(SMALL_FONT_ID, batteryText) : 0);
   const int clearHeight = std::max(renderer.getTextHeight(SMALL_FONT_ID), metrics.batteryHeight + 6);
 
   renderer.fillRect(metrics.statusBarHorizontalMargin + orientedMarginLeft + 1, textY, clearWidth, clearHeight, false);

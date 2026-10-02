@@ -10,6 +10,7 @@
 
 #include <algorithm>
 
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
@@ -263,7 +264,7 @@ void TtfRenderOptionsActivity::onRowEvent(const fui::ActionEvent& event, void* u
 
 void TtfRenderOptionsActivity::buildOptionsScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouchHardware(), false);
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, deviceHasFrontButtons(gpio), false);
   screen.setContentMargin(fui::Insets{
       static_cast<int16_t>(safe.y + metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput)),
       static_cast<int16_t>(renderer.getScreenWidth() - safe.x - safe.width),
@@ -313,7 +314,7 @@ void TtfRenderOptionsActivity::render(RenderLock&&) {
   if (optionPopup_.processRender(renderer, mappedInput)) return;
   renderer.clearScreen();
   Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
-  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouchHardware(), false);
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, deviceHasFrontButtons(gpio), false);
   header.x = safe.x;
   header.width = safe.width;
   if (mappedInput.hasTouchHardware()) {

@@ -15,6 +15,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "activities/boot_sleep/ImageFolderIndex.h"
@@ -945,7 +946,7 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
     confirm = tr(STR_OK);
   } else if (state_ == State::Error)
     confirm = tr(STR_OK);
-  const bool showNavigation = !mappedInput.hasTouch() && menuItemCount() > 1;
+  const bool showNavigation = (deviceHasFrontButtons(gpio) || !mappedInput.hasTouch()) && menuItemCount() > 1;
   const bool showTouchCollisionActions = mappedInput.hasTouch() && state_ == State::CollisionPrompt;
   const bool showTouchActions = mappedInput.hasTouch() && (state_ == State::OfferPrompt || state_ == State::Success);
   if (showTouchCollisionActions) {

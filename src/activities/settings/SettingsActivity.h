@@ -52,6 +52,7 @@ enum class SettingAction {
   DownloadFonts,
   TtfRendering,
   ClockSync,
+  FrontlightPanel,
 };
 
 struct SettingInfo {

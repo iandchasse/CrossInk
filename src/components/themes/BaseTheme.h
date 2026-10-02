@@ -262,6 +262,8 @@ class BaseTheme {
 
   // Component drawing methods
   void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
+  // showPercentage draws the label beside the glyph (batteryLabel()): the
+  // percentage, or the no-battery message in its place.
   void drawBatteryLeft(const GfxRenderer& renderer, Rect rect, bool showPercentage = true,
                        bool foregroundBlack = true) const;  // Left aligned (reader mode)
   void drawBatteryRight(const GfxRenderer& renderer, Rect rect, bool showPercentage = true,
@@ -305,6 +307,10 @@ class BaseTheme {
   // With preserveBackdrop, leave the popup on the display but restore the backing
   // pixels for the next redraw. Caller must own RenderLock.
   virtual Rect drawPopup(const GfxRenderer& renderer, const char* message, bool preserveBackdrop = false) const;
+  // drawPopup() for a message that may not fit on one line: the text wraps to at
+  // most maxLines inside a box no wider than the screen less two popup margins.
+  // Caller must own RenderLock.
+  Rect drawWrappedPopup(const GfxRenderer& renderer, const char* message, int maxLines) const;
   virtual void drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
                                int selectedIndex, bool showConfirmationFooter = false,
                                const char* cancelLabel = nullptr, const char* saveLabel = nullptr,
@@ -330,6 +336,13 @@ class BaseTheme {
 
   // Shared constants and helpers for battery drawing (used by all themes)
   static constexpr int batteryPercentSpacing = 4;
+  // On external power with no chargeable cell (HalPowerManager::noChargeableCell(),
+  // Silkscreen): battery displays show an empty glyph and "No battery" in place of
+  // a charge state, whatever the percentage setting. False on other boards.
+  static bool showsNoBattery();
+  // The text beside the battery glyph: "NN%" when shown, or the no-battery
+  // message (showsNoBattery()). nullptr for none; `buf` holds the percentage.
+  static const char* batteryLabel(char* buf, size_t size, uint16_t percentage, bool showPercentage);
   static constexpr int homeHeaderTopInset = ReaderStatusBarConfig::TOP_TEXT_INSET;
   static int homeHeaderClockTextYOffset(const GfxRenderer& renderer);
   static Rect buttonMenuTouchTarget(Rect rowRect, Rect menuRect, bool isLastItem, int rowSpacing);

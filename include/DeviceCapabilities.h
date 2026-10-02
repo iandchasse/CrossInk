@@ -1,8 +1,33 @@
 #pragma once
 
+#include <BoardConfig.h>
 #include <HalGPIO.h>
 
 #include "AppCapabilities.h"
+
+// Physical front keys (Back, Confirm, Left, Right) are fitted: every board
+// without a working touch panel, and touch boards that keep their keys
+// (TouchConfig::buttonsAlongsideTouch, Silkscreen). Key-only UI (the button-hint
+// band, key help text, the Front Buttons settings and the remap screen) keys off
+// this instead of !hasTouch(). On every other board the two are the same. The
+// simulator's HAL has no such query, and no simulated board keeps its keys.
+inline bool deviceHasFrontButtons(const HalGPIO& gpio) {
+#ifdef SIMULATOR
+  return !gpio.hasTouch();
+#else
+  return gpio.hasFrontButtons();
+#endif
+}
+
+// deviceHasFrontButtons() from the board profile rather than the touch probe,
+// for layout that already follows BoardConfig::hasTouch().
+inline bool boardHasFrontButtons() {
+#ifdef SIMULATOR
+  return !BoardConfig::hasTouch();
+#else
+  return BoardConfig::hasFrontButtons();
+#endif
+}
 
 inline bool deviceHasEdgeSideButtons(const HalGPIO& gpio) {
 #ifdef SIMULATOR

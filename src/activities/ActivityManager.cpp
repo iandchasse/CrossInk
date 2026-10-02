@@ -1070,6 +1070,14 @@ bool ActivityManager::requiresExclusiveStorageLoop() const {
   return currentActivity && currentActivity->requiresExclusiveStorageLoop();
 }
 
+bool ActivityManager::showsFrontlightNotice() const {
+  return currentActivity && currentActivity->showsFrontlightNotice();
+}
+
+bool ActivityManager::pushFrontlightPanel(Activity& activity) {
+  return openFrontlightPanel(activity, renderer, mappedInput);
+}
+
 bool ActivityManager::blocksGlobalInput() const { return currentActivity && currentActivity->blocksGlobalInput(); }
 
 bool ActivityManager::isHomeActivity() const { return currentActivity && currentActivity->name == "Home"; }

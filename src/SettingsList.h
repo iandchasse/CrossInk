@@ -1262,7 +1262,7 @@ inline std::vector<SettingInfo> buildControlsSettingsParentList(const std::vecto
   const bool hasTiltPageTurnSetting = hasSettingByName(allSettings, StrId::STR_TILT_PAGE_TURN);
   const bool hasTiltPageTurnDirectionSetting = hasSettingByName(allSettings, StrId::STR_TILT_PAGE_TURN_DIRECTION);
   const bool hasTapsGestures = hasSettingByName(allSettings, StrId::STR_NEXT_PAGE);
-  const bool hasFrontButtons = !gpio.hasTouch();
+  const bool hasFrontButtons = deviceHasFrontButtons(gpio);
   const bool hasHomeKey = gpio.hasHomeKey();
 
   std::vector<SettingInfo> settings;
@@ -1416,7 +1416,7 @@ inline std::vector<SettingInfo> buildGroupedDisplaySettingsList(const std::vecto
 
 inline std::vector<SettingInfo> buildDisplayFrontlightSettingsList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> settings;
-  settings.reserve(4);
+  settings.reserve(5);
 
   auto addDisplaySetting = [&](const StrId nameId) {
     const auto it = std::find_if(allSettings.begin(), allSettings.end(),
@@ -1424,6 +1424,11 @@ inline std::vector<SettingInfo> buildDisplayFrontlightSettingsList(const std::ve
     if (it != allSettings.end()) settings.push_back(*it);
   };
 
+  // The light panel otherwise opens by touch gestures only; a board with front
+  // keys (Silkscreen) reaches it here.
+  if (Frontlight.present() && deviceHasFrontButtons(gpio)) {
+    settings.push_back(SettingInfo::Action(StrId::STR_FRONTLIGHT_CONTROLS, SettingAction::FrontlightPanel));
+  }
   addDisplaySetting(StrId::STR_RESTORE_LIGHT_ON_WAKE);
   if (halClock.isAvailable()) {
     addDisplaySetting(StrId::STR_FRONTLIGHT_SCHEDULE);

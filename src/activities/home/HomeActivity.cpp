@@ -32,6 +32,7 @@
 #include "ClippingStore.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DeviceCapabilities.h"
 #include "GlobalActions.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
@@ -355,7 +356,9 @@ bool isDashboardTheme() {
 
 bool usesMinimalHomeInteraction() { return isMinimalTheme() || isDashboardTheme(); }
 
-bool showMinimalHomeButtonHints(const MappedInputManager& mappedInput) { return !mappedInput.hasTouch(); }
+bool showMinimalHomeButtonHints(const MappedInputManager& mappedInput) {
+  return deviceHasFrontButtons(gpio) || !mappedInput.hasTouch();
+}
 
 bool isAnyFrontButtonPressed(const MappedInputManager& mappedInput) {
   return mappedInput.isFrontButtonPressed(HalGPIO::BTN_BACK) ||

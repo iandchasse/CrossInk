@@ -45,7 +45,7 @@ std::vector<QuickActions::Trigger> availableTriggers() {
     triggers.push_back(QuickActions::Trigger::DoubleTapHome);
   }
 #if CROSSINK_APP_CAP_TOUCH
-  if (!gpio.hasTouch()) {
+  if (deviceHasFrontButtons(gpio)) {
     triggers.push_back(QuickActions::Trigger::LongBack);
     triggers.push_back(QuickActions::Trigger::LongMenu);
   }

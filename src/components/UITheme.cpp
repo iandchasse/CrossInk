@@ -15,6 +15,7 @@
 #include <string>
 #include <vector>
 
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "RecentBooksStore.h"
 #include "components/themes/BaseTheme.h"
@@ -136,15 +137,16 @@ void UITheme::setTheme(CrossPointSettings::UI_THEME type) {
 
 const ThemeMetrics& UITheme::getMetrics() const {
 #if CROSSINK_APP_CAP_TOUCH
-  // hasTouch() can flip once touch init completes after static construction, so the
-  // cached copy is refreshed when the flag differs instead of copying the struct per call.
-  const bool touch = gpio.hasTouch();
-  if (!metricsValid || touch != metricsForTouch) {
+  // The touch probe can flip deviceHasFrontButtons() once touch init completes after
+  // static construction, so the cached copy is refreshed when the flag differs instead
+  // of copying the struct per call. Touch boards that keep their keys keep the band.
+  const bool frontButtons = deviceHasFrontButtons(gpio);
+  if (!metricsValid || frontButtons != metricsForFrontButtons) {
     adjustedMetrics = *currentMetrics;
-    if (touch) {
+    if (!frontButtons) {
       adjustedMetrics.buttonHintsHeight = 0;
     }
-    metricsForTouch = touch;
+    metricsForFrontButtons = frontButtons;
     metricsValid = true;
   }
 #else

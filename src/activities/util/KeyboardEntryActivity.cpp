@@ -548,7 +548,7 @@ fui::Rect KeyboardEntryActivity::keyboardRect() const {
     y = std::max(y, inputBottom);
   }
   return fui::Rect{0, static_cast<int16_t>(y), static_cast<int16_t>(pageWidth),
-                   static_cast<int16_t>(hasTouch ? pageHeight - y : height)};
+                   static_cast<int16_t>(hasTouch ? pageHeight - metrics.buttonHintsHeight - y : height)};
 }
 
 void KeyboardEntryActivity::loop() {
@@ -1092,8 +1092,8 @@ void KeyboardEntryActivity::render(RenderLock&&) {
   frame.target().fill(kbRect, props.background);
   // Fingers land low on the bottom row (occlusion) and there is no key below
   // to catch the miss — extend its hit band down to the button hints bar.
-  const int bottomEdge = mappedInput.hasTouchHardware() ? renderer.getScreenHeight()
-                                                        : renderer.getScreenHeight() - metrics.buttonHintsHeight;
+  const int bottomEdge = !deviceHasFrontButtons(gpio) ? renderer.getScreenHeight()
+                                                      : renderer.getScreenHeight() - metrics.buttonHintsHeight;
   props.bottomHitOverflow = static_cast<int16_t>(std::max(0, bottomEdge - keysRect.bottom()));
   fui::keyboard(frame, keysRect, props);
   interactions.publish();

@@ -172,6 +172,10 @@ class ActivityManager {
   bool blocksGlobalInput() const;
   bool isHomeActivity() const;
   bool isReaderActivity() const;
+  bool showsFrontlightNotice() const;
+  // Push the frontlight panel over `activity`, as the touch drawer gesture does.
+  // For boards whose keys reach it from Settings. False when it cannot open.
+  bool pushFrontlightPanel(Activity& activity);
   bool openReaderSettingsForTouchscreenEscapeHatch();
   bool handleHomeButtonBackOrHome();
   bool openReaderMenuFromShortcut();

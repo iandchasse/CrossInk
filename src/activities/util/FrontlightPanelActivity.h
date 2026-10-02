@@ -1,5 +1,6 @@
 #pragma once
 
+#include <BoardConfig.h>  // FREEINK_CAP_FRONTLIGHT_PROBE: the class layout depends on it
 #include <FreeInkApp.h>
 #include <FreeInkUIGfxRenderer.h>
 
@@ -14,11 +15,14 @@
 struct Rect;
 
 // Frontlight quick panel (boards with a frontlight + home key, e.g. X4 Pro).
-// Opened globally by the top-edge down-swipe: a top-anchored drop-down (only the
-// upper third of the screen) with brightness and warmth sliders driving the
-// light live, plus an on/off toggle with a frontlight icon. It renders as an overlay —
-// the content underneath stays on screen below the panel, and a tap there
-// dismisses it. State is persisted once on exit (SPIFFS write throttling).
+// Opened globally by the top-edge down-swipe, or, on a board with front keys and
+// a light (Silkscreen), from Settings > Display > Frontlight: a top-anchored
+// drop-down (only the upper third of the screen) with brightness and warmth
+// sliders driving the light live, plus an on/off toggle with a frontlight icon.
+// It renders as an overlay — the content underneath stays on screen below the
+// panel, and a tap there dismisses it. State is persisted once on exit (SPIFFS
+// write throttling). Keys: Left/Right brightness, Up/Down warmth (on a board
+// with front keys), Confirm on/off, Back closes.
 class FrontlightPanelActivity final : public Activity {
   // The sun toggle, two sliders, and four -/+ targets need seven interaction
   // slots. Keep small headroom for the panel's fixed controls.
@@ -69,7 +73,43 @@ class FrontlightPanelActivity final : public Activity {
   void drawReaderDetails(freeink::ui::Screen<20>& screen);
   void adjustBrightness(int delta);
   void adjustWarmth(int delta);
+  // Up/Down on a board with front keys: warmer/cooler. A warmth that only selects
+  // a string (HalFrontlight::warmthIsSelection()) jumps straight to the other one.
+  void stepWarmthByKey(bool warmer);
   void toggleLight();
+  // FrontlightConfig::loadProbeWindowMs (Silkscreen). After a switch-on or a
+  // colour change from this panel, a load probe that found no light leaves the
+  // light off, and the panel says so under the brightness row; the probe decides
+  // on the SDK's timer, so loop() asks again until it has. One string of a
+  // colour-select light is missing (a single-colour light): the warmth row stays
+  // on the other string, says so, and ignores input. Without
+  // FREEINK_CAP_FRONTLIGHT_PROBE neither can happen.
+#if FREEINK_CAP_FRONTLIGHT_PROBE
+  void noteSwitchOnResult();
+  bool warmthLocked() const;
+  // A brightness change switches the light on, except after a switch-on found no
+  // light: then the slider and the steps only set the level, so one drag or held
+  // key does not run the unloaded probe again on every event, and the light
+  // toggle is the retry.
+  bool levelSwitchesOn() const { return !noLightNote; }
+  // From loop(): take a switch-on's result once it has decided.
+  void syncLightState();
+  // The line under the warmth row of a single-colour light, or nullptr.
+  static const char* singleStringNote();
+  // A note under a row: small text wrapped to the panel's content width, at most
+  // 3 lines. noteHeight() is the height drawNote() takes, less the gap after it.
+  static freeink::ui::TextStyle noteStyle(const freeink::ui::ThemeTokens& tokens);
+  int16_t noteHeight(const freeink::ui::ThemeTokens& tokens, const char* text) const;
+  void drawNote(UiApp::ScreenType& screen, const char* text) const;
+  // The last switch-on found no light: the note stays until the light comes on.
+  bool noLightNote = false;
+  // A switch-on from this panel has not decided its load yet.
+  bool awaitingSwitchOnResult = false;
+#else
+  void noteSwitchOnResult() {}
+  bool warmthLocked() const { return false; }
+  bool levelSwitchesOn() const { return true; }
+#endif
   void toggleReaderTouchscreen();
   void close();
   void activateQuickAction(int index);
@@ -94,4 +134,6 @@ class FrontlightPanelActivity final : public Activity {
   // the overlay back to the current screen.
   bool handleHomeGesture() override;
   bool requiresFreshBackdrop() const override { return true; }
+  // The panel shows a switch-on's "no light" result itself (noteSwitchOnResult()).
+  bool showsFrontlightNotice() const override { return true; }
 };

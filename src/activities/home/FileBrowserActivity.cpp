@@ -22,6 +22,7 @@
 #include "BookActions.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DeviceCapabilities.h"
 #include "FileBrowserActionActivity.h"
 #include "MappedInputManager.h"
 #include "activities/boot_sleep/ImageFolderIndex.h"
@@ -1529,7 +1530,7 @@ void FileBrowserActivity::render(RenderLock&&) {
       mode == Mode::PickDirectory ? tr(STR_SELECT) : (visibleEntries == 0 ? "" : tr(STR_DIR_DOWN)));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
 
-  if (!mappedInput.hasTouch() && mode == Mode::Books && basepath == "/") {
+  if ((deviceHasFrontButtons(gpio) || !mappedInput.hasTouch()) && mode == Mode::Books && basepath == "/") {
     const int pathLineHeight = renderer.getLineHeight(SMALL_FONT_ID);
     const int bandY = renderer.getScreenHeight() - metrics.buttonHintsHeight - pathLineHeight - metrics.verticalSpacing;
     const int pathY = bandY + metrics.verticalSpacing / 2 +

@@ -34,6 +34,22 @@ constexpr int homeMarginTop = 30;
 constexpr int roundedRaffHeaderClockYOffset = 5;
 constexpr int detachedHeaderBatteryTopInset = 5;
 
+// The popup box drawPopup() and drawWrappedPopup() share: the fill at (x, y, w, h)
+// inside a popupFrameThickness frame, rounded when the theme rounds popups.
+// Always inlined, so drawPopup() compiles as it did with the box written out.
+__attribute__((always_inline)) inline void drawPopupFrame(const GfxRenderer& renderer, const ThemeMetrics& metrics,
+                                                          const int x, const int y, const int w, const int h) {
+  const int frameThickness = metrics.popupFrameThickness;
+  if (metrics.popupCornerRadius > 0) {
+    renderer.fillRoundedRect(x - frameThickness, y - frameThickness, w + frameThickness * 2, h + frameThickness * 2,
+                             metrics.popupCornerRadius + frameThickness, Color::White);
+    renderer.fillRoundedRect(x, y, w, h, metrics.popupCornerRadius, Color::Black);
+  } else {
+    renderer.fillRect(x - frameThickness, y - frameThickness, w + frameThickness * 2, h + frameThickness * 2, true);
+    renderer.fillRect(x, y, w, h, false);
+  }
+}
+
 }  // namespace
 
 void BaseTheme::drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight,
@@ -64,8 +80,25 @@ void BaseTheme::drawBatteryLightningBolt(const GfxRenderer& renderer, int boltX,
   renderer.drawLine(boltX + 1, boltY + 7, boltX + 2, boltY + 7, foregroundBlack);
 }
 
+bool BaseTheme::showsNoBattery() {
+#ifdef SIMULATOR
+  return false;  // the simulator's power HAL has no such query
+#else
+  return powerManager.noChargeableCell();
+#endif
+}
+
+const char* BaseTheme::batteryLabel(char* buf, const size_t size, const uint16_t percentage,
+                                    const bool showPercentage) {
+  if (showsNoBattery()) return tr(STR_NO_BATTERY);
+  if (!showPercentage) return nullptr;
+  snprintf(buf, size, "%u%%", static_cast<unsigned>(percentage));
+  return buf;
+}
+
 void BaseTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage,
                                 const bool foregroundBlack) const {
+  if (showsNoBattery()) return;  // empty, with no charge state
   const bool charging = gpio.isUsbConnected();
 
   if (charging) {
@@ -93,10 +126,10 @@ void BaseTheme::drawBatteryLeft(const GfxRenderer& renderer, Rect rect, const bo
   // box. Lift it one pixel to center it with the percentage text.
   const int y = rect.y + 5;
 
+  char percentText[8];
   if (showPercentage) {
-    const auto percentageText = std::to_string(percentage) + "%";
-    renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + rect.width, rect.y, percentageText.c_str(),
-                      foregroundBlack);
+    const char* label = batteryLabel(percentText, sizeof(percentText), percentage, true);
+    renderer.drawText(SMALL_FONT_ID, rect.x + batteryPercentSpacing + rect.width, rect.y, label, foregroundBlack);
   }
 
   const Rect iconRect{rect.x, y, rect.width, rect.height};
@@ -111,11 +144,11 @@ void BaseTheme::drawBatteryRight(const GfxRenderer& renderer, Rect rect, const b
   const uint16_t percentage = powerManager.getBatteryPercentage();
   const int y = rect.y + 5;
 
+  char percentText[8];
   if (showPercentage) {
-    const auto percentageText = std::to_string(percentage) + "%";
-    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, percentageText.c_str());
-    renderer.drawText(SMALL_FONT_ID, rect.x - textWidth - batteryPercentSpacing, rect.y, percentageText.c_str(),
-                      foregroundBlack);
+    const char* label = batteryLabel(percentText, sizeof(percentText), percentage, true);
+    const int textWidth = renderer.getTextWidth(SMALL_FONT_ID, label);
+    renderer.drawText(SMALL_FONT_ID, rect.x - textWidth - batteryPercentSpacing, rect.y, label, foregroundBlack);
   }
 
   const Rect iconRect{rect.x, y, rect.width, rect.height};
@@ -165,7 +198,7 @@ void BaseTheme::drawProgressBar(const GfxRenderer& renderer, Rect rect, const si
 
 void BaseTheme::drawButtonHints(GfxRenderer& renderer, const char* btn1, const char* btn2, const char* btn3,
                                 const char* btn4, const bool allowInvertedText) const {
-  if (gpio.hasTouch()) return;
+  if (!deviceHasFrontButtons(gpio)) return;
 
   const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
   const bool invertText = allowInvertedText && orig_orientation == GfxRenderer::Orientation::PortraitInverted;
@@ -431,13 +464,14 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
       showStatus && SETTINGS.hideBatteryPercentage != CrossPointSettings::HIDE_BATTERY_PERCENTAGE::HIDE_ALWAYS;
   const uint16_t percentage = powerManager.getBatteryPercentage();
   char percentText[8];
-  snprintf(percentText, sizeof(percentText), "%u%%", static_cast<unsigned>(percentage));
+  const char* batteryText =
+      showStatus ? batteryLabel(percentText, sizeof(percentText), percentage, showBatteryPercentage) : nullptr;
   constexpr int16_t batteryNubWidth = 2;
   int16_t batteryReserve = showStatus ? static_cast<int16_t>(metrics.batteryWidth + batteryNubWidth) : 0;
-  if (showBatteryPercentage) {
+  if (batteryText) {
     batteryReserve = static_cast<int16_t>(
         batteryReserve + batteryPercentSpacing +
-        ui.target.measureText(fui::GfxRendererTarget::FONT_SMALL, percentText, tokens.smallText).width);
+        ui.target.measureText(fui::GfxRendererTarget::FONT_SMALL, batteryText, tokens.smallText).width);
   }
 
   fui::HeaderProps props;
@@ -501,9 +535,9 @@ void BaseTheme::drawHeader(const GfxRenderer& renderer, Rect rect, const char* t
                                                           (batteryDetached ? 0 : batteryNubWidth));
   const Rect batteryRect{batteryIconX, batteryY, metrics.batteryWidth, metrics.batteryHeight};
   if (batteryLeft) {
-    drawBatteryLeft(renderer, batteryRect, showBatteryPercentage);
+    drawBatteryLeft(renderer, batteryRect, batteryText != nullptr);
   } else {
-    drawBatteryRight(renderer, batteryRect, showBatteryPercentage);
+    drawBatteryRight(renderer, batteryRect, batteryText != nullptr);
   }
 
   drawTopStatusBarClock(renderer, rect.y, nullptr, readerContext, clockYOffset);
@@ -846,15 +880,7 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message, cons
     }
   }
 
-  const bool useRoundedPopup = metrics.popupCornerRadius > 0;
-  if (useRoundedPopup) {
-    renderer.fillRoundedRect(x - frameThickness, y - frameThickness, w + frameThickness * 2, h + frameThickness * 2,
-                             metrics.popupCornerRadius + frameThickness, Color::White);
-    renderer.fillRoundedRect(x, y, w, h, metrics.popupCornerRadius, Color::Black);
-  } else {
-    renderer.fillRect(x - frameThickness, y - frameThickness, w + frameThickness * 2, h + frameThickness * 2, true);
-    renderer.fillRect(x, y, w, h, false);
-  }
+  drawPopupFrame(renderer, metrics, x, y, w, h);
 
   const int textX = x + (w - textWidth) / 2;
   const int textY = y + marginY + metrics.popupTextBaselineOffsetY;
@@ -864,6 +890,37 @@ Rect BaseTheme::drawPopup(const GfxRenderer& renderer, const char* message, cons
     renderer.copyBufferToRegion(backupX, backupY, backupW, backupH, backdrop.get(),
                                 renderer.getRegionByteSize(backupX, backupY, backupW, backupH));
   }
+  return Rect{x, y, w, h};
+}
+
+Rect BaseTheme::drawWrappedPopup(const GfxRenderer& renderer, const char* message, const int maxLines) const {
+  const auto& metrics = UITheme::getInstance().getMetrics();
+  const int marginX = metrics.popupMarginX;
+  const int marginY = metrics.popupMarginY;
+  const int frameThickness = metrics.popupFrameThickness;
+  const EpdFontFamily::Style popupFontFamily = metrics.popupTextBold ? EpdFontFamily::BOLD : EpdFontFamily::REGULAR;
+  const int y = static_cast<int>(renderer.getScreenHeight() * metrics.popupTopOffsetRatio);
+  const int maxTextWidth = renderer.getScreenWidth() - 4 * marginX - 2 * frameThickness;
+  const auto lines = renderer.wrappedText(UI_12_FONT_ID, message, maxTextWidth, maxLines, popupFontFamily);
+  int textWidth = 0;
+  for (const auto& line : lines) {
+    textWidth = std::max(textWidth, renderer.getTextWidth(UI_12_FONT_ID, line.c_str(), popupFontFamily));
+  }
+  const int lineHeight = renderer.getLineHeight(UI_12_FONT_ID);
+  const int w = textWidth + marginX * 2;
+  const int h = lineHeight * static_cast<int>(lines.size()) + marginY * 2;
+  const int x = (renderer.getScreenWidth() - w) / 2;
+
+  drawPopupFrame(renderer, metrics, x, y, w, h);
+
+  int textY = y + marginY + metrics.popupTextBaselineOffsetY;
+  for (const auto& line : lines) {
+    const int lineWidth = renderer.getTextWidth(UI_12_FONT_ID, line.c_str(), popupFontFamily);
+    renderer.drawText(UI_12_FONT_ID, x + (w - lineWidth) / 2, textY, line.c_str(), metrics.popupTextInverted,
+                      popupFontFamily);
+    textY += lineHeight;
+  }
+  renderer.displayBuffer();
   return Rect{x, y, w, h};
 }
 
@@ -987,10 +1044,10 @@ void BaseTheme::drawReaderStatusBar(GfxRenderer& renderer, const ReaderStatusBar
   const auto measureItem = [&](const ReaderStatusBarItem item, const int maxWidth) {
     if (item == ReaderStatusBarItem::Battery) {
       int width = metrics.batteryWidth;
-      if (batteryPercent) {
-        char percent[8];
-        snprintf(percent, sizeof(percent), "%u%%", static_cast<unsigned>(powerManager.getBatteryPercentage()));
-        width += batteryPercentSpacing + renderer.getTextWidth(SMALL_FONT_ID, percent);
+      char percent[8];
+      if (const char* label =
+              batteryLabel(percent, sizeof(percent), powerManager.getBatteryPercentage(), batteryPercent)) {
+        width += batteryPercentSpacing + renderer.getTextWidth(SMALL_FONT_ID, label);
       }
       return width;
     }
@@ -1003,9 +1060,10 @@ void BaseTheme::drawReaderStatusBar(GfxRenderer& renderer, const ReaderStatusBar
     if (item == ReaderStatusBarItem::Battery) {
       if (allowedWidth < metrics.batteryWidth) return;
       char percent[8];
-      snprintf(percent, sizeof(percent), "%u%%", static_cast<unsigned>(powerManager.getBatteryPercentage()));
-      const bool showPercent = batteryPercent && allowedWidth >= metrics.batteryWidth + batteryPercentSpacing +
-                                                                     renderer.getTextWidth(SMALL_FONT_ID, percent);
+      const char* label = batteryLabel(percent, sizeof(percent), powerManager.getBatteryPercentage(), batteryPercent);
+      // drawBatteryLeft/Right() draw the same label: it shows only when it fits.
+      const bool showPercent = label != nullptr && allowedWidth >= metrics.batteryWidth + batteryPercentSpacing +
+                                                                       renderer.getTextWidth(SMALL_FONT_ID, label);
       if (top && alignRight) {
         drawBatteryRight(
             renderer, Rect{x + allowedWidth - metrics.batteryWidth, textY, metrics.batteryWidth, metrics.batteryHeight},

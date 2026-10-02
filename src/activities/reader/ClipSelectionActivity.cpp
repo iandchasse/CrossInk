@@ -10,6 +10,7 @@
 #include <cstring>
 
 #include "ClipSelectionPaging.h"
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
 #include "activities/ActivityResult.h"
@@ -520,7 +521,7 @@ void ClipSelectionActivity::render(RenderLock&&) {
   const auto confirmLabel = startMarkIdx == -1 ? tr(STR_SELECT) : tr(STR_DONE);
   const auto labels =
       mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), confirmLabel, tr(STR_DIR_LEFT), tr(STR_DIR_RIGHT));
-  if (!mappedInput.hasTouchHardware() && !pageUsesButtonHintBand(renderer)) {
+  if (deviceHasFrontButtons(gpio) && !pageUsesButtonHintBand(renderer)) {
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
 
