@@ -22,7 +22,7 @@ The hardware is described in `de-link_pcb/docs/HARDWARE.md` ([iandchasse/silkscr
 
 - CrossInk `development` at `9dd334d3` (2026-09-29), as cloned.
 - freeink-sdk at the shared Silkscreen SDK head, `3d1c39ae` ([The shared SDK](#the-shared-sdk)).
-- The last CrossPoint `silkscreen` commit ported is `28fdd857` (2026-10-01).
+- The last CrossPoint `silkscreen` commit ported is `8cb94736` (2026-10-02).
 
 ## Status
 
@@ -49,7 +49,10 @@ CrossPoint commits after the last review (`b605f87d`) were taken as follows:
 - `92973915`, the front-light blend: in `c369039e`;
 - `36ee5cfc`, the front-light key shortcuts and the power double-click: its SDK move in `ff68feee`, and the panel's takeover of a switch-on started elsewhere in `f0ffb481`. Its Short Power > Toggle Frontlight, Long-press Confirm > Frontlight and double-click toggle stay CrossPoint's: CrossInk has its own Toggle Frontlight and shortcut actions;
 - `8127e3e8`, the battery checks before the chord returns: CrossInk has had them since `647fc531` (CI-02), and `b65fb929` adds the held-chord wait;
-- `6b4f807d` (test firmware formatting) and `28fdd857` (CrossPoint's own docs): nothing to port.
+- `6b4f807d` (test firmware formatting) and `28fdd857` (CrossPoint's own docs): nothing to port;
+- `bb7f80d3`, the upstream-sync runbook and scripts: CrossInk's build matrix script and the runbook pointers in `8b46e691`;
+- `ad1b5ce8`, upstream `5b1f0605` (#3824: per-book content keys, plugin isolation): its SDK move in `1dcf47d9`, nothing else to port. CrossInk has no plugin system and links neither the SDK's ContentProtection nor its Opds;
+- `8cb94736` (CrossPoint's own docs): REQUIREMENTS.md refreshed from it.
 
 **Battery use.** The image has carried every drain rule since S6, but none has been measured. Run C2 and C6 of the [bring-up checklist](#bring-up-checklist-real-board) before relying on it.
 
@@ -253,7 +256,7 @@ review and records) is `crosspoint-reader/docs/silkscreen/UPSTREAM-SYNC.md`; a C
 
 ```bash
 git fetch crosspoint
-git log --oneline 28fdd857..crosspoint/silkscreen -- . ':!src/activities/testsuite' ':!scripts/check_test_firmware.sh'
+git log --oneline 8cb94736..crosspoint/silkscreen -- . ':!src/activities/testsuite' ':!scripts/check_test_firmware.sh'
 ```
 
 Port new drain fixes and board behaviour, update [POWER.md §3](POWER.md#3-firmware-rules-and-where-they-live)'s anchors, and move the "last CrossPoint commit ported" at the top of this file. CrossPoint's own uncommitted work is not ported until it lands as a commit.
