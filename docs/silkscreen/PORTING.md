@@ -20,9 +20,9 @@ The hardware is described in `de-link_pcb/docs/HARDWARE.md` ([iandchasse/silkscr
 
 **Base:**
 
-- CrossInk `development` at `9dd334d3` (2026-09-29), as cloned.
-- freeink-sdk at the shared Silkscreen SDK head, `3d1c39ae` ([The shared SDK](#the-shared-sdk)).
-- The last CrossPoint `silkscreen` commit ported is `8cb94736` (2026-10-02).
+- CrossInk `development` at `9dd334d3` (2026-09-29), as cloned; merged up to `3efe61b6` (2026-10-02, v1.6.1 and what followed) in `a9f9ef64`.
+- freeink-sdk at the shared Silkscreen SDK head, `bf196c8f` ([The shared SDK](#the-shared-sdk)).
+- The last CrossPoint `silkscreen` commit ported is `844dde61` (2026-10-03), the 1% battery. CrossPoint's `silkscreen` head `1deb7c41` has been read through: what follows `8cb94736` is ported or recorded below as not applicable.
 
 ## Status
 
@@ -52,7 +52,12 @@ CrossPoint commits after the last review (`b605f87d`) were taken as follows:
 - `6b4f807d` (test firmware formatting) and `28fdd857` (CrossPoint's own docs): nothing to port;
 - `bb7f80d3`, the upstream-sync runbook and scripts: CrossInk's build matrix script and the runbook pointers in `8b46e691`;
 - `ad1b5ce8`, upstream `5b1f0605` (#3824: per-book content keys, plugin isolation): its SDK move in `1dcf47d9`, nothing else to port. CrossInk has no plugin system and links neither the SDK's ContentProtection nor its Opds;
-- `8cb94736` (CrossPoint's own docs): REQUIREMENTS.md refreshed from it.
+- `8cb94736` (CrossPoint's own docs): REQUIREMENTS.md refreshed from it;
+- `854536e9`, the build-matrix guard against concurrent pio runs: ported in `5ddff99f`;
+- `04dd14ea`, the power double-click waits out every short-click action: CrossPoint's own (its Short Power actions and double-click toggle stay CrossPoint's, as for `36ee5cfc`); nothing to port;
+- `844dde61`, the battery in 1% steps, with the SDK's `bf196c8`: the SDK move in `61e220ea`, the port in `8a720bf1` (see Defaults chosen);
+- `1deb7c41`, CrossPoint's merge of upstream `5ab0f290` (#3847 the power-mode mutex, #3737 log lines at the low-power clock, #3830, #3733, #3834, #3838): CrossPoint upstream's own fixes, which CrossInk's HalPowerManager and logger do not carry; CrossInk takes them only if its own upstream does, and no Silkscreen rule depends on them;
+- `18417dfe` (CrossPoint's own docs): nothing to port.
 
 **Battery use.** The image has carried every drain rule since S6, but none has been measured. Run C2 and C6 of the [bring-up checklist](#bring-up-checklist-real-board) before relying on it.
 
@@ -112,7 +117,7 @@ The user's decisions for this port:
   - OTA queries `uxjulia/CrossInk`'s releases, which carry no `firmware-silkscreen` asset, so a check ends at "no update".
   - Pointing it at a private feed is a `-DCROSSINK_OTA_RELEASE_URL=...` build flag (`src/network/OtaUpdater.cpp`).
 - **Awake ceiling on battery:** the longer of 15 min and the user's sleep timeout. It never shortens a timeout the user chose; it bounds Never and the keep-awake screens. The 60-min input cap and the low-battery cutoff stay. CrossPoint uses the same rule.
-- **Base:** `development` `9dd334d3` as cloned, not `release/v1.6.1`.
+- **Base:** `development` `9dd334d3` as cloned, not `release/v1.6.1`; later merges are in the sync records below.
 - **Platform:** the Silkscreen envs override `platform` to pioarduino 55.03.311 (Arduino 3.3.11), the core the Silkscreen sleep path and front light were validated on. `[base]` keeps CrossInk's 55.03.37 for every other env.
 - **Board tag** `silkscreen`, the same as CrossPoint, and one SD card shared by both readers (C11 below).
 - **Sleep path:** Silkscreen reaches the SDK sleep path, and every other board keeps CrossInk's tail byte for byte. The guard script documents that one exception ([POWER.md](POWER.md#guard-script-and-its-exception)).
@@ -143,7 +148,7 @@ The user's decisions for this port:
 | Front-light key path | Settings > Display > Frontlight opens the panel; Long-press Confirm > Frontlight and Short Power > Toggle Frontlight (both since `36ee5cfc`) | Settings > Display > Frontlight > Light Controls (`SettingAction::FrontlightPanel`, `ActivityManager::pushFrontlightPanel()`); CrossInk's own shortcuts |
 | Restore at wake | Restore Light on Wake | Also CrossInk's daily light schedule; a brightness change from 0 while lit is a probed switch-on |
 | Reader overlay | `xteinkClassPanel()` honours `x4ClassPanel` | No counterpart; check gray levels by eye (C12) |
-| Version | Upstream's version string | `1.6.0-silkscreen` (`scripts/git_branch.py`), file `firmware-silkscreen.bin` |
+| Version | Upstream's version string | `1.6.1-silkscreen` (`scripts/git_branch.py`), file `firmware-silkscreen.bin` |
 
 ## Build
 
@@ -156,8 +161,8 @@ pio run -e silkscreen -t upload
 - **What runs with each build:**
   - before it, the sleep-source guard;
   - after it, CrossInk's `check_firmware_size.py`, `check_app_touch_gate.py` and `rename_firmware.py` (`firmware-silkscreen.bin`). The touch-gate audit returns at once on a touch build, as designed.
-- **Version.** Settings shows `1.6.0-silkscreen`. The debug env shows `1.6.0-<branch>+<hash>`, which on this branch reads `1.6.0-silkscreen+<hash>`.
-- **Size at the port review:** 5,911,177 B (90.2 % of the 6.25 MB app slot) and 114,992 B of static RAM.
+- **Version.** Settings shows `1.6.1-silkscreen`. The debug env shows `1.6.1-<branch>+<hash>`, which on this branch reads `1.6.1-silkscreen+<hash>`.
+- **Size at the port review:** 5,911,177 B (90.2 % of the 6.25 MB app slot) and 114,992 B of static RAM. After the `3efe61b6` sync: 5,927,701 B and 115,000 B (the image is 5,932,896 B, 90.5 % of the slot).
 - **Local hooks.** Set these under `[silkscreen]` in `platformio.local.ini` (gitignored), as in CrossPoint:
   - `frontlight_flags =` drops the light; `-DSILKSCREEN_FRONTLIGHT_BLEND_HZ=0` keeps the fixed warm/cool choice;
   - `display_flags = -DSILKSCREEN_DISPLAY_CONTROLLER=uc8279` (or `ssd1677`) skips the panel probe;
@@ -189,7 +194,7 @@ pio run -e silkscreen -t upload
 
 There is one Silkscreen SDK line: the branch `silkscreen` of `silkscreen-firmware/crosspoint-reader/freeink-sdk`, published as `iandchasse/freeink-sdk`. CrossPoint owns it. CrossInk's gitlink is **always that branch's head**: never a commit that is not on it, and never CrossInk's own pre-merge PR pins.
 
-**Check:** these two must print the same commit (today `3d1c39aebbf2e4bbbcb9e14b4beb97c2458fa885`):
+**Check:** these two must print the same commit (today `bf196c8f6d339b826fab02a01359c83487cb913e`):
 
 ```bash
 git ls-tree HEAD freeink-sdk
@@ -222,6 +227,7 @@ review and records) is `crosspoint-reader/docs/silkscreen/UPSTREAM-SYNC.md`; a C
 | CrossInk commits | `crossink/development` | SDK gitlink | What it brought |
 |---|---|---|---|
 | `1dcf47d9`, `332fb4ac`, and the `docs:` commit after them | Nothing new: `9dd334d3`, as cloned | `468b8e2` to `3d1c39a`, the shared line's merge of `bbd528c` | CrossPoint's sync to upstream `5b1f0605` (`ad1b5ce8`, #3824). Only the SDK move: `bbd528c` changes ContentProtection and the OPDS parser, and CrossInk links neither (it has no plugin system and parses OPDS with its own `lib/OpdsParser`), so there is nothing to port and no CHANGELOG line. REQUIREMENTS.md refreshed from CrossPoint `8cb94736`. |
+| `a9f9ef64` (the merge), `61e220ea`, `8a720bf1`, and the `docs:` commit after them | `9dd334d3` to `3efe61b6`: 23 commits, 143 files (v1.6.1 and what followed: inline EPUB images, the Library search list, toggle switches, menu buttons that follow the device layout, the KOReader progress cards, a faster sleep entry) | `3d1c39a` to `bf196c8`, the shared line's `read the Li-ion curve in tenths of a percent` (a new function; no other board changes). Upstream's own new pin, `8bbc44c`, is an ancestor of the shared head, so the shared head stayed | Conflicts in `CHANGELOG.md` (the release commit renamed `[Unreleased]` to `[v1.6.1]` and took the Silkscreen lines with it: all 28 are back under a new `[Unreleased]`), `FrontlightPanelActivity.h` (both hooks kept) and `KeyboardEntryActivity.{h,cpp}` (Silkscreen's `preventAutoSleep()` with upstream's `inputPollDelayMs()` and `showTouchFeedback()`). Every other Silkscreen hunk was checked against the merge base's delta and survives. **Taken as is:** `1162fa43`, menu buttons that follow the device layout: Left and Right switch the reader menu's tabs on the Root pane (on Silkscreen `deviceHasEdgeSideButtons()` is false, so the directions are not swapped), which is how the tabs are reachable by keys. `461b7074`, a silent restart replays the live light state: the replay still goes through `HalFrontlight::begin()`, whose `restoreAllowed()` refusal and no-load memory gate it, so a restart relights only what a user action or Restore Light on Wake had lit. `c3e2d42f`, a faster sleep entry: `APP_STATE.saveToFile()` moves after `goToSleep()` and the 500 ms settle goes; every SD write in `enterDeepSleep()` still comes before `Storage.shutdown()` and Silkscreen's sleep tail is untouched. The Library scan token is an RTC word and an atomic flag, with no SD access before the wake decision. **Watch:** with touch fitted, `KeyboardEntryActivity` polls every 2 ms instead of 10 ms (awake only, bounded by the ceiling); the KOReader progress screen's action buttons keep upstream's touch gate (`resultActionLayout(hasTouch)`), so with touch fitted they reserve no key-hint band and may overlap the hints drawn below them (the same gate as before the merge; check it on the panel, C12, with the key-access fixes). **Also:** `1.6.0` to `1.6.1`, the battery in 1% steps, and the sizes in Build. Builds: `silkscreen` 5,927,701 B flash, `x4-pro` 5,914,177 B, `x4-classic` 5,776,362 B, `c3check` 6,350,225 B (188,832 B of the OTA slot free), the sleep-wake guard and the touch-gate audit passing, and the same 7 narrowing warnings as before. |
 
 **Each sync:**
 
@@ -263,7 +269,7 @@ review and records) is `crosspoint-reader/docs/silkscreen/UPSTREAM-SYNC.md`; a C
 
 ```bash
 git fetch crosspoint
-git log --oneline 8cb94736..crosspoint/silkscreen -- . ':!src/activities/testsuite' ':!scripts/check_test_firmware.sh'
+git log --oneline 1deb7c41..crosspoint/silkscreen -- . ':!src/activities/testsuite' ':!scripts/check_test_firmware.sh'
 ```
 
 Port new drain fixes and board behaviour, update [POWER.md §3](POWER.md#3-firmware-rules-and-where-they-live)'s anchors, and move the "last CrossPoint commit ported" at the top of this file. CrossPoint's own uncommitted work is not ported until it lands as a commit.
@@ -344,7 +350,7 @@ CrossInk keys a few layout and naming choices on device macros. Silkscreen gets 
 1. **C1 - Boot and identity.**
    - The log shows `Device: silkscreen`, then `Panel controller SSD1677/UC8279 (probed)`, or `(kept from the probe before the sleep)` after a wake.
    - The touch probe lines come after the wake decision (`silkscreen-debug`).
-   - Settings > System shows `1.6.0-silkscreen`.
+   - Settings > System shows `1.6.1-silkscreen`.
    - After a USB Drive session and eject, USB Serial/JTAG comes back without a power cycle.
    - The SD firmware update rejects an image built for another board and accepts CrossPoint's `silkscreen` image.
 2. **C2 - Sleep current** (MEAS-01, [POWER.md §4](POWER.md#4-measurement-and-bench-checks)).
