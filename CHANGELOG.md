@@ -28,6 +28,7 @@
 - Silkscreen: shortcuts that start Wi-Fi or Nearby (sync progress, file transfer, Calibre, join network, hotspot, nearby position sync) do nothing while the battery reads at its cutoff.
 - Silkscreen: a front light with warm and cool strings now blends them for a warmth between the ends instead of picking one, once both strings have lit since the last reset (`-DSILKSCREEN_FRONTLIGHT_BLEND_HZ=0` in `frontlight_flags` keeps the fixed choice).
 - Silkscreen: the first warmth change after a wake that needs the light's other colour shows that colour for half a second while its string is checked, instead of going dark first; switching the light off or sleeping during the check waits for the light's power to settle before the colour changes.
+- Silkscreen: the battery percentage moves in 1% steps instead of 10% steps, estimated from the cell's voltage (the board has no fuel gauge), and rounds to the nearest percent so a full cell resting just under 4.2 V reads 100%. It reads a few percent low while the front light is on or the reader is busy, and high while charging. Other devices keep their readings.
 
 ### Fixed
 

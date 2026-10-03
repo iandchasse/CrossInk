@@ -123,6 +123,7 @@ The user's decisions for this port:
 - **Registration:** Silkscreen is registered only in build-relevant files. The release workflows, the release catalog and `docs/catalog` are untouched.
 - **Framebuffer:** `FREEINK_FB_PSRAM` is not set, as in CrossPoint, so the framebuffer stays in internal RAM.
 - **Front light:** probed only on a user action or a restore at wake. CrossInk's daily light schedule counts as a restore and respects the SDK's no-load and missing-string memory.
+- **Battery percentage in 1% steps** (CrossPoint `844dde61`, with the SDK's `BatteryMonitor::percentTenthsFromMillivolts()` from `bf196c8`). Upstream snaps the percentage to 10% notches (one noisy ADC read looked up in an 11-entry Li-ion curve). Silkscreen has no fuel gauge, so `HalPowerManager::getBatteryPercentage()` averages 16 conversions of `P+` and reads the same curve linearly between its notches (tenths of a percent), smooths it as before and rounds to the nearest percent, so a cell resting just under 4.20 V still reads 100%. The step is as fine as the hardware resolves; the accuracy is the voltage's (ADC calibration, sag under load, the rise while charging), so it is a state-of-charge estimate, not a gauge. Gated by `BoardConfig::isSilkscreen()`: every other board keeps the 10% notches and its floor.
 
 ## What differs from CrossPoint
 
