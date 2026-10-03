@@ -231,6 +231,9 @@ class EpubReaderDrawerActivity final : public Activity {
   // touch reader whose keys sit beside the panel (Silkscreen). Touch-only boards
   // keep the touch-only menu.
   bool keyNavigation() const;
+  // The Spacing and Margins panes name the keys' step sizes under their sliders.
+  // A separate query so the hints can be hidden without switching the keys off.
+  bool showsStepHints() const;
   const std::vector<RowId>& activeRows() const;
   int activeTopIndex() const;
   void activateRow(RowId row);
