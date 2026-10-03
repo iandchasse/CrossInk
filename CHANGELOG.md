@@ -42,6 +42,7 @@
 - Silkscreen: with the touchscreen fitted, the reader menu's Line Spacing, Word Spacing, Page Margins and Auto Page Turn interval can be set from the buttons, as without a touchscreen: Confirm starts and stops adjusting a slider, the front buttons step by 1 and the side buttons by 5, and Spacing and Margins name those steps under their sliders.
 - Silkscreen: with the touchscreen fitted, the reader menu, Library, Library settings, File Transfer menu and on-screen keyboard start with their cursor showing, as without a touchscreen, and the File Browser settings keep it on the row you tapped, so Confirm no longer acts on a choice you cannot see. After a tap hides the cursor in the reader menu or keyboard, the next button press shows it again before it moves or acts, and password show/hide in the keyboard's cursor mode takes one Confirm instead of two.
 - Silkscreen: with no touchscreen fitted, an SD-card font or size chosen in the reader menu is kept, instead of being dropped when the menu closes because that reader has no live font preview to confirm it.
+- Silkscreen: with the touchscreen fitted, Home in the Lyra Carousel theme answers the buttons, which were dead although their hints showed: Left and Right move along the covers or icons, Up and Down switch between them, Confirm opens the selection and Back opens the book. On the Minimal and Dashboard themes Up and Down no longer move a highlight on the button hints, because the front buttons open the action named above each one.
 
 ## [v1.6.1] - 2026-09-30
 

@@ -439,6 +439,5 @@ It differs from Silkscreen in three ways:
   - After more than 60 min on USB with no input, unplugging sleeps the device about 1 s later, once the ladder decodes "on battery". USB Drive and web transfers count for this too.
   - ESP-NOW connectionless power save in the Nearby windows: not tried.
   - The new strings exist in English only, and other languages fall back to English: `STR_POWER_BUTTON_FAULT`, `STR_BATTERY_TOO_LOW_FOR_UPDATE`, `STR_NEARBY_STOPPED_WAITING`, `STR_FRONTLIGHT_CONTROLS`, `STR_FRONTLIGHT_NOT_DETECTED`, `STR_FRONTLIGHT_COOL_ONLY`, `STR_FRONTLIGHT_WARM_ONLY`, `STR_NO_BATTERY`.
-  - On Minimal and Dashboard home the touch path still moves a highlight on the hint bar that Confirm does not activate. That is CrossInk's existing touch behaviour.
 - **Before any release channel** (as for CrossPoint, [MODULARITY.md, Future work](MODULARITY.md#future-work)): a board tag per panel family, and an OTA feed for the fork.
 - **Optional SDK wording:** the `awakeCeilingMin` comment (`BoardConfig.h`) and the SDK README could say that the consumer may extend the ceiling to a longer user timeout. That would be an SDK commit on the shared line, then a gitlink bump in both repos.

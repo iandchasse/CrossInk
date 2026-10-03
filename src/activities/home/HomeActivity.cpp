@@ -483,6 +483,15 @@ int getHomeMenuSelectionOffset(const std::vector<RecentBook>& recentBooks) {
   return metrics.homeContinueReadingInMenu ? 0 : getVisibleRecentBookCount(recentBooks);
 }
 
+// Which icon of the carousel's strip is highlighted. A board without touch shows the key selection. A touch-only
+// board shows only the icon under a finger. A board that keeps its front keys alongside touch (Silkscreen) shows
+// the key selection too, and an icon under a finger takes the highlight while the finger is down.
+int carouselMenuHighlightIndex(const MappedInputManager& mappedInput, const int touchDownIndex, const int keyIndex) {
+  if (!mappedInput.hasTouchHardware()) return keyIndex;
+  if (touchDownIndex >= 0 || !deviceHasFrontButtons(gpio)) return touchDownIndex;
+  return keyIndex;
+}
+
 }  // namespace
 
 // ---------------------------------------------------------------------------
@@ -1643,9 +1652,12 @@ void HomeActivity::loop() {
       minimalHomeNavIndex = homeNavCount - 1;
     }
 
-    // Touch readers do not show the front-button hints, so retain their
+    // Touch-only readers do not show the front-button hints, so retain their
     // existing side-button handling without moving the non-touch hint focus.
-    if (mappedInput.hasTouch()) {
+    // A board that keeps its front keys alongside touch (Silkscreen) shows the
+    // hints and its front keys act by slot, as labelled, so a highlight moved
+    // by Up/Down would name an action that Confirm does not run.
+    if (mappedInput.hasTouch() && !deviceHasFrontButtons(gpio)) {
       if (mappedInput.wasPressed(MappedInputManager::Button::Up)) {
         minimalHomeNavIndex = minimalHomeNavIndex < 0
                                   ? homeNavCount - 1
@@ -1739,6 +1751,10 @@ void HomeActivity::loop() {
   const bool isCarousel =
       static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::LYRA_CAROUSEL;
   const bool carouselTouchOnly = isCarousel && mappedInput.hasTouchHardware();
+  // carouselTouchOnly also gates the swipe flag below, so it stays true on a
+  // touch board that keeps its front keys (Silkscreen). Only the key handlers
+  // follow carouselKeysOff, which that board leaves on.
+  const bool carouselKeysOff = carouselTouchOnly && !deviceHasFrontButtons(gpio);
   const int previousHighlightedBookIdx = getHighlightedBookIndex();
   const int visibleBookCount = getVisibleRecentBookCount();
   const int carouselMenuItemCount =
@@ -1772,7 +1788,7 @@ void HomeActivity::loop() {
   // interaction path above. On other themes, Back opens the most recent book.
   // Requiring a press observed on Home ignores the stale release that can
   // arrive after Back closed the previous activity.
-  if (!carouselTouchOnly && !hasCarouselSwipe && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
+  if (!carouselKeysOff && !hasCarouselSwipe && mappedInput.wasReleased(MappedInputManager::Button::Back) &&
       backPressSeen && !recentBooks.empty()) {
     onContinueReading();
     return;
@@ -1964,7 +1980,7 @@ void HomeActivity::loop() {
       }
     }
 
-    if (!carouselTouchOnly) {
+    if (!carouselKeysOff) {
       if (!handledHorizontalNav && mappedInput.wasPressed(MappedInputManager::Button::Right)) {
         moveRight();
       }
@@ -2049,7 +2065,7 @@ void HomeActivity::loop() {
     updateHighlightedBookContext();
   }
 
-  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && !(isCarousel && mappedInput.hasTouchHardware())) {
+  if (mappedInput.wasReleased(MappedInputManager::Button::Confirm) && !carouselKeysOff) {
     activateSelectedHomeItem();
   }
 }
@@ -2253,9 +2269,9 @@ void HomeActivity::render(RenderLock&&) {
                                         hasAnyBookStats(currentBookStats) ? &currentBookStats : nullptr,
                                         currentBookProgressPercent);
       const auto menuItems = buildHomeMenuItems(hasOpdsServers, hasReadingStats, hasBookmarks, hasClippings);
-      const int menuHighlightIndex = mappedInput.hasTouchHardware()
-                                         ? carouselMenuTouchDownIndex
-                                         : (inCarouselRow ? -1 : selectorIndex - static_cast<int>(recentBooks.size()));
+      const int menuHighlightIndex =
+          carouselMenuHighlightIndex(mappedInput, carouselMenuTouchDownIndex,
+                                     inCarouselRow ? -1 : selectorIndex - static_cast<int>(recentBooks.size()));
       GUI.drawButtonMenu(
           renderer, Rect{}, static_cast<int>(menuItems.size()), menuHighlightIndex,
           [&menuItems](int index) { return menuItems[index].label; },
@@ -2317,9 +2333,10 @@ void HomeActivity::render(RenderLock&&) {
 
   const bool isCarouselTheme =
       static_cast<CrossPointSettings::UI_THEME>(SETTINGS.uiTheme) == CrossPointSettings::UI_THEME::LYRA_CAROUSEL;
-  const int menuSelectedIndex = isCarouselTheme && mappedInput.hasTouchHardware()
-                                    ? carouselMenuTouchDownIndex
-                                    : selectorIndex - getHomeMenuSelectionOffset(recentBooks);
+  const int menuKeyIndex = selectorIndex - getHomeMenuSelectionOffset(recentBooks);
+  const int menuSelectedIndex = isCarouselTheme
+                                    ? carouselMenuHighlightIndex(mappedInput, carouselMenuTouchDownIndex, menuKeyIndex)
+                                    : menuKeyIndex;
   GUI.drawButtonMenu(
       renderer, Rect{0, menuStartY, pageWidth, menuHeight}, static_cast<int>(menuItems.size()), menuSelectedIndex,
       [&menuItems](int index) { return menuItems[index].label; },
