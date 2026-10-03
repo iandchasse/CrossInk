@@ -282,6 +282,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     // Power-only choices. Keep SLEEP=1 as the existing Sleep/Wake setting.
     SLEEP_ONLY = 34,
     WAKE_ONLY = 35,
+    // Opens the front-light panel from the keys, on a board with a light that keeps
+    // its front keys (Silkscreen); pressed again, it closes the panel. No chord
+    // counterpart: POWER_CHORD_ACTION must stay aligned with ChordAction.
+    FRONTLIGHT_PANEL = 36,
     SHORT_PWRBTN_COUNT
   };
 
@@ -412,6 +416,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     LONG_MENU_QUICK_ACTIONS = 22,
     LONG_MENU_QUICK_LOCK = 23,
     LONG_MENU_LIBRARY = 24,
+    LONG_MENU_FRONTLIGHT_PANEL = 25,
     LONG_PRESS_MENU_ACTION_COUNT
   };
 

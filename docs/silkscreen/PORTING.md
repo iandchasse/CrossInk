@@ -47,7 +47,7 @@ CrossPoint commits after the last review (`b605f87d`) were taken as follows:
 - `5d58fdc0`, the ceiling rule: ported in `838b27b1` and `647fc531`;
 - `4566ddcd` and `16e42656`, the SSD1677 drive values: through the SDK move in `37d61efe`;
 - `92973915`, the front-light blend: in `c369039e`;
-- `36ee5cfc`, the front-light key shortcuts and the power double-click: its SDK move in `ff68feee`, and the panel's takeover of a switch-on started elsewhere in `f0ffb481`. Its Short Power > Toggle Frontlight, Long-press Confirm > Frontlight and double-click toggle stay CrossPoint's: CrossInk has its own Toggle Frontlight and shortcut actions;
+- `36ee5cfc`, the front-light key shortcuts and the power double-click: its SDK move in `ff68feee`, and the panel's takeover of a switch-on started elsewhere in `f0ffb481`. Its Short Power > Toggle Frontlight and double-click toggle stay CrossPoint's: CrossInk has its own Toggle Frontlight and shortcut actions. Its Long-press Confirm > Frontlight has a CrossInk counterpart in the Light Controls shortcut (below);
 - `8127e3e8`, the battery checks before the chord returns: CrossInk has had them since `647fc531` (CI-02), and `b65fb929` adds the held-chord wait;
 - `6b4f807d` (test firmware formatting) and `28fdd857` (CrossPoint's own docs): nothing to port;
 - `bb7f80d3`, the upstream-sync runbook and scripts: CrossInk's build matrix script and the runbook pointers in `8b46e691`;
@@ -106,7 +106,7 @@ The user's decisions for this port:
   - the key help in File Browser, Nearby transfer and Home;
   - Settings > Display > Sunlight Fading Fix (`getSettingsList()`), so Silkscreen keeps the row whether or not its touch panel answered, as in CrossPoint.
 
-  These routed gates use `deviceHasFrontButtons(gpio)`, which equals the old `!gpio.hasTouch()` on every other board. The two gates the port added, Light Controls in Settings > Display > Frontlight and the light panel's Up/Down warmth keys, use `boardHasFrontButtons()` (the board profile) instead, so an X4 Pro whose touch panel fails its probe gains neither.
+  These routed gates use `deviceHasFrontButtons(gpio)`, which equals the old `!gpio.hasTouch()` on every other board. The gates the port added, the light panel's key entry points (`frontlightPanelFromKeys()`: Light Controls in Settings > Display > Frontlight, in the reader menu and as a shortcut) and the panel's Up/Down warmth keys and key steps, use `boardHasFrontButtons()` (the board profile) instead, so an X4 Pro whose touch panel fails its probe gains none of them.
 
   The rest of CrossInk's touch UI is unchanged. The remap screen keeps its touch header. These key hints stay touch-gated on purpose, so with the touch panel fitted Silkscreen does not show them, although the keys work:
   - the side-button hints (`BaseTheme`/`LyraTheme::drawSideButtonHints()`, the keyboard's `>` `<`): their only caller is the keyboard, whose touch layout (56-px keys) starts at about y 430-490 in portrait, under the hints' fixed 345-506 band at the right edge, so they would cover its top-right keys; the key layout without touch starts below them;
@@ -146,7 +146,7 @@ The user's decisions for this port:
 | Client traffic | All requests except WebDAV polling methods and the plugin-job poll | All requests except WebDAV polling methods and `handleNotFound()` answers (captive probes); also automatic page turns and a USB host using the drive |
 | Plugin system, loan clock | Drain rules (`4505ceec`) | Not in CrossInk: rows marked not applicable in POWER.md |
 | Upload cutoff | Web uploads poll the cutoff | WebSocket uploads covered; a blocking multipart upload is not (no upstream #3732) |
-| Front-light key path | Settings > Display > Frontlight opens the panel; Long-press Confirm > Frontlight and Short Power > Toggle Frontlight (both since `36ee5cfc`) | Settings > Display > Frontlight > Light Controls (`SettingAction::FrontlightPanel`, `ActivityManager::pushFrontlightPanel()`); CrossInk's own shortcuts |
+| Front-light key path | Settings > Display > Frontlight opens the panel; Long-press Confirm > Frontlight and Short Power > Toggle Frontlight (both since `36ee5cfc`) | Settings > Display > Frontlight > Light Controls (`SettingAction::FrontlightPanel`, `ActivityManager::pushFrontlightPanel()`); the reader menu's Settings tab > Light Controls (`ReaderDrawerCatalogItem::LightControls`); the Light Controls shortcut, `SHORT_PWRBTN::FRONTLIGHT_PANEL` (36) and `LONG_MENU_FRONTLIGHT_PANEL` (25), offered where `frontlightPanelFromKeys()` (a light and `boardHasFrontButtons()`) and handled by `ActivityManager::toggleFrontlightPanelFromShortcut()`: it opens the panel without lighting anything, and the same key closes it; CrossInk's own Toggle Frontlight |
 | Restore at wake | Restore Light on Wake | Also CrossInk's daily light schedule; a brightness change from 0 while lit is a probed switch-on |
 | Reader overlay | `xteinkClassPanel()` honours `x4ClassPanel` | No counterpart; check gray levels by eye (C12) |
 | Version | Upstream's version string | `1.6.1-silkscreen` (`scripts/git_branch.py`), file `firmware-silkscreen.bin` |
@@ -377,6 +377,7 @@ CrossInk keys a few layout and naming choices on device macros. Silkscreen gets 
    - **Restore with no light:** with Restore Light on Wake on, or inside the daily schedule's window, unplug the light while asleep and wake. The restore tries once, and the popup follows the first screen. The next wake logs `Frontlight not restored` and leaves the boost off. A power cycle tries once again.
    - **Single-string light:** it lights the string that is there; the panel says "Warm light only" or "Cool light only" and pins the warmth.
    - **Light Controls** (Settings > Display > Frontlight): Left/Right set the brightness, Up/Down the warmth, Confirm switches the light, Back closes it, and the light is saved on exit.
+   - **Light Controls from a book:** the reader menu's Settings tab lists Light Controls, and it returns to the menu when the panel closes. With Short Power, Long Power or Long-press Confirm set to Light Controls, that key opens the panel in a book and on Home without lighting anything, and the same key closes it (a long press of Confirm, when that is the shortcut). Left and Right step 1 % below 10 % and 5 % above it, and a held key takes 0 to 100 % in about 3 s.
    - **Shortcut with the panel open:** with no light fitted and Short Power set to Toggle Frontlight, open Light Controls and press Power. The panel's "No front light detected" note shows, Left/Right only set the level and do not relight the boost, and after closing the panel and rebooting the light reads off. In the reader's light overlay (reader details), the same press shows the popup at once.
    - **Blend:** warmth 30-70 % mixes the strings, and the first switch-on after a reset lights each string through its probe window.
    - **Ghost wake:** it never lights the LEDs.

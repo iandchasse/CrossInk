@@ -203,6 +203,36 @@ TEST(ReaderDrawerModel, ButtonDevicesRestoreStatsAndTransfersInTheirTabs) {
   EXPECT_EQ(fullLocation.items[5], ReaderDrawerCatalogItem::SyncProgress);
 }
 
+TEST(ReaderDrawerModel, LightControlsFollowsControlsOnlyWhereThePanelOpensFromTheKeys) {
+  const ReaderDrawerCatalog without = makeReaderDrawerCatalog({});
+  const auto& withoutSettings = without[static_cast<size_t>(ReaderDrawerTab::Settings)];
+  for (uint8_t i = 0; i < withoutSettings.count; ++i) {
+    EXPECT_NE(withoutSettings.items[i], ReaderDrawerCatalogItem::LightControls);
+  }
+
+  // The flag is last in ReaderDrawerAvailability, so the positional initialisers above
+  // keep their meaning; this one names it.
+  ReaderDrawerAvailability available{};
+  available.lightControls = true;
+  const ReaderDrawerCatalog catalog = makeReaderDrawerCatalog(available);
+  const auto& settings = catalog[static_cast<size_t>(ReaderDrawerTab::Settings)];
+  EXPECT_EQ(settings.count, static_cast<uint8_t>(withoutSettings.count + 1));
+  EXPECT_EQ(settings.items[1], ReaderDrawerCatalogItem::Controls);
+  EXPECT_EQ(settings.items[2], ReaderDrawerCatalogItem::LightControls);
+  EXPECT_EQ(settings.items[3], ReaderDrawerCatalogItem::BookDictionary);
+  for (size_t tab = 0; tab < READER_DRAWER_TAB_COUNT; ++tab) {
+    if (tab == static_cast<size_t>(ReaderDrawerTab::Settings)) continue;
+    EXPECT_EQ(catalog[tab].count, without[tab].count);
+  }
+
+  // The Settings tab with every conditional row still fits the catalog's rows.
+  const ReaderDrawerAvailability full{true, true, true, true, true, true, true, true, true, true};
+  const ReaderDrawerCatalog fullCatalog = makeReaderDrawerCatalog(full);
+  const auto& fullSettings = fullCatalog[static_cast<size_t>(ReaderDrawerTab::Settings)];
+  EXPECT_EQ(fullSettings.count, 12);
+  EXPECT_LE(fullSettings.count, fullSettings.items.size());
+}
+
 TEST(ReaderDrawerModel, ChangeMaskSeparatesPreviewRelayoutAndOrientation) {
   const auto mask =
       ReaderSettingsChangeMask::Preview | ReaderSettingsChangeMask::Relayout | ReaderSettingsChangeMask::Orientation;

@@ -22,7 +22,8 @@ struct Rect;
 // It renders as an overlay — the content underneath stays on screen below the
 // panel, and a tap there dismisses it. State is persisted once on exit (SPIFFS
 // write throttling). Keys: Left/Right brightness, Up/Down warmth (on a board
-// with front keys), Confirm on/off, Back closes.
+// with front keys), Confirm on/off, Back closes (as does the Light Controls
+// shortcut that opened it, pressed again).
 class FrontlightPanelActivity final : public Activity {
   // The sun toggle, two sliders, and four -/+ targets need seven interaction
   // slots. Keep small headroom for the panel's fixed controls.
@@ -47,6 +48,10 @@ class FrontlightPanelActivity final : public Activity {
   // Swallow the swipe/tap fallout of a slider drag so its release can't
   // trigger the back gesture and close the panel mid-adjustment.
   bool draggingSlider = false;
+  // A Confirm press that began while the panel was open. With Long-press Confirm set to
+  // Light Controls, holding it closes the panel as it opened it; the press that opened the
+  // panel (still held) must not count.
+  bool confirmPressedInPanel = false;
   // Bottom edge of the drop-down (px). Content lays out above it and the
   // handle occupies its final band. Set by render() before the app lays out.
   int panelBottom = 0;
@@ -133,6 +138,11 @@ class FrontlightPanelActivity final : public Activity {
   // From an active reader, Home returns to the library; elsewhere it dismisses
   // the overlay back to the current screen.
   bool handleHomeGesture() override;
+  // The Light Controls shortcut that opened the panel, pressed again.
+  bool closeForLightControlsShortcut() override {
+    close();
+    return true;
+  }
   bool requiresFreshBackdrop() const override { return true; }
   // The panel shows a switch-on's "no light" result itself (noteSwitchOnResult()),
   // except in reader-details mode, which has no light rows: main.cpp's popup

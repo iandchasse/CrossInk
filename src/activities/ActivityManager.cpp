@@ -18,6 +18,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DeviceCapabilities.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "SilentRestart.h"
@@ -1101,6 +1102,25 @@ bool ActivityManager::showsFrontlightNotice() const {
 
 bool ActivityManager::pushFrontlightPanel(Activity& activity) {
   return openFrontlightPanel(activity, renderer, mappedInput);
+}
+
+bool ActivityManager::toggleFrontlightPanelFromShortcut() {
+  if (!frontlightPanelFromKeys()) return false;
+  // A navigation in flight owns the screen; the press is dropped, not queued.
+  if (!currentActivity || pendingAction != PendingAction::None) return true;
+  if (currentActivity->name == "FrontlightPanel") {
+    currentActivity->closeForLightControlsShortcut();
+    return true;
+  }
+  // The checks of the touch gesture's route: no modal open, and a screen that does
+  // not keep the panel's swipe for itself (the reader menu). Also no second panel
+  // over a screen the panel itself opened (its Settings tile).
+  if (currentActivity->blocksGlobalInput() || !currentActivity->allowFrontlightPanelGesture() ||
+      hasActivityNamed("FrontlightPanel")) {
+    return true;
+  }
+  openFrontlightPanel(*currentActivity, renderer, mappedInput);
+  return true;
 }
 
 bool ActivityManager::blocksGlobalInput() const { return currentActivity && currentActivity->blocksGlobalInput(); }

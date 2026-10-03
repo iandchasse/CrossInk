@@ -59,6 +59,12 @@ class EpubReaderDrawerActivity final : public Activity {
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return true; }
   bool allowFrontlightPanelGesture() const override { return false; }
+  // Light Controls opens the panel over this menu. It clears the touchscreen override when
+  // it closes, which the menu holds for as long as it is open on a touch unit.
+  void onFrontlightPanelClosed() override {
+    if (mappedInput.hasTouchHardware()) mappedInput.setReaderTouchscreenOverride(true);
+    requestUpdate();
+  }
   // A dirty preview can rebuild the page area itself; after a TTF ID change,
   // an unavailable text snapshot is replaced with a safe blank background.
   bool requiresFreshBackdrop() const override {

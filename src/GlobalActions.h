@@ -33,6 +33,7 @@ inline bool isPowerButtonActionAvailableOutsideReader(const CrossPointSettings::
     case CrossPointSettings::SHORT_PWRBTN::JOIN_NETWORK:
     case CrossPointSettings::SHORT_PWRBTN::CREATE_HOTSPOT:
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_FRONTLIGHT:
+    case CrossPointSettings::SHORT_PWRBTN::FRONTLIGHT_PANEL:
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_TOUCHSCREEN:
     case CrossPointSettings::SHORT_PWRBTN::LIBRARY:
       return true;

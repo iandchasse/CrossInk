@@ -245,6 +245,16 @@ void TxtReaderActivity::loop() {
     return;
   }
 
+  if (SETTINGS.longPressMenuAction == CrossPointSettings::LONG_MENU_FRONTLIGHT_PANEL &&
+      mappedInput.getHeldTime() >= LONG_PRESS_MENU_MS &&
+      (mappedInput.isPressed(MappedInputManager::Button::Confirm) ||
+       mappedInput.wasReleased(MappedInputManager::Button::Confirm))) {
+    longPressMenuHandled = mappedInput.isPressed(MappedInputManager::Button::Confirm);
+    mappedInput.suppressNextConfirmRelease();
+    handleGlobalPowerButtonAction(CrossPointSettings::SHORT_PWRBTN::FRONTLIGHT_PANEL);
+    return;
+  }
+
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     openReaderMenu();
     return;
@@ -497,6 +507,7 @@ bool TxtReaderActivity::supportsQuickAction(const CrossPointSettings::SHORT_PWRB
     case CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER:
     case CrossPointSettings::SHORT_PWRBTN::LIBRARY:
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_FRONTLIGHT:
+    case CrossPointSettings::SHORT_PWRBTN::FRONTLIGHT_PANEL:
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_TOUCHSCREEN:
       return true;
     default:
@@ -541,6 +552,7 @@ bool TxtReaderActivity::executeReaderShortcutAction(const CrossPointSettings::SH
       toggleHomeButtonInReader();
       return true;
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_FRONTLIGHT:
+    case CrossPointSettings::SHORT_PWRBTN::FRONTLIGHT_PANEL:
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_TOUCHSCREEN:
       return handleGlobalPowerButtonAction(action);
     default:
@@ -616,6 +628,8 @@ bool TxtReaderActivity::executeLongPressBackAction() {
     case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_LIBRARY:
       activityManager.goToLibrary();
       return true;
+    case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_FRONTLIGHT_PANEL:
+      return handleGlobalPowerButtonAction(CrossPointSettings::SHORT_PWRBTN::FRONTLIGHT_PANEL);
     case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_CREATE_CLIPPING:
       return false;
     default:

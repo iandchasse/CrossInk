@@ -429,6 +429,7 @@ inline uint8_t shortcutRawValue(const ShortcutOptionCatalog catalog, const Cross
         case Action::QUICK_LOCK:
           return Chord::CHORD_QUICK_LOCK;
         case Action::TOGGLE_TILT_PAGE_TURN:
+        case Action::FRONTLIGHT_PANEL:  // No chord value: ChordAction stays aligned with POWER_CHORD_ACTION.
           return SHORTCUT_OPTION_UNAVAILABLE;
         default:
           return SHORTCUT_OPTION_UNAVAILABLE;
@@ -486,6 +487,8 @@ inline uint8_t shortcutRawValue(const ShortcutOptionCatalog catalog, const Cross
           return LongPress::LONG_MENU_QUICK_LOCK;
         case Action::LIBRARY:
           return LongPress::LONG_MENU_LIBRARY;
+        case Action::FRONTLIGHT_PANEL:
+          return LongPress::LONG_MENU_FRONTLIGHT_PANEL;
         case Action::PAGE_TURN:
         case Action::PREVIOUS_PAGE:
         case Action::NEARBY_POSITION_SYNC:
@@ -502,6 +505,7 @@ inline uint8_t shortcutRawValue(const ShortcutOptionCatalog catalog, const Cross
         case Action::TOGGLE_TILT_PAGE_TURN:
         case Action::TOGGLE_HOME_BUTTON_IN_READER:
         case Action::TOGGLE_FRONTLIGHT:
+        case Action::FRONTLIGHT_PANEL:  // The Home key has its own front-light action.
           return SHORTCUT_OPTION_UNAVAILABLE;
         default:
           return static_cast<uint8_t>(action);
@@ -1429,10 +1433,9 @@ inline std::vector<SettingInfo> buildDisplayFrontlightSettingsList(const std::ve
   };
 
   // The light panel otherwise opens by touch gestures only; a board that keeps
-  // its front keys alongside touch (Silkscreen) reaches it here. Decided by the
-  // board profile, not the touch probe, so a touch panel that fails its probe
-  // adds nothing on other boards.
-  if (Frontlight.present() && boardHasFrontButtons()) {
+  // its front keys alongside touch (Silkscreen) reaches it here, and from the
+  // reader menu and the Light Controls shortcuts (frontlightPanelFromKeys()).
+  if (frontlightPanelFromKeys()) {
     settings.push_back(SettingInfo::Action(StrId::STR_FRONTLIGHT_CONTROLS, SettingAction::FrontlightPanel));
   }
   addDisplaySetting(StrId::STR_RESTORE_LIGHT_ON_WAKE);

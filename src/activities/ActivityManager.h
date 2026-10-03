@@ -177,6 +177,12 @@ class ActivityManager {
   // Push the frontlight panel over `activity`, as the touch drawer gesture does.
   // For boards whose keys reach it from Settings. False when it cannot open.
   bool pushFrontlightPanel(Activity& activity);
+  // A Light Controls shortcut (Short or Long Power, long-press Confirm or Back, a side
+  // key, Quick Actions): open the panel over the current screen, or close it when it
+  // is already open. Opened under the touch gesture's checks (no modal, and the screen
+  // allows it). False only where the board has no key route to the panel; true
+  // otherwise, also when the screen cannot take it, so the press acts only once.
+  bool toggleFrontlightPanelFromShortcut();
   bool openReaderSettingsForTouchscreenEscapeHatch();
   bool handleHomeButtonBackOrHome();
   bool openReaderMenuFromShortcut();

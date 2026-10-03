@@ -150,6 +150,7 @@ enum class ReaderDrawerCatalogItem : uint8_t {
   SyncProgress,
   NearbyPositionSync,
   SendNearbyBook,
+  LightControls,
 };
 
 struct ReaderDrawerAvailability {
@@ -162,6 +163,9 @@ struct ReaderDrawerAvailability {
   bool buttonDevice = false;
   bool globalStatsEnabled = true;
   bool bookStatsEnabled = true;
+  // The front-light panel opens from the keys (frontlightPanelFromKeys()). Last, so a
+  // positional initialiser written before it still means what it did.
+  bool lightControls = false;
 };
 
 struct ReaderDrawerTabCatalog {
@@ -226,6 +230,7 @@ constexpr ReaderDrawerCatalog makeReaderDrawerCatalog(const ReaderDrawerAvailabi
   auto& settings = catalog[static_cast<size_t>(ReaderDrawerTab::Settings)];
   settings.add(ReaderDrawerCatalogItem::StatusBar);
   settings.add(ReaderDrawerCatalogItem::Controls);
+  if (available.lightControls) settings.add(ReaderDrawerCatalogItem::LightControls);
   settings.add(ReaderDrawerCatalogItem::BookDictionary);
   settings.add(ReaderDrawerCatalogItem::RenderMode);
   settings.add(ReaderDrawerCatalogItem::IndexingMethod);

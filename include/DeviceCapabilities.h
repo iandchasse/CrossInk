@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BoardConfig.h>
+#include <CrossInkHalFrontlight.h>
 #include <HalGPIO.h>
 
 #include "AppCapabilities.h"
@@ -28,6 +29,13 @@ inline bool boardHasFrontButtons() {
   return BoardConfig::hasFrontButtons();
 #endif
 }
+
+// The front-light panel otherwise opens by touch gestures only. A board with a light
+// that keeps its front keys (Silkscreen) opens it from the keys: Settings > Display >
+// Frontlight, the reader menu's Settings tab, and the Light Controls shortcuts. Decided
+// by the board profile, not the touch probe, so a touch panel that fails its probe adds
+// nothing on a touch-only board.
+inline bool frontlightPanelFromKeys() { return Frontlight.present() && boardHasFrontButtons(); }
 
 inline bool deviceHasEdgeSideButtons(const HalGPIO& gpio) {
 #ifdef SIMULATOR

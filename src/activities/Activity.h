@@ -115,6 +115,9 @@ class Activity {
   virtual std::unique_ptr<Activity> createFrontlightReadingStatsActivity() { return {}; }
   virtual void onFrontlightPanelOpened() {}
   virtual void onFrontlightPanelClosed() { requestUpdate(); }
+  // The Light Controls shortcut that opens the front-light panel was pressed again:
+  // only the panel itself closes. Returns whether it did.
+  virtual bool closeForLightControlsShortcut() { return false; }
   // Readers with per-book overrides can temporarily restore their global
   // defaults around this write. Other activities persist normally.
   virtual void persistGlobalSettings() { SETTINGS.saveToFile(); }

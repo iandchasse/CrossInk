@@ -613,6 +613,44 @@ class SimulatorSmokeTest {
       fail("Library is missing from Quick Actions choices");
     }
 
+    // Light Controls opens the front-light panel from the keys: offered only where
+    // frontlightPanelFromKeys(), never as a chord (ChordAction stays aligned with
+    // POWER_CHORD_ACTION), and a saved Quick Actions slot keeps it.
+    {
+      const bool lightControls = frontlightPanelFromKeys();
+      const auto offers = [&allSettings](const char* key, const ShortcutOptionCatalog catalog) {
+        const auto setting = std::find_if(allSettings.begin(), allSettings.end(),
+                                          [key](const SettingInfo& candidate) { return settingKeyIs(candidate, key); });
+        const auto raw = shortcutRawValue(catalog, CrossPointSettings::FRONTLIGHT_PANEL);
+        return setting != allSettings.end() && raw != SHORTCUT_OPTION_UNAVAILABLE &&
+               std::find(setting->enumRawValues.begin(), setting->enumRawValues.end(), raw) !=
+                   setting->enumRawValues.end();
+      };
+      if (offers("shortPwrBtn", ShortcutOptionCatalog::PowerButton) != lightControls ||
+          offers("longPwrBtn", ShortcutOptionCatalog::PowerButton) != lightControls ||
+          offers("longPressMenuAction", ShortcutOptionCatalog::LongPress) != lightControls ||
+          offers("longPressBackAction", ShortcutOptionCatalog::LongPress) != lightControls) {
+        fail("Light Controls availability does not match the front-light panel's key route");
+      }
+      if (shortcutRawValue(ShortcutOptionCatalog::ButtonChord, CrossPointSettings::FRONTLIGHT_PANEL) !=
+          SHORTCUT_OPTION_UNAVAILABLE) {
+        fail("Light Controls must not take a chord value");
+      }
+      if (QuickActions::isQuickActionSlotActionAvailable(CrossPointSettings::FRONTLIGHT_PANEL) != lightControls ||
+          QuickActions::actionLabel(CrossPointSettings::FRONTLIGHT_PANEL) != StrId::STR_FRONTLIGHT_CONTROLS) {
+        fail("Light Controls is missing or mislabeled in Quick Actions choices");
+      }
+      JsonDocument originalSettings;
+      SETTINGS.toJson(originalSettings);
+      JsonDocument slotSettings;
+      SETTINGS.toJson(slotSettings);
+      slotSettings["quickActionSlots"][0] = CrossPointSettings::FRONTLIGHT_PANEL;
+      SETTINGS.fromJson(slotSettings.as<JsonVariantConst>());
+      const bool slotKept = SETTINGS.quickActionSlots[0] == CrossPointSettings::FRONTLIGHT_PANEL;
+      SETTINGS.fromJson(originalSettings.as<JsonVariantConst>());
+      if (!slotKept) fail("A Light Controls Quick Actions slot was not accepted from the settings file");
+    }
+
     const uint8_t savedTrackReadingStats = SETTINGS.trackReadingStats;
     SETTINGS.trackReadingStats = 0;
     const auto statsDisabledSettings = getSettingsList();

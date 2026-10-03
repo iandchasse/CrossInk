@@ -97,7 +97,9 @@ bool isWebEnumOptionAvailable(const SettingInfo& setting, size_t optionIndex) {
   if (option == StrId::STR_TOGGLE_TOUCHSCREEN && !gpio.hasTouch()) return false;
 
   if (!Frontlight.present()) {
-    if (option == StrId::STR_TOGGLE_FRONTLIGHT ||
+    // Light Controls (the panel from the keys) is in the shared catalog only where a light
+    // and front keys exist (QuickActions::isActionAvailable()); this keeps the list honest.
+    if (option == StrId::STR_TOGGLE_FRONTLIGHT || option == StrId::STR_FRONTLIGHT_CONTROLS ||
         (isSwipeActionSetting(setting) &&
          (option == StrId::STR_INCREASE_BRIGHTNESS || option == StrId::STR_DECREASE_BRIGHTNESS ||
           option == StrId::STR_INCREASE_WARMTH || option == StrId::STR_DECREASE_WARMTH))) {

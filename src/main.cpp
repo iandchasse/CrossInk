@@ -740,6 +740,10 @@ bool handleGlobalPowerButtonAction(const CrossPointSettings::SHORT_PWRBTN action
       LOG_INF("LIGHT", "Frontlight toggled %s by shortcut", lightOn ? "on" : "off");
       return true;
     }
+    case CrossPointSettings::SHORT_PWRBTN::FRONTLIGHT_PANEL:
+      // Opens the light panel (lighting nothing), or closes it when it is already open.
+      // Where the board offers no key route to the panel the shortcut does nothing.
+      return activityManager.toggleFrontlightPanelFromShortcut();
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_TOUCHSCREEN:
       if (!gpio.hasTouch()) return false;
       SETTINGS.disableReaderTouchscreen = SETTINGS.disableReaderTouchscreen ? 0 : 1;

@@ -9,6 +9,7 @@
 #include <functional>
 
 #include "CrossPointSettings.h"
+#include "DeviceCapabilities.h"
 
 class OptionPopup;
 
@@ -61,7 +62,7 @@ inline constexpr std::array<StrId, CrossPointSettings::QUICK_ACTION_SLOT_ACTION_
 
 // Shared display order for shortcut pickers. The values remain the persisted
 // SHORT_PWRBTN IDs; only their presentation order is centralized here.
-inline constexpr std::array<CrossPointSettings::SHORT_PWRBTN, 31> shortcutActionOrder = {
+inline constexpr std::array<CrossPointSettings::SHORT_PWRBTN, 32> shortcutActionOrder = {
     CrossPointSettings::IGNORE,
     CrossPointSettings::SLEEP,
     CrossPointSettings::PAGE_TURN,
@@ -92,6 +93,7 @@ inline constexpr std::array<CrossPointSettings::SHORT_PWRBTN, 31> shortcutAction
     CrossPointSettings::QUICK_ACTIONS,
     CrossPointSettings::QUICK_LOCK,
     CrossPointSettings::TOGGLE_FRONTLIGHT,
+    CrossPointSettings::FRONTLIGHT_PANEL,
     CrossPointSettings::TOGGLE_TOUCHSCREEN,
 };
 
@@ -104,6 +106,7 @@ inline bool isActionAvailable(const uint8_t action) {
     return true;
   if (action == CrossPointSettings::QUICK_ACTIONS || action == CrossPointSettings::QUICK_LOCK) return true;
   if (action == CrossPointSettings::TOGGLE_FRONTLIGHT) return Frontlight.present();
+  if (action == CrossPointSettings::FRONTLIGHT_PANEL) return frontlightPanelFromKeys();
   if (action == CrossPointSettings::TOGGLE_TOUCHSCREEN) return gpio.hasTouch();
   if (action < CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT) {
     return action != CrossPointSettings::TOGGLE_TILT_PAGE_TURN || supportsTiltPageTurn();
@@ -124,6 +127,7 @@ inline StrId actionLabel(const uint8_t action) {
   if (action < CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT) return actionLabels[action];
   if (action == CrossPointSettings::QUICK_ACTIONS) return StrId::STR_QUICK_ACTIONS;
   if (action == CrossPointSettings::TOGGLE_FRONTLIGHT) return StrId::STR_TOGGLE_FRONTLIGHT;
+  if (action == CrossPointSettings::FRONTLIGHT_PANEL) return StrId::STR_FRONTLIGHT_CONTROLS;
   if (action == CrossPointSettings::TOGGLE_TOUCHSCREEN) return StrId::STR_TOGGLE_TOUCHSCREEN;
   if (action == CrossPointSettings::QUICK_LOCK) return StrId::STR_QUICK_LOCK;
   if (action == CrossPointSettings::PREVIOUS_PAGE) return StrId::STR_PREV_PAGE;

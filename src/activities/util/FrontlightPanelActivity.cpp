@@ -40,6 +40,8 @@ constexpr fui::ActionId ACTION_QUICK = 6;
 constexpr fui::ActionId ACTION_DISMISS = 7;
 constexpr int BRIGHTNESS_STEP = 5;
 constexpr int FINE_STEP = 1;
+// The Long-press Confirm that opens the panel (the readers' threshold) closes it again.
+constexpr unsigned long LONG_CONFIRM_CLOSE_MS = 600;
 constexpr int HEADER_ICON_SIZE = 24;
 constexpr int HEADER_BUTTON_WIDTH = 64;
 constexpr int HEADER_CONTENT_BOTTOM_GAP = 8;
@@ -436,6 +438,19 @@ void FrontlightPanelActivity::loop() {
   // and are saved on exit. ButtonNavigator no longer lets a one-key list react to Back, so this
   // only keeps a Back chord from nudging the light. Gated to boards that keep their front keys.
   if (boardHasFrontButtons() && mappedInput.isPressed(MappedInputManager::Button::Back)) return;
+  // Long-press Confirm set to Light Controls: held again, it closes the panel it opened. The
+  // hold that opened the panel is still down when it appears, so only a new press counts, and
+  // its release goes to the screen underneath as nothing.
+  if (SETTINGS.longPressMenuAction == CrossPointSettings::LONG_MENU_FRONTLIGHT_PANEL && boardHasFrontButtons()) {
+    if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) confirmPressedInPanel = true;
+    if (confirmPressedInPanel && mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+        mappedInput.getHeldTime() >= LONG_CONFIRM_CLOSE_MS) {
+      mappedInput.suppressNextConfirmRelease();
+      close();
+      return;
+    }
+  }
+  if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) confirmPressedInPanel = false;
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (!context.showReaderDetails) toggleLight();
     return;
