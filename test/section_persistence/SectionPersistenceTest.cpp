@@ -1,6 +1,10 @@
 #include <gtest/gtest.h>
 
+// Include standard headers before the class/private macros below: libstdc++
+// templates declared with `class` do not compile if first parsed under them.
+#include <algorithm>
 #include <cstdint>
+#include <deque>
 #include <memory>
 #include <string>
 #include <utility>
@@ -16,10 +20,17 @@
 #include <GfxRenderer.h>
 
 namespace {
-constexpr uint8_t kFullVersion = 78;
-constexpr uint8_t kPartialVersion = 0xF2;
-constexpr uint8_t kPreviousFullVersion = 77;
-constexpr uint8_t kPreviousPartialVersion = 0xF3;
+constexpr uint8_t kFullVersion = 81;
+constexpr uint8_t kPartialVersion = 0xC2;
+constexpr uint8_t kPreviousFullVersion = 80;
+constexpr uint8_t kPreviousPartialVersion = 0xC1;
+constexpr uint8_t kOlderFullVersion = 79;
+constexpr uint8_t kOlderPartialVersion = 0xF4;
+constexpr uint8_t kEarlierFullVersion = 78;
+constexpr uint8_t kEarlierPartialVersion = 0xF2;
+constexpr uint8_t kLastReleaseFullVersion = 77;
+constexpr uint8_t kLastReleasePartialVersion = 0xF3;
+constexpr uint8_t kPreviousReleasePrepPartialVersion = 0x80;
 
 ReaderRenderSpec renderSpec() {
   ReaderRenderSpec spec;
@@ -152,7 +163,10 @@ TEST_F(SectionPersistenceTest, FailedCommitKeepsThePreviousReadableCache) {
 }
 
 TEST_F(SectionPersistenceTest, RejectsCachesFromPreviousLayoutRevisions) {
-  for (const uint8_t staleVersion : {kPreviousFullVersion, kPreviousPartialVersion}) {
+  for (const uint8_t staleVersion :
+       {kPreviousFullVersion, kPreviousPartialVersion, kOlderFullVersion, kOlderPartialVersion, kEarlierFullVersion,
+        kEarlierPartialVersion, kLastReleaseFullVersion, kLastReleasePartialVersion,
+        kPreviousReleasePrepPartialVersion}) {
     SectionHarness harness;
     harness.begin();
     harness.appendPages(1);

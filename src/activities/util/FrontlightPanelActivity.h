@@ -138,4 +138,7 @@ class FrontlightPanelActivity final : public Activity {
   // except in reader-details mode, which has no light rows: main.cpp's popup
   // shows it there and saves the light as off at once.
   bool showsFrontlightNotice() const override { return !context.showReaderDetails; }
+#ifdef SIMULATOR
+  void simulatorActivateQuickAction(int index) { activateQuickAction(index); }
+#endif
 };

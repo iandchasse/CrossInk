@@ -2305,6 +2305,7 @@ void EpubReaderActivity::endGlobalSettingsEditForBookReader(void* ctx) {
 void EpubReaderActivity::onEnter() {
   Activity::onEnter();
   pageLoadRetryCount = 0;
+  touchReaderDrawerState = initialReaderDrawerState(mappedInput.hasTouchHardware());
 
   MemoryBudget::logEpubHeapPools("reader enter");
 
@@ -2673,7 +2674,8 @@ void EpubReaderActivity::openReaderMenu() {
       requestUpdate();
       return;
     }
-    touchReaderDrawerState = menu->reopenDrawer ? menu->drawerState : ReaderDrawerState{};
+    touchReaderDrawerState =
+        menu->reopenDrawer ? menu->drawerState : initialReaderDrawerState(mappedInput.hasTouchHardware());
     applyOrientation(menu->orientation);
     if (menu->settingsChanged && hasReaderSettingsChange(menu->changeMask, ReaderSettingsChangeMask::Relayout)) {
       ensureReaderSdFontLoaded(renderer);
