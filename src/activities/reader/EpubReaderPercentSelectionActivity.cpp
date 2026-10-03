@@ -463,6 +463,8 @@ void EpubReaderPercentSelectionActivity::buildKeypadScreen(UiApp::ScreenType& sc
     backspaceBtn.icon = fui::bitmapFromIcon(icon_backspace_28);
     backspaceBtn.action = ACTION_KEYPAD_BACKSPACE;
     backspaceBtn.inputMask = fui::InputTouch;
+    // Keys can step onto this control as well when they sit beside the panel.
+    backspaceBtn.state = keypadBackspaceFocused && deviceHasFrontButtons(gpio) ? fui::StateSelected : fui::StateNormal;
     backspaceBtn.enabled = entryLen > 0;
     screen.button(backspaceBtn, iconRect);
   } else {
@@ -507,9 +509,11 @@ void EpubReaderPercentSelectionActivity::buildKeypadScreen(UiApp::ScreenType& sc
   gridProps.gap = theme.spaceSm;
   gridProps.minTouchSize = theme.minTouchSize;
   gridProps.radius = 3;
-  // Non-touch shows which key directional nav is on; touch has no such focus concept.
+  // Key navigation shows which key it is on: always without touch, and with touch
+  // when the keys sit beside the panel (Silkscreen). Touch alone has no such focus.
+  const bool showKeypadFocus = !mappedInput.hasTouch() || deviceHasFrontButtons(gpio);
   gridProps.selectedIndex =
-      mappedInput.hasTouch() || keypadBackspaceFocused ? int16_t{-1} : static_cast<int16_t>(keypadRow * 3 + keypadCol);
+      !showKeypadFocus || keypadBackspaceFocused ? int16_t{-1} : static_cast<int16_t>(keypadRow * 3 + keypadCol);
   fui::keyGrid(screen.frame(), gridArea, gridProps);
 }
 

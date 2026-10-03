@@ -227,6 +227,10 @@ class EpubReaderDrawerActivity final : public Activity {
   void buildEnumOptionsPane(UiApp::ScreenType& screen);
   void buildTtfRenderingPane(UiApp::ScreenType& screen);
 
+  // The front keys drive this menu: always on a keys-only reader, and on a
+  // touch reader whose keys sit beside the panel (Silkscreen). Touch-only boards
+  // keep the touch-only menu.
+  bool keyNavigation() const;
   const std::vector<RowId>& activeRows() const;
   int activeTopIndex() const;
   void activateRow(RowId row);

@@ -448,9 +448,12 @@ void EpubReaderDrawerActivity::onEnter() {
   Activity::onEnter();
   if (mappedInput.hasTouchHardware()) mappedInput.setReaderTouchscreenOverride(true);
 
-  const ReaderDrawerCatalog catalog = makeReaderDrawerCatalog(
-      {hasFootnotes, hasDictionary, hasBookmarks, hasClippings, showReadingPaceReset, stablePageCount > 0,
-       !mappedInput.hasTouchHardware(), globalStatsEnabled, bookStatsEnabled});
+  // Reading Stats, Sync Progress, Nearby Position Sync and Send Nearby Book are
+  // rows of the key menu. A touch unit with keys has no other in-book route to
+  // them (the light panel's tiles need a Home key to open), so it lists them too.
+  const ReaderDrawerCatalog catalog =
+      makeReaderDrawerCatalog({hasFootnotes, hasDictionary, hasBookmarks, hasClippings, showReadingPaceReset,
+                               stablePageCount > 0, keyNavigation(), globalStatsEnabled, bookStatsEnabled});
   for (size_t tab = 0; tab < rootRows.size(); ++tab) {
     rootRows[tab].reserve(catalog[tab].count);
     rootRows[tab].assign(catalog[tab].items.begin(), catalog[tab].items.begin() + catalog[tab].count);
@@ -1030,6 +1033,10 @@ void EpubReaderDrawerActivity::buildPaneHeader(UiApp::ScreenType& screen) {
       screen.frame(),
       fui::Rect{static_cast<int16_t>(rect.x + leadingInset), static_cast<int16_t>(rect.y + 4), buttonSize, buttonSize},
       back);
+}
+
+bool EpubReaderDrawerActivity::keyNavigation() const {
+  return !mappedInput.hasTouchHardware() || deviceHasFrontButtons(gpio);
 }
 
 const std::vector<EpubReaderDrawerActivity::RowId>& EpubReaderDrawerActivity::activeRows() const {
@@ -1708,10 +1715,18 @@ void EpubReaderDrawerActivity::activateRow(const RowId row) {
       closeAndReturn(false, EpubReaderMenuAction::SELECT_CHAPTER, !mappedInput.hasTouchHardware());
       return;
     case RowId::GoToPercent:
+      // The sheet's Percent pane has no key route on a touch unit with keys, and
+      // Confirm there would jump to the position the pane opened with. The
+      // full-screen selector takes taps and keys both. A keys-only reader keeps
+      // its own Percent pane.
+      if (mappedInput.hasTouchHardware() && keyNavigation()) {
+        closeAndReturn(false, EpubReaderMenuAction::GO_TO_PERCENT, true);
+        return;
+      }
       openPane(ReaderDrawerPane::Percent);
       return;
     case RowId::GoToStablePage:
-      if (!mappedInput.hasTouchHardware()) {
+      if (keyNavigation()) {
         closeAndReturn(false, EpubReaderMenuAction::GO_TO_STABLE_PAGE, true);
         return;
       }

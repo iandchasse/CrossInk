@@ -38,6 +38,7 @@
 - Silkscreen: switching the front light on with no light fitted now saves it as off, a light that trips its over-voltage protection is saved as off straight away instead of at the next sleep, and a single-colour light keeps its warmth setting on the colour that is fitted.
 - Silkscreen: full and half screen refreshes use panel drive settings suited to the board's display power circuit, so they no longer leave grey or stuck pixels or flicker.
 - A screen that listens to a single key, such as Left, no longer also reacts to Back. Leaving the front light panel with Back no longer changes the brightness, switches an off light on or saves it as on, and the same stray reaction is gone from the Home cover grid, the folder picker, clipping selection, the interval, on-screen keyboard and reader menu sliders.
+- Silkscreen: with the touchscreen fitted, the reader menu lists Reading Stats, Sync Progress, Nearby Position Sync and Send Nearby Book, and Go to % and Go to Stable Page open the full-screen page selector, whose keypad shows which key the buttons are on. Each is now reachable from the buttons.
 
 ## [v1.6.1] - 2026-09-30
 
