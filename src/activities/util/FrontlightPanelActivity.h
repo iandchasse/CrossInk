@@ -78,6 +78,9 @@ class FrontlightPanelActivity final : public Activity {
   void drawReaderDetails(freeink::ui::Screen<20>& screen);
   void adjustBrightness(int delta);
   void adjustWarmth(int delta);
+  // Left/Right on a board with front keys: 5 % a step, 1 % below 10 % so the lowest levels
+  // can be set. Other boards step 5 %, as before.
+  void stepBrightnessByKey(bool up);
   // Up/Down on a board with front keys: warmer/cooler. A warmth that only selects
   // a string (HalFrontlight::warmthIsSelection()) jumps straight to the other one.
   void stepWarmthByKey(bool warmer);

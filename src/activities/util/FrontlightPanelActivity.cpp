@@ -40,6 +40,12 @@ constexpr fui::ActionId ACTION_QUICK = 6;
 constexpr fui::ActionId ACTION_DISMISS = 7;
 constexpr int BRIGHTNESS_STEP = 5;
 constexpr int FINE_STEP = 1;
+// Below this brightness a key steps FINE_STEP, so 1-4 % can be set.
+constexpr int FINE_STEP_BELOW = 10;
+// Key repeat on a board driven from its front keys: the default (500 ms to start, 500 ms
+// between steps) took about 10 s from 0 to 100 %.
+constexpr uint16_t KEY_REPEAT_START_MS = 380;
+constexpr uint16_t KEY_REPEAT_INTERVAL_MS = 150;
 // The Long-press Confirm that opens the panel (the readers' threshold) closes it again.
 constexpr unsigned long LONG_CONFIRM_CLOSE_MS = 600;
 constexpr int HEADER_ICON_SIZE = 24;
@@ -66,6 +72,9 @@ fui::SheetProps frontlightSheetProps() {
 FrontlightPanelActivity::FrontlightPanelActivity(GfxRenderer& renderer, MappedInputManager& mappedInput,
                                                  FrontlightPanelContext context)
     : Activity("FrontlightPanel", renderer, mappedInput),
+      // This screen only; the keys of every other board keep ButtonNavigator's defaults.
+      buttonNavigator(boardHasFrontButtons() ? KEY_REPEAT_INTERVAL_MS : uint16_t{500},
+                      boardHasFrontButtons() ? KEY_REPEAT_START_MS : uint16_t{500}),
       context(std::move(context)),
       drawerState(this->context.drawerState),
       uiTarget(makeUiTarget(renderer)),
@@ -199,6 +208,22 @@ void FrontlightPanelActivity::adjustWarmth(const int delta) {
   Frontlight.setWarmth(warmth);
   noteSwitchOnResult();
   requestUpdate();
+}
+
+void FrontlightPanelActivity::stepBrightnessByKey(const bool up) {
+  if (!boardHasFrontButtons()) {
+    adjustBrightness(up ? BRIGHTNESS_STEP : -BRIGHTNESS_STEP);
+    return;
+  }
+  const int level = brightness;
+  if (up) {
+    adjustBrightness(level < FINE_STEP_BELOW ? FINE_STEP : BRIGHTNESS_STEP);
+  } else if (level <= FINE_STEP_BELOW) {
+    adjustBrightness(-FINE_STEP);
+  } else {
+    // Stop on the 10 % mark instead of stepping over it.
+    adjustBrightness(-std::min(BRIGHTNESS_STEP, level - FINE_STEP_BELOW));
+  }
 }
 
 void FrontlightPanelActivity::stepWarmthByKey(const bool warmer) {
@@ -458,10 +483,8 @@ void FrontlightPanelActivity::loop() {
 
   if (context.showReaderDetails) return;
 
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left},
-                                       [this] { adjustBrightness(-BRIGHTNESS_STEP); });
-  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right},
-                                       [this] { adjustBrightness(BRIGHTNESS_STEP); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] { stepBrightnessByKey(false); });
+  buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] { stepBrightnessByKey(true); });
   // Warmth otherwise has touch controls only: a board that keeps its front keys
   // alongside touch (Silkscreen, by its profile) gets Up/Down for it. Touch-only
   // boards are unchanged, also when their touch panel fails its probe.
