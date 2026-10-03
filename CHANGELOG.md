@@ -41,6 +41,7 @@
 - Silkscreen: with the touchscreen fitted, the reader menu lists Reading Stats, Sync Progress, Nearby Position Sync and Send Nearby Book, and Go to % and Go to Stable Page open the full-screen page selector, whose keypad shows which key the buttons are on. Each is now reachable from the buttons.
 - Silkscreen: with the touchscreen fitted, the reader menu's Line Spacing, Word Spacing, Page Margins and Auto Page Turn interval can be set from the buttons, as without a touchscreen: Confirm starts and stops adjusting a slider, the front buttons step by 1 and the side buttons by 5, and Spacing and Margins name those steps under their sliders.
 - Silkscreen: with the touchscreen fitted, the reader menu, Library, Library settings, File Transfer menu and on-screen keyboard start with their cursor showing, as without a touchscreen, and the File Browser settings keep it on the row you tapped, so Confirm no longer acts on a choice you cannot see. After a tap hides the cursor in the reader menu or keyboard, the next button press shows it again before it moves or acts, and password show/hide in the keyboard's cursor mode takes one Confirm instead of two.
+- Silkscreen: with no touchscreen fitted, an SD-card font or size chosen in the reader menu is kept, instead of being dropped when the menu closes because that reader has no live font preview to confirm it.
 
 ## [v1.6.1] - 2026-09-30
 

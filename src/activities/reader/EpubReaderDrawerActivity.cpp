@@ -637,7 +637,16 @@ void EpubReaderDrawerActivity::discoverDictionaries() {
 
 void EpubReaderDrawerActivity::commitSettings() {
   if (!settingsChanged) return;
-  if (!mappedInput.hasTouchHardware() && draft.sdFontFamilyName[0] != '\0' &&
+  // A touch build on a board that keeps its keys (Silkscreen) has this menu with
+  // no preview model at all while its touch panel is absent: the preview exists
+  // only for touch hardware. Nothing then sets lastGoodPreviewSettings, so the
+  // rollback below would throw away every SD font choice. Other boards keep it.
+#if CROSSINK_APP_CAP_TOUCH
+  const bool noPreviewByDesign = boardHasFrontButtons() && !previewModel && !ownedPreviewModel;
+#else
+  constexpr bool noPreviewByDesign = false;
+#endif
+  if (!mappedInput.hasTouchHardware() && !noPreviewByDesign && draft.sdFontFamilyName[0] != '\0' &&
       (draft.sdFontFamilyName != lastGoodPreviewSettings.sdFontFamilyName ||
        draft.readerFontPointSize != lastGoodPreviewSettings.readerFontPointSize)) {
     // A queued preview may not have rendered before Back or an external exit.
