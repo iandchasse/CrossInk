@@ -1436,7 +1436,6 @@ void setup() {
 
   const esp_reset_reason_t rawResetReason = esp_reset_reason();
   const esp_sleep_wakeup_cause_t rawWakeupCause = esp_sleep_get_wakeup_cause();
-  if (libraryScanSleepToken.consume(rawResetReason == ESP_RST_DEEPSLEEP)) library::restoreLibraryIndexAfterSleep();
 
 #ifdef ENABLE_SERIAL_LOG
 #ifdef CROSSPOINT_WAIT_FOR_USB_SERIAL
@@ -1603,6 +1602,12 @@ void setup() {
 #if FREEINK_CAP_POWER_POLICY
   sleepIfBatteryEmptyAtBoot();
 #endif
+
+  // The Library scan token (kept across deep sleep by enterDeepSleep()) is consumed here, once
+  // this boot is committed to staying up, and not at the top of setup(): a ghost wake, a release
+  // wake, a reset-loop sleep or an empty-battery sleep above goes back to sleep without saving
+  // it again, so consuming it earlier would make the next real wake rescan the Library.
+  if (libraryScanSleepToken.consume(rawResetReason == ESP_RST_DEEPSLEEP)) library::restoreLibraryIndexAfterSleep();
 
   // SD Card Initialization
   // We need 6 open files concurrently when parsing a new chapter
