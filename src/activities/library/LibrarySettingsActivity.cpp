@@ -2,6 +2,7 @@
 
 #include <I18n.h>
 
+#include "DeviceCapabilities.h"
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "components/UiAppHelpers.h"
@@ -20,7 +21,9 @@ LibrarySettingsActivity::LibrarySettingsActivity(GfxRenderer& renderer, MappedIn
 
 void LibrarySettingsActivity::onEnter() {
   Activity::onEnter();
-  showSelection = !mappedInput.hasTouchHardware();
+  // A touch unit with keys shows its cursor at once, so the first Confirm does
+  // not flip a row nobody has highlighted.
+  showSelection = !mappedInput.hasTouchHardware() || deviceHasFrontButtons(gpio);
   applySharedUiTheme(app, uiTarget);
   app.on(ACTION_ROW, &LibrarySettingsActivity::onRow, this);
   app.setScreen(&LibrarySettingsActivity::screen, this);

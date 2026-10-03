@@ -476,8 +476,11 @@ void EpubReaderDrawerActivity::onEnter() {
     rootRows[tab].reserve(catalog[tab].count);
     rootRows[tab].assign(catalog[tab].items.begin(), catalog[tab].items.begin() + catalog[tab].count);
   }
-  if (!mappedInput.hasTouchHardware()) {
-    buttonFocusActive = state.pane != ReaderDrawerPane::Root;
+  if (keyNavigation()) {
+    // A keys-only reader starts on its tab bar. A touch unit with keys starts
+    // with the row cursor showing, so the first Confirm never acts on a row that
+    // nobody can see and the first arrow does not skip the first row.
+    buttonFocusActive = state.pane != ReaderDrawerPane::Root || mappedInput.hasTouchHardware();
     if (state.pane == ReaderDrawerPane::Root) {
       const auto count = rootRows[static_cast<size_t>(state.tab)].size();
       state.selectedIndex =
@@ -1764,7 +1767,7 @@ void EpubReaderDrawerActivity::activateRow(const RowId row) {
       // Confirm there would jump to the position the pane opened with. The
       // full-screen selector takes taps and keys both. A keys-only reader keeps
       // its own Percent pane.
-      if (mappedInput.hasTouchHardware() && keyNavigation()) {
+      if (mappedInput.hasTouchHardware() && deviceHasFrontButtons(gpio)) {
         closeAndReturn(false, EpubReaderMenuAction::GO_TO_PERCENT, true);
         return;
       }
@@ -2442,8 +2445,13 @@ void EpubReaderDrawerActivity::moveSelection(const bool forward, const bool page
     count = static_cast<int>(activeRows().size());
   }
   if (count <= 0) return;
-  if (!mappedInput.hasTouchHardware() && !buttonFocusActive &&
-      (state.pane == ReaderDrawerPane::Root || state.pane == ReaderDrawerPane::FontFamily)) {
+  // A tap hid the cursor on a touch unit with keys. The first key shows it where
+  // it was, without moving it, so no row is skipped.
+  const bool revealOnly = mappedInput.hasTouchHardware() && deviceHasFrontButtons(gpio) && !buttonFocusActive;
+  if (revealOnly) {
+    // selectedIndex stays; the follow below scrolls it into view.
+  } else if (!mappedInput.hasTouchHardware() && !buttonFocusActive &&
+             (state.pane == ReaderDrawerPane::Root || state.pane == ReaderDrawerPane::FontFamily)) {
     state.selectedIndex = forward ? 0 : static_cast<int16_t>(count - 1);
   } else {
     state.selectedIndex = page ? (forward ? ButtonNavigator::nextPageIndex(state.selectedIndex, count, visibleRows)
@@ -2881,6 +2889,12 @@ void EpubReaderDrawerActivity::loop() {
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (!mappedInput.hasTouchHardware() && state.pane == ReaderDrawerPane::Root && !buttonFocusActive) {
       changeTab(adjacentReaderDrawerTab(state.tab, true));
+      return;
+    }
+    if (mappedInput.hasTouchHardware() && deviceHasFrontButtons(gpio) && !buttonFocusActive) {
+      // A tap hid the cursor: show it first rather than act on an unseen row.
+      buttonFocusActive = true;
+      requestUpdate();
       return;
     }
     buttonFocusActive = true;

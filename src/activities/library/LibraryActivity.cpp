@@ -442,7 +442,9 @@ void LibraryActivity::applyFilter() {
 
 void LibraryActivity::resetViewport() {
   selection = rowCount() || !mappedInput.hasTouchHardware() ? CONTROL_COUNT : 3;
-  showSelection = !mappedInput.hasTouchHardware();
+  // Touch alone starts with no cursor. A touch unit with keys shows it, so the
+  // first Confirm does not open a book nobody has highlighted.
+  showSelection = !mappedInput.hasTouchHardware() || deviceHasFrontButtons(gpio);
   topIndex = 0;
   gridPageStart = 0;
   loadedGridPageStart = -1;

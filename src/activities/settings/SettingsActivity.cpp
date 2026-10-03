@@ -786,7 +786,10 @@ void SettingsActivity::onRowEvent(const fui::ActionEvent& event, void* user) {
   if (event.value < 0 || event.value >= static_cast<int16_t>(self->settingsCount)) return;
   if ((*self->currentSettings)[event.value].type == SettingType::SECTION_HEADER) return;
   self->selectedSettingIndex = event.value + 1;
-  if (self->isFileBrowserView()) self->showSettingSelection = false;
+  // A tap hides the File Browser view's cursor, unless the keys sit beside the
+  // panel: there it stays on the tapped row, so a later Confirm acts on a row
+  // that is highlighted.
+  if (self->isFileBrowserView() && !deviceHasFrontButtons(gpio)) self->showSettingSelection = false;
   // Most rows repaint a different surface (popup, sub-activity, new value);
   // a lingering tap flash would gray an unrelated element.
   self->app.clearTapFlash();

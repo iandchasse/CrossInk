@@ -4,6 +4,7 @@
 #include <I18n.h>
 
 #include "CrossPointSettings.h"
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
@@ -71,7 +72,9 @@ void NetworkModeSelectionActivity::onEnter() {
   Activity::onEnter();
 
   selectedIndex = 0;
-  buttonSelectionActive = !mappedInput.hasTouchHardware();
+  // A touch unit with keys preselects its first choice, so the first Confirm
+  // does not start a transfer mode nobody has highlighted.
+  buttonSelectionActive = !mappedInput.hasTouchHardware() || deviceHasFrontButtons(gpio);
   ui.closeRouting();
   visibleRows = 1;
   topIndex = 0;

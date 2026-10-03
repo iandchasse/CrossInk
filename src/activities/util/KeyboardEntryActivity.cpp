@@ -154,7 +154,9 @@ void KeyboardEntryActivity::onEnter() {
   passwordVisible = false;
   selRow = 0;
   selCol = 0;
-  buttonSelectionVisible = !mappedInput.hasTouchHardware();
+  // Touch alone starts without a key highlight. A touch unit with keys shows it,
+  // so the first arrow does not skip the first key and the first Confirm types it.
+  buttonSelectionVisible = !mappedInput.hasTouchHardware() || deviceHasFrontButtons(gpio);
   delPressCount = 0;
   hintVisible = false;
   hintShowTime = 0;
@@ -223,9 +225,18 @@ void KeyboardEntryActivity::clampSelection() {
   if (selCol >= cols) selCol = cols > 0 ? cols - 1 : 0;
 }
 
+bool KeyboardEntryActivity::revealHiddenSelection() {
+  // Touch typing hides the highlight. On a touch unit with keys the first arrow
+  // shows it where it was instead of moving it, so no key is skipped.
+  if (buttonSelectionVisible.load() || !mappedInput.hasTouchHardware() || !deviceHasFrontButtons(gpio)) return false;
+  buttonSelectionVisible = true;
+  return true;
+}
+
 void KeyboardEntryActivity::moveSelectionRow(const int delta) {
   const fui::KeyboardLayout& layout = currentLayout();
   if (layout.rowCount == 0) return;
+  if (revealHiddenSelection()) return;
   buttonSelectionVisible = true;
   const int oldCols = selRow < layout.rowCount ? layout.rows[selRow].count : 1;
   selRow = (selRow + delta + layout.rowCount) % layout.rowCount;
@@ -243,6 +254,7 @@ void KeyboardEntryActivity::moveSelectionCol(const int delta) {
   if (selRow < 0 || selRow >= layout.rowCount) return;
   const int cols = layout.rows[selRow].count;
   if (cols <= 0) return;
+  if (revealHiddenSelection()) return;
   buttonSelectionVisible = true;
   selCol = (selCol + delta + cols) % cols;
 }
@@ -745,7 +757,11 @@ void KeyboardEntryActivity::loop() {
   }
 
   if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
-    if (mappedInput.hasTouchHardware() && !buttonSelectionVisible.load()) {
+    // In cursor mode Confirm acts on the text cursor, not on a highlighted key, so
+    // a touch unit with keys does not need the reveal there: password show/hide
+    // takes one press.
+    const bool cursorUsesConfirm = cursorMode && deviceHasFrontButtons(gpio);
+    if (mappedInput.hasTouchHardware() && !buttonSelectionVisible.load() && !cursorUsesConfirm) {
       // Touch typing hides the button focus. Reveal it first so Confirm cannot
       // activate a key whose selection is not visible.
       buttonSelectionVisible = true;

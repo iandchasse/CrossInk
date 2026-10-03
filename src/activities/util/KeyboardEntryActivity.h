@@ -129,6 +129,8 @@ class KeyboardEntryActivity : public Activity {
   const freeink::ui::KeyboardKey* selectedKey() const;
   int selectedLogicalIndex() const;
   void clampSelection();
+  // True when this key press only showed the hidden highlight (touch unit with keys).
+  bool revealHiddenSelection();
   void moveSelectionRow(int delta);
   void moveSelectionCol(int delta);
   bool syncSelectionToValue(int16_t value);
