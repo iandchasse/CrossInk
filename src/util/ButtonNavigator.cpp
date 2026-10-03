@@ -1,5 +1,7 @@
 #include "ButtonNavigator.h"
 
+#include <algorithm>
+
 const MappedInputManager* ButtonNavigator::mappedInput = nullptr;
 
 void ButtonNavigator::onNext(const Callback& callback) {
@@ -17,6 +19,11 @@ void ButtonNavigator::onPressAndContinuous(const Buttons& buttons, const Callbac
   onContinuous(buttons, callback);
 }
 
+void ButtonNavigator::onPressAndContinuous(const ButtonList buttons, const Callback& callback) {
+  onPress(buttons, callback);
+  onContinuous(buttons, callback);
+}
+
 void ButtonNavigator::onNextPress(const Callback& callback) { onPress(getNextButtons(), callback); }
 
 void ButtonNavigator::onPreviousPress(const Callback& callback) { onPress(getPreviousButtons(), callback); }
@@ -30,7 +37,31 @@ void ButtonNavigator::onNextContinuous(const Callback& callback) { onContinuous(
 void ButtonNavigator::onPreviousContinuous(const Callback& callback) { onContinuous(getPreviousButtons(), callback); }
 
 void ButtonNavigator::onPress(const Buttons& buttons, const Callback& callback) {
-  const bool wasPressed = std::any_of(buttons.begin(), buttons.end(), [](const MappedInputManager::Button button) {
+  onPressImpl(buttons.data(), buttons.size(), callback);
+}
+
+void ButtonNavigator::onPress(const ButtonList buttons, const Callback& callback) {
+  onPressImpl(buttons.begin(), buttons.size(), callback);
+}
+
+void ButtonNavigator::onRelease(const Buttons& buttons, const Callback& callback) {
+  onReleaseImpl(buttons.data(), buttons.size(), callback);
+}
+
+void ButtonNavigator::onRelease(const ButtonList buttons, const Callback& callback) {
+  onReleaseImpl(buttons.begin(), buttons.size(), callback);
+}
+
+void ButtonNavigator::onContinuous(const Buttons& buttons, const Callback& callback) {
+  onContinuousImpl(buttons.data(), buttons.size(), callback);
+}
+
+void ButtonNavigator::onContinuous(const ButtonList buttons, const Callback& callback) {
+  onContinuousImpl(buttons.begin(), buttons.size(), callback);
+}
+
+void ButtonNavigator::onPressImpl(const Button* const buttons, const size_t count, const Callback& callback) {
+  const bool wasPressed = std::any_of(buttons, buttons + count, [](const Button button) {
     return mappedInput != nullptr && mappedInput->wasPressed(button);
   });
 
@@ -39,8 +70,8 @@ void ButtonNavigator::onPress(const Buttons& buttons, const Callback& callback) 
   }
 }
 
-void ButtonNavigator::onRelease(const Buttons& buttons, const Callback& callback) {
-  const bool wasReleased = std::any_of(buttons.begin(), buttons.end(), [](const MappedInputManager::Button button) {
+void ButtonNavigator::onReleaseImpl(const Button* const buttons, const size_t count, const Callback& callback) {
+  const bool wasReleased = std::any_of(buttons, buttons + count, [](const Button button) {
     return mappedInput != nullptr && mappedInput->wasReleased(button);
   });
 
@@ -53,8 +84,8 @@ void ButtonNavigator::onRelease(const Buttons& buttons, const Callback& callback
   }
 }
 
-void ButtonNavigator::onContinuous(const Buttons& buttons, const Callback& callback) {
-  const bool isPressed = std::any_of(buttons.begin(), buttons.end(), [this](const MappedInputManager::Button button) {
+void ButtonNavigator::onContinuousImpl(const Button* const buttons, const size_t count, const Callback& callback) {
+  const bool isPressed = std::any_of(buttons, buttons + count, [this](const Button button) {
     return mappedInput != nullptr && mappedInput->isPressed(button) && shouldNavigateContinuously();
   });
 

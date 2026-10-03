@@ -37,6 +37,7 @@
 - Silkscreen: sleep puts the touchscreen controller into its low-power mode, frees the shared sensor bus and switches the front light off before the board's pins are parked, and a power button still held 5 s into sleep no longer keeps the board awake.
 - Silkscreen: switching the front light on with no light fitted now saves it as off, a light that trips its over-voltage protection is saved as off straight away instead of at the next sleep, and a single-colour light keeps its warmth setting on the colour that is fitted.
 - Silkscreen: full and half screen refreshes use panel drive settings suited to the board's display power circuit, so they no longer leave grey or stuck pixels or flicker.
+- A screen that listens to a single key, such as Left, no longer also reacts to Back. Leaving the front light panel with Back no longer changes the brightness, switches an off light on or saves it as on, and the same stray reaction is gone from the Home cover grid, the folder picker, clipping selection, the interval, on-screen keyboard and reader menu sliders.
 
 ## [v1.6.1] - 2026-09-30
 

@@ -432,6 +432,10 @@ void FrontlightPanelActivity::loop() {
     close();
     return;
   }
+  // Back is held on its way out: it must not reach the key handlers below, which change the light
+  // and are saved on exit. ButtonNavigator no longer lets a one-key list react to Back, so this
+  // only keeps a Back chord from nudging the light. Gated to boards that keep their front keys.
+  if (boardHasFrontButtons() && mappedInput.isPressed(MappedInputManager::Button::Back)) return;
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (!context.showReaderDetails) toggleLight();
     return;
