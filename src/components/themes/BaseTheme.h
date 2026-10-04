@@ -28,6 +28,7 @@ struct TabInfo {
 };
 
 struct ReaderStatusBarContent {
+  bool outsideReader = false;
   float bookProgress = 0;
   float chapterProgress = -1;
   int chapterPage = 0;
@@ -319,12 +320,10 @@ class BaseTheme {
                                int firstOptionIndex = -1) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   // title is borrowed and must stay alive for the call; pass nullptr or "" for none.
-  virtual void drawReaderStatusBar(GfxRenderer& renderer, ReaderStatusBarPosition position,
+  virtual void drawReaderStatusBar(const GfxRenderer& renderer, ReaderStatusBarPosition position,
                                    const ReaderStatusBarContent& content,
                                    const ReaderStatusBarConfig* overrideConfig = nullptr) const;
-  virtual void drawTopStatusBarClock(const GfxRenderer& renderer, int topY = -1, const char* previewTime = nullptr,
-                                     bool readerContext = true, int textYOffset = 0, bool darkMode = false,
-                                     bool forceVisible = false) const;
+  void drawDisplayStatusBar(const GfxRenderer& renderer, int topY) const;
   virtual void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                              int contentStartX = 0, int contentWidth = 0) const;
@@ -343,8 +342,6 @@ class BaseTheme {
   // The text beside the battery glyph: "NN%" when shown, or the no-battery
   // message (showsNoBattery()). nullptr for none; `buf` holds the percentage.
   static const char* batteryLabel(char* buf, size_t size, uint16_t percentage, bool showPercentage);
-  static constexpr int homeHeaderTopInset = ReaderStatusBarConfig::TOP_TEXT_INSET;
-  static int homeHeaderClockTextYOffset(const GfxRenderer& renderer);
   static Rect buttonMenuTouchTarget(Rect rowRect, Rect menuRect, bool isLastItem, int rowSpacing);
   static void drawBatteryOutline(const GfxRenderer& renderer, int x, int y, int battWidth, int rectHeight,
                                  bool foregroundBlack = true);

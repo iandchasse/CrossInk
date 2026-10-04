@@ -22,6 +22,7 @@ enum class SettingAction {
   RemapFrontButtons,
   RemapFrontButtonsReader,
   CustomiseStatusBar,
+  DisplayStatusBar,
   KOReaderSync,
   OPDSBrowser,
   DisplaySleepScreen,
@@ -220,7 +221,8 @@ inline std::string settingEnumOptionLabel(const SettingInfo& setting, const uint
 
 inline bool settingShowsNavigationCaret(const SettingInfo& setting) {
   return setting.type == SettingType::SUBMENU || setting.action == SettingAction::CustomiseStatusBar ||
-         setting.action == SettingAction::QuickActions || setting.action == SettingAction::TtfRendering;
+         setting.action == SettingAction::DisplayStatusBar || setting.action == SettingAction::QuickActions ||
+         setting.action == SettingAction::TtfRendering;
 }
 
 class SettingsActivity final : public Activity {
@@ -325,6 +327,8 @@ class SettingsActivity final : public Activity {
                             bool returnToParentOnClose = false, View view = View::Root);
   bool allowGlobalHomeSwipeGesture() const override { return false; }
   bool handleHomeGesture() override;
+  // Light Controls opens the panel over Settings, and a Sync & Transfer pick would not be carried out here.
+  bool handlesFrontlightPanelAction() const override { return false; }
 #ifdef SIMULATOR
   int simulatorCategoryIndex() const { return selectedCategoryIndex; }
   int simulatorSelectedIndex() const { return selectedSettingIndex; }

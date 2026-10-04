@@ -59,6 +59,8 @@ class EpubReaderDrawerActivity final : public Activity {
   void render(RenderLock&&) override;
   bool isReaderActivity() const override { return true; }
   bool allowFrontlightPanelGesture() const override { return false; }
+  // The panel opened from the Light Controls row has no route to carry out a Sync & Transfer pick.
+  bool handlesFrontlightPanelAction() const override { return false; }
   // Light Controls opens the panel over this menu. It clears the touchscreen override when
   // it closes, which the menu holds for as long as it is open on a touch unit.
   void onFrontlightPanelClosed() override {

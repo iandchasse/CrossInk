@@ -69,6 +69,7 @@ class XtcReaderActivity final : public Activity {
   bool saveProgress(uint32_t page);
   bool queueProgressSave(uint32_t pageToRender);
   bool flushQueuedProgress();
+  void saveProgressBeforeRestart();
   void loadProgress();
   void pauseReadingStatsTimer(const char* source = "unknown");
   void syncStatsTrackingState();
@@ -110,6 +111,7 @@ class XtcReaderActivity final : public Activity {
     return true;
   }
   bool isReaderActivity() const override { return true; }
+  bool isBookReaderActivity() const override { return true; }
   bool usesFullScreenReaderVerticalSwipes() const override {
 #if defined(FREEINK_DEVICE_STICKY) && FREEINK_DEVICE_STICKY
     return true;
@@ -134,10 +136,12 @@ class XtcReaderActivity final : public Activity {
   std::string getCurrentBookTitle() const override { return xtc ? xtc->getTitle() : std::string{}; }
   bool getFrontlightPanelBookDetails(FrontlightPanelBookDetails& details) override;
   std::unique_ptr<Activity> createFrontlightReadingStatsActivity() override;
-  void onFrontlightPanelOpened() override { pauseReadingStatsTimer("frontlight_panel"); }
+  void onFrontlightPanelOpened() override {
+    pauseReadingStatsTimer("frontlight_panel");
+    saveProgressBeforeRestart();
+  }
   void onFrontlightPanelClosed() override;
   bool handleFrontlightPanelResult(const FrontlightPanelResult& result) override;
-  bool handlesFrontlightPanelAction() const override { return true; }
 
   // Renders the last saved page to the frame buffer without flushing to display.
   // Used by SleepActivity to prepare the background for the overlay sleep mode.

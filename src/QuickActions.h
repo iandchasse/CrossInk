@@ -62,7 +62,7 @@ inline constexpr std::array<StrId, CrossPointSettings::QUICK_ACTION_SLOT_ACTION_
 
 // Shared display order for shortcut pickers. The values remain the persisted
 // SHORT_PWRBTN IDs; only their presentation order is centralized here.
-inline constexpr std::array<CrossPointSettings::SHORT_PWRBTN, 32> shortcutActionOrder = {
+inline constexpr std::array<CrossPointSettings::SHORT_PWRBTN, 33> shortcutActionOrder = {
     CrossPointSettings::IGNORE,
     CrossPointSettings::SLEEP,
     CrossPointSettings::PAGE_TURN,
@@ -95,6 +95,7 @@ inline constexpr std::array<CrossPointSettings::SHORT_PWRBTN, 32> shortcutAction
     CrossPointSettings::TOGGLE_FRONTLIGHT,
     CrossPointSettings::FRONTLIGHT_PANEL,
     CrossPointSettings::TOGGLE_TOUCHSCREEN,
+    CrossPointSettings::HOME_READER,
 };
 
 inline bool supportsTiltPageTurn() { return halTiltSensor.isAvailable(); }
@@ -108,6 +109,7 @@ inline bool isActionAvailable(const uint8_t action) {
   if (action == CrossPointSettings::TOGGLE_FRONTLIGHT) return Frontlight.present();
   if (action == CrossPointSettings::FRONTLIGHT_PANEL) return frontlightPanelFromKeys();
   if (action == CrossPointSettings::TOGGLE_TOUCHSCREEN) return gpio.hasTouch();
+  if (action == CrossPointSettings::HOME_READER) return !gpio.hasTouch();
   if (action < CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT) {
     return action != CrossPointSettings::TOGGLE_TILT_PAGE_TURN || supportsTiltPageTurn();
   }
@@ -133,6 +135,7 @@ inline StrId actionLabel(const uint8_t action) {
   if (action == CrossPointSettings::PREVIOUS_PAGE) return StrId::STR_PREV_PAGE;
   if (action == CrossPointSettings::NEARBY_POSITION_SYNC) return StrId::STR_NEARBY_POSITION_SYNC;
   if (action == CrossPointSettings::LIBRARY) return StrId::STR_LIBRARY;
+  if (action == CrossPointSettings::HOME_READER) return StrId::STR_HOME_READER;
   return StrId::STR_HOME_BUTTON_LOCK;
 }
 

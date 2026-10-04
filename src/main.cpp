@@ -827,6 +827,8 @@ CrossPointSettings::SHORT_PWRBTN chordPowerAction(const ButtonShortcutController
       return Power::NEARBY_POSITION_SYNC;
     case Chord::Library:
       return Power::LIBRARY;
+    case Chord::HomeReader:
+      return Power::HOME_READER;
     case Chord::FileTransfer:
       return Power::FILE_TRANSFER;
     case Chord::CalibreWireless:
@@ -1586,6 +1588,10 @@ void setup() {
 #if FREEINK_CAP_POWER_POLICY
       wakeNoInputArmed = BoardConfig::powerPolicy().wakeNoInputTimeoutS > 0;
 #endif
+      // Readers also handle held Power shortcuts. Hide the wake hold from
+      // mapped input until its release, while allowing the activity to load.
+      mappedInputManager.suppressNextPowerRelease();
+      mappedInputManager.suppressNextPowerConfirmRelease();
       break;
     case HalGPIO::WakeupReason::AfterUSBPower:
       // TEMP: continue booting while diagnosing post-flash/reset behavior.
@@ -1689,7 +1695,7 @@ void setup() {
             (BoardConfig::isX4Pro() || CROSSINK_APP_DEVICE_X4CLASSIC) ? "DOWN" : "UP");
   }
 
-  LOG_DBG("MAIN", "Starting CrossInk version " CROSSINK_VERSION);
+  LOG_DBG("MAIN", "Starting CrossInk version %s", AppVersion::version());
   logMemoryStats("Boot");
 
   // Resolve the single boot-presentation decision. Skipping the splash also
@@ -1729,7 +1735,7 @@ void setup() {
   const bool shouldRestoreSleepFrame =
       resume == BootResume::SplashlessWake && (isUc8279X3 ? hasValidSleepFrame : Storage.exists(SLEEP_FRAME_FILE));
   bool allowFastInitialReaderRefresh = false;
-  bool x4WakeFrameAlreadyCleaned = false;
+  bool x4WakeCanFastPaint = false;
 
   setupDisplayAndFonts(SleepWakePolicy::shouldInitializeSeamlessly(resume, isUc8279X3, hasValidSleepFrame),
                        resume != BootResume::Network, useReaderRenderStack);
@@ -1757,6 +1763,15 @@ void setup() {
           renderer.cleanupGrayscaleWithFrameBuffer();
           allowFastInitialReaderRefresh = true;
         }
+#ifndef SIMULATOR
+        else if (display.restoreVisibleFrame()) {
+          // Quick Resume left this exact frame on the glass. Rebuild the panel's
+          // old-image plane so the first Home/reader paint only drives changed
+          // pixels, including removal of the sleep moon.
+          allowFastInitialReaderRefresh = true;
+          x4WakeCanFastPaint = true;
+        }
+#endif
       } else if (isUc8279X3 && hasValidSleepFrame) {
         // The frame passed the size preflight but could not be read after display
         // setup. Do one clean, device-specific recovery rather than painting
@@ -1773,7 +1788,7 @@ void setup() {
         // baseline, so the reader's first page can use its fast initial cycle
         // instead of repeating the cleanup waveform.
         allowFastInitialReaderRefresh = true;
-        x4WakeFrameAlreadyCleaned = true;
+        x4WakeCanFastPaint = true;
       }
       break;
     case BootResume::Splash:
@@ -1857,7 +1872,7 @@ void setup() {
     // crashed (indicated by readerActivityLoadCount > 0)
     // On X4, use the first Home paint to clean the retained sleep image.
     const auto homeRefreshMode =
-        resume == BootResume::SplashlessWake && shouldClearX4WakeGhosting() && !x4WakeFrameAlreadyCleaned
+        resume == BootResume::SplashlessWake && shouldClearX4WakeGhosting() && !x4WakeCanFastPaint
             ? HalDisplay::HALF_REFRESH
             : HalDisplay::FAST_REFRESH;
     activityManager.goHome(HomeMenuItem::NONE, homeRefreshMode);
@@ -1984,6 +1999,21 @@ void loop() {
   static unsigned long maxLoopDuration = 0;
   const unsigned long loopStartTime = millis();
   static unsigned long lastMemPrint = 0;
+
+#ifndef SIMULATOR
+  // The main task owns calibration. Exclude render-task battery/clock reads
+  // during each short SDK step without blocking input behind a busy renderer.
+  static bool checkBatteryCapacity = true;
+  static bool batteryCalibrationStarted = false;
+  if (checkBatteryCapacity) {
+    RenderLock lock(RenderLock::Mode::Try);
+    if (lock.ownsLock()) {
+      checkBatteryCapacity = powerManager.updateBatteryCalibration();
+      if (!checkBatteryCapacity && batteryCalibrationStarted) activityManager.requestUpdate();
+      batteryCalibrationStarted = checkBatteryCapacity;
+    }
+  }
+#endif
 
   // Keep release suppression in the mapped-input layer in sync with every
   // hardware input frame. A shortcut may open an activity that never queries

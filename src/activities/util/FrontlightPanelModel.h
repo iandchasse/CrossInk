@@ -44,10 +44,11 @@ constexpr bool showsFrontlightActionBar(const bool boardHasFrontKeys, const bool
   return !boardHasFrontKeys || touchWorks;
 }
 
-// The Sync & Transfer tile hands its choice back to the screen that opened the panel, and only
-// Home and the readers act on it (Activity::handlesFrontlightPanelAction()): over Settings or
-// the reader menu a pick would be dropped. A board with front keys (Silkscreen) leaves the tile
-// out there; every other board keeps it, as before.
+// The Sync & Transfer tile hands its choice back to the screen that opened the panel. Every screen
+// acts on it (Activity::handleFrontlightPanelResult(), upstream's 25124472) except Settings and the
+// reader menu, which say so through Activity::handlesFrontlightPanelAction(): there a pick would be
+// dropped. A board with front keys (Silkscreen) leaves the tile out there; every other board keeps
+// it, as before.
 constexpr bool offersFrontlightSyncTile(const bool boardHasFrontKeys, const bool sourceActsOnResult) {
   return !boardHasFrontKeys || sourceActsOnResult;
 }
@@ -78,7 +79,7 @@ struct FrontlightPanelResult {
 struct FrontlightPanelContext {
   Activity* sourceActivity = nullptr;
   // An open reader of any supported format. This controls reader header chrome
-  // and Home navigation; EPUB-only actions remain gated by activeEpub.
+  // and Home navigation; activeEpub identifies the reader save/handoff path.
   bool activeReaderBook = false;
   bool activeEpub = false;
   bool showReaderDetails = false;

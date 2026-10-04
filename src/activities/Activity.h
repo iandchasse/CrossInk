@@ -74,6 +74,9 @@ class Activity {
   // The screen shows a front-light switch-on's "no light" result itself
   // (HalFrontlight::takeNoLightNotice()), so the main loop does not pop it up.
   virtual bool showsFrontlightNotice() const { return false; }
+  // Reader-mode child screens may also report isReaderActivity(); only the
+  // activity owning the open book should be the Home/Reader unwind target.
+  virtual bool isBookReaderActivity() const { return false; }
   virtual bool isHomeActivity() const { return false; }
   // The open book uses its vertical swipe actions across the entire page;
   // dialogs and lists retain their normal edge or scroll gestures.
@@ -123,9 +126,12 @@ class Activity {
   virtual void persistGlobalSettings() { SETTINGS.saveToFile(); }
   virtual bool onFrontlightGlobalSettingsOpened() { return false; }
   virtual void onFrontlightGlobalSettingsClosed() {}
-  virtual bool handleFrontlightPanelResult(const FrontlightPanelResult&) { return false; }
-  // handleFrontlightPanelResult() carries out the panel's Sync & Transfer choices.
-  virtual bool handlesFrontlightPanelAction() const { return false; }
+  virtual bool handleFrontlightPanelResult(const FrontlightPanelResult& result);
+  // handleFrontlightPanelResult() carries out the panel's Sync & Transfer choices, and since upstream's
+  // 25124472 the base class does it for every screen. The two screens Silkscreen opens the panel from
+  // without a route for the result (Settings, the reader menu) say false, and the panel then leaves the
+  // tile out on a board that keeps its front keys (offersFrontlightSyncTile()).
+  virtual bool handlesFrontlightPanelAction() const { return true; }
   virtual bool handleExternalReaderMenuAction(uint8_t) { return false; }
   virtual bool restorePendingOverlay(const PendingOverlayResume&) { return false; }
   virtual ScreenshotInfo getScreenshotInfo() const { return {}; }

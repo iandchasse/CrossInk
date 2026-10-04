@@ -1,3 +1,6 @@
 .github/workflows/*.lock.yml linguist-generated=true
 # The Silkscreen build script runs under Git Bash, which rejects CRLF: keep it LF where core.autocrlf is set.
 scripts/silkscreen/*.sh text eol=lf
+# scripts/patch_sdfat.py applies these with `git apply` to SdFat's registry
+# sources, which are LF: keep them LF where core.autocrlf is set.
+scripts/sdfat_patches/*.patch text eol=lf

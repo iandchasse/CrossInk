@@ -15,6 +15,7 @@
 #include "BookReadingStats.h"
 #include "BookmarkStore.h"
 #include "EndOfBookOptions.h"
+#include "EpubLinkReturnState.h"
 #include "EpubReaderMenuModel.h"
 #include "FootnoteLinkTargets.h"
 #include "GlobalReadingStats.h"
@@ -261,11 +262,8 @@ class EpubReaderActivity final : public Activity {
   ReaderPinchGesture pinchFontGesture;
   FootnoteLinkTargets currentPageFootnoteTouchTargets{};
 #endif
-  struct SavedPosition {
-    int spineIndex;
-    int pageNumber;
-  };
-  static constexpr int MAX_FOOTNOTE_DEPTH = 3;
+  using SavedPosition = EpubLinkReturnState::Position;
+  static constexpr int MAX_FOOTNOTE_DEPTH = EpubLinkReturnState::MAX_DEPTH;
   SavedPosition savedPositions[MAX_FOOTNOTE_DEPTH] = {};
   int footnoteDepth = 0;
 
@@ -373,8 +371,10 @@ class EpubReaderActivity final : public Activity {
   // suppression exists to protect.
   bool saveProgress(int spineIndex, int currentPage, int pageCount, bool allowDuringFootnotePreview = false);
   bool queueProgressSave(int spineIndex, int currentPage, int pageCount, bool forceSave = false);
-  bool flushQueuedProgress();
-  bool saveFootnoteOriginProgress();
+  void saveProgressBeforeRestart();
+  bool saveReadingProgress();
+  bool saveLinkStack() const;
+  void loadLinkStack();
   void cacheCurrentSectionPosition();
   void pauseReadingPaceTimer(const char* reason = "unknown");
   void resumeReadingPaceTimer(const char* reason = "unknown");
@@ -452,6 +452,7 @@ class EpubReaderActivity final : public Activity {
   void clearPendingManualPageTurns(bool requestRecoveryRedraw = true);
   void finishManualPageTurnBrakeIfReady();
   void cancelSilentNextChapterPrefetchForForwardTurn();
+  bool isAtBookStart() const;
   void pageTurn(bool isForwardTurn, const char* source = "unknown");
   float getCurrentBookProgressPercent() const;
   void initializeCompletionPromptTrigger();
@@ -513,6 +514,7 @@ class EpubReaderActivity final : public Activity {
            !backgroundBuildYieldForInput.load(std::memory_order_relaxed);
   }
   bool isReaderActivity() const override { return true; }
+  bool isBookReaderActivity() const override { return true; }
   bool isEpubReaderActivity() const override { return true; }
   void onInputLockChanged(bool locked) override;
   void onUserInput() override;
@@ -540,7 +542,6 @@ class EpubReaderActivity final : public Activity {
   bool onFrontlightGlobalSettingsOpened() override { return beginGlobalSettingsEdit(); }
   void onFrontlightGlobalSettingsClosed() override { endGlobalSettingsEdit(); }
   bool handleFrontlightPanelResult(const FrontlightPanelResult& result) override;
-  bool handlesFrontlightPanelAction() const override { return true; }
   bool handleExternalReaderMenuAction(uint8_t action) override;
   bool restorePendingOverlay(const PendingOverlayResume& resume) override;
   void setAutoPageTurnIntervalSeconds(uint16_t seconds);

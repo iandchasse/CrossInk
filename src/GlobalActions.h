@@ -36,6 +36,7 @@ inline bool isPowerButtonActionAvailableOutsideReader(const CrossPointSettings::
     case CrossPointSettings::SHORT_PWRBTN::FRONTLIGHT_PANEL:
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_TOUCHSCREEN:
     case CrossPointSettings::SHORT_PWRBTN::LIBRARY:
+    case CrossPointSettings::SHORT_PWRBTN::HOME_READER:
       return true;
     case CrossPointSettings::SHORT_PWRBTN::IGNORE:
     case CrossPointSettings::SHORT_PWRBTN::PAGE_TURN:

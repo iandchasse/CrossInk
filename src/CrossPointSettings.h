@@ -282,10 +282,13 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     // Power-only choices. Keep SLEEP=1 as the existing Sleep/Wake setting.
     SLEEP_ONLY = 34,
     WAKE_ONLY = 35,
+    HOME_READER = 36,
     // Opens the front-light panel from the keys, on a board with a light that keeps
     // its front keys (Silkscreen); pressed again, it closes the panel. No chord
-    // counterpart: POWER_CHORD_ACTION must stay aligned with ChordAction.
-    FRONTLIGHT_PANEL = 36,
+    // counterpart: POWER_CHORD_ACTION must stay aligned with ChordAction. Appended
+    // after upstream's HOME_READER, which owns 36 (Silkscreen's own value was 36
+    // before the merge of crossink/development 6fbc97d1).
+    FRONTLIGHT_PANEL = 37,
     SHORT_PWRBTN_COUNT
   };
 
@@ -325,6 +328,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     CHORD_PREVIOUS_PAGE = 29,
     CHORD_NEARBY_POSITION_SYNC = 30,
     CHORD_LIBRARY = 31,
+    CHORD_HOME_READER = 32,
     POWER_CHORD_ACTION_COUNT
   };
 
@@ -472,7 +476,7 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
     return config;
   }();
   uint8_t legacyXtcTopUsesBottom = 0;
-  uint8_t showClockOutsideReader = 0;
+  DisplayStatusBarConfig displayStatusBar;
   // Clock visibility mode (requires an RTC-backed clock).
   uint8_t hideClock = HIDE_CLOCK_ALWAYS;
   // Clock UTC offset in quarter-hour steps, biased by 48 so it fits in uint8_t.
@@ -602,6 +606,9 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t longPressButtonBehavior = OFF;
   // UI Theme
   uint8_t uiTheme = LYRA;
+  uint8_t swapLibraryFileBrowser = 0;
+  bool supportsLibraryFileBrowserSwap() const { return uiTheme == MINIMAL || uiTheme == DASHBOARD; }
+  bool isLibraryFileBrowserSwapped() const { return supportsLibraryFileBrowserSwap() && swapLibraryFileBrowser; }
   // Recently Opened layout in Library; keep the original raw values for older settings.
   uint8_t recentBooksView = RECENT_BOOKS_LIST;
   // UI scale (list fonts + row heights); touch boards default one step larger
@@ -732,11 +739,6 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
 
   bool shortPowerPressWakes() const { return shortPwrBtn == SLEEP || shortPwrBtn == WAKE_ONLY; }
 
-  bool shouldShowClockInReader() const {
-    return topReaderStatusBar.contains(ReaderStatusBarItem::Clock) ||
-           bottomReaderStatusBar.contains(ReaderStatusBarItem::Clock);
-  }
-  bool shouldShowClockOutsideReader() const { return showClockOutsideReader != 0; }
   bool shouldTrackReadingStats() const { return trackReadingStats != 0; }
   static const char* getDefaultDeviceName();
   const char* getEffectiveDeviceName() const;
