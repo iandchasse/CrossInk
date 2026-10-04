@@ -22,7 +22,7 @@ The hardware is described in `de-link_pcb/docs/HARDWARE.md` ([iandchasse/silkscr
 
 - CrossInk `development` at `9dd334d3` (2026-09-29), as cloned; merged up to `3efe61b6` (2026-10-02, v1.6.1 and what followed) in `a9f9ef64`, and up to `6fbc97d1` (2026-10-04) in `6e182dfe`.
 - freeink-sdk at the shared Silkscreen SDK head, `7279bae` ([The shared SDK](#the-shared-sdk)).
-- The last CrossPoint `silkscreen` commit ported is `c9abee96` (2026-10-03), the rounding fix of the 1% battery (`844dde61`). CrossPoint's `silkscreen` head `f935da24` has been read through: what follows `8cb94736` is ported or recorded below as not applicable.
+- The last CrossPoint `silkscreen` commit ported is `c9abee96` (2026-10-03), the rounding fix of the 1% battery (`844dde61`). CrossPoint's `silkscreen` head `abdb2fa7` has been read through: what follows `8cb94736` is ported or recorded below as not applicable.
 
 ## Status
 
@@ -63,7 +63,7 @@ CrossPoint commits after the last review (`b605f87d`) were taken as follows:
 - `56a323b7`, CrossPoint's merge of upstream `cdac66ff` (Metalio E-Ink 4 with its haptics and page keys, #3848, #3802, #3410), with its SDK head `7279bae`: the SDK move is this repo's `6e182dfe`. No Silkscreen rule changed: its four conflicts keep CrossPoint's Silkscreen hunks beside Metalio code that CrossInk does not have (`HalGPIO::update()`, `MappedInputManager::update()`, the `AfterUSBPower` list and `ci.yml`), and CrossInk's own upstream has no Metalio board;
 - `5d239070` (CrossPoint's own docs: the record of that sync): nothing to port;
 - `4821b7c2`, the cutoff poll in WebDAV GET and PUT and in `/download` (`CutoffAbortPrint`): **not ported**. CrossInk's `handleDownload()` streams in its own loop (`src/network/CrossPointWebServer.cpp`) and its WebDAV GET is still upstream's `client.write(file)` (`src/network/WebDAVHandler.cpp`), which since the `HalFile` wrap sends one byte (upstream CrossPoint's #3410, not yet taken by CrossInk), so both keep the gap that CrossPoint closed. Port the adapter with the #3410 fix ([POWER.md](POWER.md), BAT-01, "Not covered");
-- `f935da24` (CrossPoint's own docs: the record of that fix and of the SDK half of its `cdac66ff` sync): nothing to port.
+- `f935da24` and `abdb2fa7` (CrossPoint's own docs: the record of that fix and of the SDK half of its `cdac66ff` sync): nothing to port.
 
 **Battery use.** The image has carried every drain rule since S6, but none has been measured. Run C2 and C6 of the [bring-up checklist](#bring-up-checklist-real-board) before relying on it.
 
@@ -373,7 +373,7 @@ review and records) is `crosspoint-reader/docs/silkscreen/UPSTREAM-SYNC.md`; a C
 
 ```bash
 git fetch crosspoint
-git log --oneline f935da24..crosspoint/silkscreen -- . ':!src/activities/testsuite' ':!scripts/check_test_firmware.sh'
+git log --oneline abdb2fa7..crosspoint/silkscreen -- . ':!src/activities/testsuite' ':!scripts/check_test_firmware.sh'
 ```
 
 Port new drain fixes and board behaviour, update [POWER.md §3](POWER.md#3-firmware-rules-and-where-they-live)'s anchors, and move the "last CrossPoint commit ported" at the top of this file. CrossPoint's own uncommitted work is not ported until it lands as a commit.
