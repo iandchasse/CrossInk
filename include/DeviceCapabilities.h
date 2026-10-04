@@ -4,6 +4,9 @@
 #include <CrossInkHalFrontlight.h>
 #include <HalGPIO.h>
 
+#include <cstdint>
+#include <iterator>
+
 #include "AppCapabilities.h"
 
 // Physical front keys (Back, Confirm, Left, Right) are fitted: every board
@@ -64,11 +67,36 @@ inline bool deviceUsesSideButtonHintGutters(const HalGPIO& gpio) {
 #endif
 }
 
+// The Up and Down keys sit on one ADC ladder (Silkscreen, IO4): the ladder reads two keys
+// pressed together as one of them or as no key, so they can never be held at once. From the
+// board profile's key windows (BoardConfig::adcLadders), not a board name. False on every
+// board whose keys are not data-driven ADC ladders, and in the simulator, whose boards have
+// none (its BoardConfig has no ladder data).
+inline bool boardSideKeysShareAdcLadder() {
+#ifdef SIMULATOR
+  return false;
+#else
+  if (!BoardConfig::hasAdcLadders()) return false;
+  for (const auto& ladder : BoardConfig::ACTIVE.adcLadders.ladders) {
+    bool hasUp = false;
+    bool hasDown = false;
+    for (uint8_t i = 0; i < ladder.count && i < std::size(ladder.keys); ++i) {
+      hasUp = hasUp || ladder.keys[i].button == BoardConfig::LadderButton::Up;
+      hasDown = hasDown || ladder.keys[i].button == BoardConfig::LadderButton::Down;
+    }
+    if (hasUp && hasDown) return true;
+  }
+  return false;
+#endif
+}
+
 // Touch readers can safely dedicate both side buttons to a chord because Back
 // and Confirm remain available on-screen. X4 Classic has the same two edge
 // buttons plus a separate four-button front cluster, so it has the same escape
-// path without a touchscreen.
+// path without a touchscreen. A board whose side keys share an ADC ladder
+// (Silkscreen) cannot press them together, so it offers no chord.
 inline bool deviceSupportsSideButtonChord(const HalGPIO& gpio) {
+  if (boardSideKeysShareAdcLadder()) return false;
 #if CROSSINK_APP_DEVICE_X4CLASSIC || defined(SIMULATOR_DEVICE_X4_CLASSIC)
   return true;
 #else

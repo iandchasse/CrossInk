@@ -270,6 +270,22 @@ TEST(FrontlightPanelModel, TouchDrawerSupportsFrontlightOrReaderDetails) {
   EXPECT_FALSE(supportsFrontlightDrawer(false, false, true));
 }
 
+TEST(FrontlightPanelModel, ActionBarIsDroppedOnlyOnFrontKeysWithoutTouch) {
+  // Silkscreen with its touch tail (C1) and without it (C2).
+  EXPECT_TRUE(showsFrontlightActionBar(true, true));
+  EXPECT_FALSE(showsFrontlightActionBar(true, false));
+  // A touch-only board keeps the bar, also when its touch probe fails.
+  EXPECT_TRUE(showsFrontlightActionBar(false, true));
+  EXPECT_TRUE(showsFrontlightActionBar(false, false));
+}
+
+TEST(FrontlightPanelModel, SyncTileNeedsAnActingScreenOnlyOnBoardsWithFrontKeys) {
+  EXPECT_TRUE(offersFrontlightSyncTile(true, true));
+  EXPECT_FALSE(offersFrontlightSyncTile(true, false));
+  EXPECT_TRUE(offersFrontlightSyncTile(false, true));
+  EXPECT_TRUE(offersFrontlightSyncTile(false, false));
+}
+
 TEST(ReaderDrawerModel, PercentStepsDoNotBecomeSettingsChanges) {
   EXPECT_TRUE(readerDrawerStepChangesSettings(ReaderDrawerPane::Spacing));
   EXPECT_TRUE(readerDrawerStepChangesSettings(ReaderDrawerPane::Margins));

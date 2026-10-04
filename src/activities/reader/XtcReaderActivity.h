@@ -137,6 +137,7 @@ class XtcReaderActivity final : public Activity {
   void onFrontlightPanelOpened() override { pauseReadingStatsTimer("frontlight_panel"); }
   void onFrontlightPanelClosed() override;
   bool handleFrontlightPanelResult(const FrontlightPanelResult& result) override;
+  bool handlesFrontlightPanelAction() const override { return true; }
 
   // Renders the last saved page to the frame buffer without flushing to display.
   // Used by SleepActivity to prepare the background for the overlay sleep mode.

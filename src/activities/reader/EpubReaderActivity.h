@@ -540,6 +540,7 @@ class EpubReaderActivity final : public Activity {
   bool onFrontlightGlobalSettingsOpened() override { return beginGlobalSettingsEdit(); }
   void onFrontlightGlobalSettingsClosed() override { endGlobalSettingsEdit(); }
   bool handleFrontlightPanelResult(const FrontlightPanelResult& result) override;
+  bool handlesFrontlightPanelAction() const override { return true; }
   bool handleExternalReaderMenuAction(uint8_t action) override;
   bool restorePendingOverlay(const PendingOverlayResume& resume) override;
   void setAutoPageTurnIntervalSeconds(uint16_t seconds);

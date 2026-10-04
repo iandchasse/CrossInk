@@ -70,6 +70,12 @@ class FrontlightPanelActivity final : public Activity {
   void addStepSlider(UiApp::ScreenType& screen, const freeink::ui::Rect& row, uint8_t value,
                      freeink::ui::ActionId sliderAction, freeink::ui::ActionId stepAction);
   Rect homeButtonRect() const;
+  // The action bar is touch hits only, so a board with front keys and no working touch panel
+  // draws none (actionBarHeight() is then 0); its Sync tile is left out where the screen
+  // underneath does not act on the choice. See FrontlightPanelModel.h.
+  bool showsActionBar() const;
+  bool showsSyncTile() const;
+  int actionBarHeight() const;
   // Height of the drop-down, derived from the content it holds (header +
   // sliders + toggle). Same layout math as buildPanelScreen so the frame,
   // content margin, and dismiss threshold all agree.

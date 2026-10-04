@@ -156,4 +156,5 @@ class HomeActivity final : public Activity {
   void onFrontlightPanelOpened() override;
   void onFrontlightPanelClosed() override;
   bool handleFrontlightPanelResult(const FrontlightPanelResult& result) override;
+  bool handlesFrontlightPanelAction() const override { return true; }
 };

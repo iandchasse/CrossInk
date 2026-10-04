@@ -83,6 +83,7 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #include "AppVersion.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DeviceCapabilities.h"
 #include "GlobalActions.h"
 #include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
@@ -784,6 +785,9 @@ ButtonShortcutController::ChordAction configuredChordAction() {
 }
 
 ButtonShortcutController::ChordAction configuredSideButtonChordAction() {
+  // Up and Down on one ADC ladder never read as pressed together (Silkscreen): a value stored
+  // before the setting was hidden, or sent by an old web page, does nothing.
+  if (boardSideKeysShareAdcLadder()) return ButtonShortcutController::ChordAction::Disabled;
   const auto rawAction = SETTINGS.sideButtonChordAction;
   if (rawAction >= CrossPointSettings::POWER_CHORD_ACTION_COUNT) {
     return ButtonShortcutController::ChordAction::Disabled;

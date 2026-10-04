@@ -380,6 +380,7 @@ void FrontlightPanelActivity::closeSyncDialog() {
 void FrontlightPanelActivity::activateQuickAction(const int index) {
   if (index < 0 || index >= 5) return;
   if (index == 0 && !context.showReadingStatsAction) return;
+  if (index == 1 && !showsSyncTile()) return;
   drawerState.selectedAction = static_cast<int8_t>(index);
   switch (index) {
     case 0:
@@ -494,6 +495,17 @@ void FrontlightPanelActivity::loop() {
   }
 }
 
+bool FrontlightPanelActivity::showsActionBar() const {
+  return showsFrontlightActionBar(boardHasFrontButtons(), mappedInput.hasTouchHardware());
+}
+
+bool FrontlightPanelActivity::showsSyncTile() const {
+  return offersFrontlightSyncTile(boardHasFrontButtons(),
+                                  context.sourceActivity && context.sourceActivity->handlesFrontlightPanelAction());
+}
+
+int FrontlightPanelActivity::actionBarHeight() const { return showsActionBar() ? ACTION_BAR_HEIGHT : 0; }
+
 Rect FrontlightPanelActivity::homeButtonRect() const {
   const auto& metrics = UITheme::getInstance().getMetrics();
   return Rect{renderer.getScreenWidth() - HEADER_BUTTON_WIDTH, metrics.topPadding, HEADER_BUTTON_WIDTH,
@@ -517,7 +529,7 @@ int FrontlightPanelActivity::computePanelBottom() const {
       y += lh + tokens.spaceLg;
     }
     y += lh;
-    y += tokens.spaceLg * 3 + ACTION_BAR_HEIGHT;
+    y += tokens.spaceLg * 3 + actionBarHeight();
     const auto sheet = frontlightSheetProps();
     return y + DrawerHandle::bandHeight(sheet);
   }
@@ -533,7 +545,7 @@ int FrontlightPanelActivity::computePanelBottom() const {
     if (const char* note = singleStringNote()) y += noteHeight(tokens, note) + tokens.spaceMd;
 #endif
   }
-  y += tokens.spaceLg + ACTION_BAR_HEIGHT;  // trailing padding + actions
+  y += tokens.spaceLg + actionBarHeight();  // trailing padding + actions
   const auto sheet = frontlightSheetProps();
   return y + DrawerHandle::bandHeight(sheet);
 }
@@ -599,23 +611,32 @@ void FrontlightPanelActivity::buildPanelScreen(UiApp::ScreenType& screen) {
                                        (showsBookProgress() ? metrics.tabBarHeight : 0)),
                   0, bottomInset, 0});
 
-  const fui::Rect actionBar = screen.takeBottom(ACTION_BAR_HEIGHT);
-  const bool showStats = context.showReadingStatsAction;
-  const int16_t slotCount = showStats ? 5 : 4;
-  const int16_t slotWidth = static_cast<int16_t>(actionBar.width / slotCount);
-  const std::array<fui::BitmapRef, 5> icons = {
-      fui::bitmapFromIcon(icon_reading_stats_24), fui::bitmapFromIcon(icon_transfer_24),
-      fui::bitmapFromIcon(icon_tabler_moon_filled_24), fui::bitmapFromIcon(icon_sliders_horizontal_24),
-      fui::bitmapFromIcon(pendingTouchscreenDisabled ? icon_device_tablet_off_24 : icon_device_tablet_24)};
-  for (int16_t slotIndex = 0; slotIndex < slotCount; ++slotIndex) {
-    const int16_t i = showStats ? slotIndex : slotIndex + 1;
-    const int16_t x = static_cast<int16_t>(actionBar.x + slotIndex * slotWidth);
-    const int16_t width = slotIndex == slotCount - 1 ? static_cast<int16_t>(actionBar.right() - x) : slotWidth;
-    const fui::Rect slot{x, actionBar.y, width, actionBar.height};
-    screen.frame().hit(slot, ACTION_QUICK, i);
-    screen.target().bitmap(slot, icons[static_cast<size_t>(i)], fui::BitmapMode::Center);
+  if (showsActionBar()) {
+    const fui::Rect actionBar = screen.takeBottom(ACTION_BAR_HEIGHT);
+    // Reading Stats and Sync & Transfer are left out when there is nothing for them to act on;
+    // the tiles that remain share the bar. Night mode, Settings and the touch toggle always stay.
+    std::array<int16_t, 5> tiles{};
+    int16_t slotCount = 0;
+    for (int16_t i = 0; i < 5; ++i) {
+      if (i == 0 && !context.showReadingStatsAction) continue;
+      if (i == 1 && !showsSyncTile()) continue;
+      tiles[static_cast<size_t>(slotCount++)] = i;
+    }
+    const int16_t slotWidth = static_cast<int16_t>(actionBar.width / slotCount);
+    const std::array<fui::BitmapRef, 5> icons = {
+        fui::bitmapFromIcon(icon_reading_stats_24), fui::bitmapFromIcon(icon_transfer_24),
+        fui::bitmapFromIcon(icon_tabler_moon_filled_24), fui::bitmapFromIcon(icon_sliders_horizontal_24),
+        fui::bitmapFromIcon(pendingTouchscreenDisabled ? icon_device_tablet_off_24 : icon_device_tablet_24)};
+    for (int16_t slotIndex = 0; slotIndex < slotCount; ++slotIndex) {
+      const int16_t i = tiles[static_cast<size_t>(slotIndex)];
+      const int16_t x = static_cast<int16_t>(actionBar.x + slotIndex * slotWidth);
+      const int16_t width = slotIndex == slotCount - 1 ? static_cast<int16_t>(actionBar.right() - x) : slotWidth;
+      const fui::Rect slot{x, actionBar.y, width, actionBar.height};
+      screen.frame().hit(slot, ACTION_QUICK, i);
+      screen.target().bitmap(slot, icons[static_cast<size_t>(i)], fui::BitmapMode::Center);
+    }
+    screen.target().fill(fui::Rect{actionBar.x, actionBar.y, actionBar.width, 1}, fui::Paint::solid(fui::Color::Black));
   }
-  screen.target().fill(fui::Rect{actionBar.x, actionBar.y, actionBar.width, 1}, fui::Paint::solid(fui::Color::Black));
 
   if (context.showReaderDetails) {
     drawReaderDetails(screen);

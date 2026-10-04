@@ -124,6 +124,8 @@ class Activity {
   virtual bool onFrontlightGlobalSettingsOpened() { return false; }
   virtual void onFrontlightGlobalSettingsClosed() {}
   virtual bool handleFrontlightPanelResult(const FrontlightPanelResult&) { return false; }
+  // handleFrontlightPanelResult() carries out the panel's Sync & Transfer choices.
+  virtual bool handlesFrontlightPanelAction() const { return false; }
   virtual bool handleExternalReaderMenuAction(uint8_t) { return false; }
   virtual bool restorePendingOverlay(const PendingOverlayResume&) { return false; }
   virtual ScreenshotInfo getScreenshotInfo() const { return {}; }

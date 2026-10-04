@@ -36,6 +36,22 @@ constexpr bool supportsFrontlightDrawer(const bool hasTouchHardware, const bool 
   return hasTouchHardware && (hasFrontlight || hasReaderDetailsPanel);
 }
 
+// The panel's action bar (Reading Stats, Sync & Transfer, Night mode, Settings, Touch toggle)
+// is touch hits only. A board that keeps its front keys but has no working touch panel
+// (Silkscreen without its touch tail) draws no bar rather than icons nothing answers. Every
+// other board, touch-only included, draws it as before.
+constexpr bool showsFrontlightActionBar(const bool boardHasFrontKeys, const bool touchWorks) {
+  return !boardHasFrontKeys || touchWorks;
+}
+
+// The Sync & Transfer tile hands its choice back to the screen that opened the panel, and only
+// Home and the readers act on it (Activity::handlesFrontlightPanelAction()): over Settings or
+// the reader menu a pick would be dropped. A board with front keys (Silkscreen) leaves the tile
+// out there; every other board keeps it, as before.
+constexpr bool offersFrontlightSyncTile(const bool boardHasFrontKeys, const bool sourceActsOnResult) {
+  return !boardHasFrontKeys || sourceActsOnResult;
+}
+
 struct FrontlightPanelBookDetails {
   std::string title;
   std::string author;
