@@ -11,6 +11,10 @@ same analyzer (`crosspoint-reader/scripts/silkscreen/battery_log_report.py`). Th
   `LOG_LEVEL=1` and no USB-serial wait, so boot timing and the ghost-wake path match `silkscreen`. There is no setting, screen,
   i18n key or Quick Action: stop logging by flashing `silkscreen`.
 - **Flash:** `pio run -e silkscreen-batlog -t upload`. `scripts/silkscreen/build_matrix.sh` builds it after `silkscreen`.
+- **Size** (the final build matrix, 2026-10-04): 5622425 B of flash and 116080 B of static RAM, 8820 B and 544 B more than
+  `silkscreen` (5613605 / 115536). The image is 5627616 B, 925984 B free in the 6553600 B slot (`silkscreen`: 934800 B free).
+  Free RTC slow memory is 1464 B, against 1648 B on `silkscreen`: the record is 184 B. Every other env is the size it was,
+  to the byte. CrossPoint's BATTERY-LOG.md section 1 has both readers' figures.
 - **Version and image.** `1.6.1-silkscreen-batlog`: `scripts/git_branch.py` injects `CROSSINK_VERSION` only for the envs it
   lists, so this env is in its set (without that, `BuildInfo` would report `dev`). The image is
   `.pio/build/silkscreen-batlog/firmware.bin`, with `firmware-silkscreen.bin` beside it. `custom_firmware_device_type` stays
