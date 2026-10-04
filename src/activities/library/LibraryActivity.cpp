@@ -753,6 +753,17 @@ void LibraryActivity::handleInput(const LibraryInputBuffer::Event& input) {
       return;
     }
   }
+  if (!showSelection && deviceHasFrontButtons(gpio) &&
+      (input.type == Type::ConfirmLongPress || input.type == Type::ConfirmRelease)) {
+    // A tap or a swipe hid the cursor (touch unit with keys; a keys-only board never hides it, and a
+    // touch-only board has no Confirm). The arrow keys already show it before they move (move()); a
+    // Confirm does the same instead of opening, or activating, a row or control nobody can see.
+    pendingInput.clear();
+    if (input.type == Type::ConfirmLongPress)
+      ignoreConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
+    revealSelection();
+    return;
+  }
   if (input.type == Type::ConfirmLongPress) {
     pendingInput.clear();
     ignoreConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
@@ -878,6 +889,21 @@ void LibraryActivity::handleInput(const LibraryInputBuffer::Event& input) {
     if (input.type == Type::NextPage) moveBook(ButtonNavigator::nextPageIndex(row, bookCount, page));
     if (input.type == Type::PreviousPage) moveBook(ButtonNavigator::previousPageIndex(row, bookCount, page));
   }
+}
+
+void LibraryActivity::revealSelection() {
+  showSelection = true;
+  if (gridEnabled()) {
+    // A swipe turns the page and selects its first book, so the cursor is already on the page.
+    loadGridProgress();
+  } else if (selection >= CONTROL_COUNT) {
+    // A swipe scrolls the list without moving the selection, which may then be off-screen.
+    listNav.selected = selection - CONTROL_COUNT;
+    listNav.top = topIndex;
+    listNav.follow(rowCount());
+    topIndex = listNav.top;
+  }
+  requestUpdate();
 }
 
 void LibraryActivity::listScreen(UiApp::ScreenType& screen, void* user) {

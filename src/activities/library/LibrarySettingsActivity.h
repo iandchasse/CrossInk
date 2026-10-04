@@ -30,4 +30,6 @@ class LibrarySettingsActivity final : public Activity {
   static void provideRow(void* user, uint16_t row, freeink::ui::ListItem& item);
   void buildScreen(UiApp::ScreenType& screen);
   void toggle(int row);
+  // Shows the cursor a tap or a swipe hid, scrolled into view.
+  void revealSelection();
 };

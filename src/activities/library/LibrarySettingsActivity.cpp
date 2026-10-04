@@ -72,6 +72,15 @@ void LibrarySettingsActivity::toggle(const int row) {
   requestUpdate();
 }
 
+void LibrarySettingsActivity::revealSelection() {
+  showSelection = true;
+  listNav.selected = selection;
+  listNav.top = topIndex;
+  listNav.follow(ROW_COUNT);
+  topIndex = listNav.top;
+  requestUpdate();
+}
+
 void LibrarySettingsActivity::onRow(const fui::ActionEvent& event, void* user) {
   auto* self = static_cast<LibrarySettingsActivity*>(user);
   if (event.value < 0 || event.value >= ROW_COUNT) return;
@@ -105,6 +114,13 @@ void LibrarySettingsActivity::loop() {
     }
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    // A tap or a swipe hid the cursor (touch unit with keys; a keys-only board never hides it, and a
+    // touch-only board has no Confirm). Show it first, as the arrow keys do, instead of flipping a row
+    // nobody can see.
+    if (!showSelection && deviceHasFrontButtons(gpio)) {
+      revealSelection();
+      return;
+    }
     toggle(selection);
     return;
   }
@@ -121,12 +137,7 @@ void LibrarySettingsActivity::loop() {
   }
   const auto move = [this](int next) {
     if (!showSelection) {
-      showSelection = true;
-      listNav.selected = selection;
-      listNav.top = topIndex;
-      listNav.follow(ROW_COUNT);
-      topIndex = listNav.top;
-      requestUpdate();
+      revealSelection();
       return;
     }
     selection = next;

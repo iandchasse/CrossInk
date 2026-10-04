@@ -117,6 +117,9 @@ class LibraryActivity final : public Activity {
   void latchInput();
   void queueInput(LibraryInputBuffer::Type type, int x = -1, int y = -1);
   void handleInput(const LibraryInputBuffer::Event& input);
+  // Shows the cursor a tap or a swipe hid, scrolled into view. A Confirm on a touch unit with keys
+  // does this instead of acting on a row or control nobody can see.
+  void revealSelection();
   void refreshIndexIfNeeded(bool showScanning = false);
   bool rebuildIndex(bool showScanning);
   void readRecentBook(size_t historyRow, RecentBook& book) const;
