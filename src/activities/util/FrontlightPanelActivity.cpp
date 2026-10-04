@@ -89,6 +89,7 @@ void FrontlightPanelActivity::onEnter() {
   // A single-colour light: warmth is the string that lights, and that is saved.
   if (warmthLocked()) warmth = Frontlight.stringMissing(true) ? 0 : 100;
   lightOn = Frontlight.isOn();
+  navKeysArmed = !boardHasFrontButtons();
 #if FREEINK_CAP_FRONTLIGHT_PROBE
   // Also after a switch-on elsewhere, or a restore at wake, found no light.
   noLightNote = !lightOn && Frontlight.noLightFound();
@@ -483,6 +484,19 @@ void FrontlightPanelActivity::loop() {
   }
 
   if (context.showReaderDetails) return;
+
+  if (!navKeysArmed) {
+    // The side button that opened the panel (Up long-press = Light Controls fires at 700 ms with the key
+    // still down) must be let go before Up or Down steps the light: ButtonNavigator counts the hold
+    // from the first press, so it would repeat from the first pass. Back and Confirm have their own
+    // guards above.
+    using Button = MappedInputManager::Button;
+    if (mappedInput.isPressed(Button::Up) || mappedInput.isPressed(Button::Down) ||
+        mappedInput.isPressed(Button::Left) || mappedInput.isPressed(Button::Right)) {
+      return;
+    }
+    navKeysArmed = true;
+  }
 
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Left}, [this] { stepBrightnessByKey(false); });
   buttonNavigator.onPressAndContinuous({MappedInputManager::Button::Right}, [this] { stepBrightnessByKey(true); });

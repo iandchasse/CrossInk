@@ -52,6 +52,11 @@ class FrontlightPanelActivity final : public Activity {
   // Light Controls, holding it closes the panel as it opened it; the press that opened the
   // panel (still held) must not count.
   bool confirmPressedInPanel = false;
+  // Up/Down/Left/Right act only once none of them is held. A side button set to Light Controls opens the
+  // panel while it is still down, and ButtonNavigator would take that hold for a key held in the panel
+  // and step the warmth at once, then every 150 ms until release. Armed from the start on a board
+  // without front keys, where nothing opens the panel that way.
+  bool navKeysArmed = false;
   // Bottom edge of the drop-down (px). Content lays out above it and the
   // handle occupies its final band. Set by render() before the app lays out.
   int panelBottom = 0;
