@@ -2424,11 +2424,19 @@ void loop() {
   // Otherwise, use longer delay to save power
   const uint8_t inputPollDelayMs = activityManager.inputPollDelayMs();
   bool skipLoopDelay = false;
+#if SILKSCREEN_BATLOG
+  // Set once the render task has been seen holding the lock. The first paint of a wake is only queued in the pass
+  // that starts it, and the render task cannot run until the loop yields, so a free lock in that pass proves nothing.
+  static bool sawRenderBusy = false;
+#endif
   {
     // Reader scheduling inspects state also owned by the render task. Never wait
     // here: the input loop must stay available while a page is being rendered.
     RenderLock lock(RenderLock::Mode::Try);
     if (!lock.ownsLock()) {
+#if SILKSCREEN_BATLOG
+      sawRenderBusy = true;
+#endif
       // Continue polling at the activity's rate while its screen is drawn.
       delay(inputPollDelayMs);
       return;
@@ -2436,8 +2444,9 @@ void loop() {
     skipLoopDelay = activityManager.skipLoopDelay();
   }
 #if SILKSCREEN_BATLOG
-  // The render task is idle: the first such pass after the first paint writes the wake's row.
-  if (!deepSleepInProgress) BatteryLogWriter::flushIfDue();
+  // The render task is idle again after a paint: the first such pass writes the wake's row. A wake that never shows
+  // the render task busy is left to the flush at sleep entry.
+  if (!deepSleepInProgress && sawRenderBusy) BatteryLogWriter::flushIfDue();
 #endif
   if (skipLoopDelay) {
     powerManager.setPowerSaving(false);  // Make sure we're at full performance when skipLoopDelay is requested
