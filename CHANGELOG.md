@@ -58,6 +58,7 @@
 - Silkscreen: pressing Confirm to see the network list while the Wi-Fi screen is connecting to a saved network no longer connects to the first network on the list when the button is released.
 - Silkscreen: the front light schedule's time picker labels its Left and Right buttons "Prev Field" and "Next Field" instead of "Up" and "Down", says under the fields that Up and Down change the value, and holding Up or Down steps the minutes by 5. Holding Left or Right no longer also changes the value.
 - Silkscreen: in the reader menu's sub-lists (font, dictionary, options and the like) the Left and Right buttons step up and down the list like Up and Down, where they did nothing while the hints under them still read "Left" and "Right"; the hints now read "Up" and "Down".
+- Silkscreen: on battery, a web upload (a file or a font from a browser form) or a Library scan that is running when the battery reaches its cutoff now stops, and the reader goes to sleep, instead of running to its end.
 
 ## [v1.6.1] - 2026-09-30
 
