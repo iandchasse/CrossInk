@@ -50,6 +50,7 @@
 - Silkscreen: when a received file already exists, the Nearby transfer screen shows which of Replace, Keep Both and Cancel the buttons have selected, and starts on Cancel so a stray Confirm cannot overwrite the file.
 - Silkscreen: in the Reading Stats date editor, holding Back for a second throws the edits away, as the touchscreen's Cancel button does; Back pressed briefly still saves them. The editor says so under the dates.
 - Silkscreen: in a dictionary lookup from a book, the Right button creates a clipping from the selected words, on the definition and on the "not found" and alternate-form prompts, where only a touchscreen button did. Its hint is "Clip".
+- Silkscreen: pressing Left on the first row of an OPDS catalogue to search no longer also moves the selection to the last row, which was where the list stood after the search.
 
 ## [v1.6.1] - 2026-09-30
 

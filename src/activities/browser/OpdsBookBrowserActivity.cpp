@@ -14,6 +14,7 @@
 #include <utility>
 
 #include "CrossPointSettings.h"
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
@@ -199,7 +200,12 @@ void OpdsBookBrowserActivity::loop() {
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       navigateBack();
     } else if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
-      if (!searchTemplate.empty() && selectorIndex == 0) launchSearch();
+      if (!searchTemplate.empty() && selectorIndex == 0) {
+        launchSearch();
+        // The same Left release would otherwise step the selection to the last row below, so the list
+        // is left that way when the search returns. Silkscreen only: other boards keep their behaviour.
+        if (boardKeepsKeysBesideTouch()) return;
+      }
     }
 
     // Touch goes through the FreeInkApp: render() registered every tap target
