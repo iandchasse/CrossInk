@@ -163,6 +163,8 @@ class DictionaryLookupController {
   bool lookupToastEnabled_ = true;
   bool fullScreenChildWasShown_ = false;
   bool allowCreateClipping_ = false;
+  // Silkscreen: Right creates the clipping from the alt-form and not-found prompts, as their touch button does.
+  bool hasClippingKey() const;
   bool shouldOfferAltForms_ = true;
   std::string preparedQuickIndexPath;
 

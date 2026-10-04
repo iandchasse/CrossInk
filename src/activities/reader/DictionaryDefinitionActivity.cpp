@@ -19,6 +19,7 @@
 
 #include "../settings/DictionarySelectActivity.h"
 #include "CrossPointSettings.h"
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "Memory.h"
 #include "SdCardFontSystem.h"
@@ -487,6 +488,11 @@ bool DictionaryDefinitionActivity::showTouchDictionarySwitch() const {
   return hasModalBackground() && showLookupButton && mappedInput.hasTouch();
 }
 #endif
+
+// Silkscreen: Right saves the clipping, as the touch button under the definition does.
+bool DictionaryDefinitionActivity::hasClippingKey() const {
+  return boardKeepsKeysBesideTouch() && hasModalBackground() && showLookupButton && hasClippingRequest_;
+}
 
 int DictionaryDefinitionActivity::dictionaryFooterHeight() const {
   if (!hasModalBackground()) return 0;
@@ -1363,6 +1369,12 @@ void DictionaryDefinitionActivity::loop() {
     return;
   }
 
+  if (hasClippingKey() && mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+    setResult(ActivityResult{clippingRequest_});
+    finish();
+    return;
+  }
+
 #if CROSSINK_APP_CAP_TOUCH
   if (showLookupButton && mappedInput.hasTouch() && mappedInput.wasLeftEdgeGesture()) {
     setResult(ActivityResult{});
@@ -1710,7 +1722,7 @@ void DictionaryDefinitionActivity::render(RenderLock&&) {
   // Button hints
   const char* btn2 = inlineFailureFeedback ? tr(STR_DONE) : (showLookupButton ? tr(STR_LOOKUP_SHORT) : "");
   const char* btn3 = showLookupButton ? tr(STR_DICT_SWITCH) : "";
-  const char* btn4 = nullptr;
+  const char* btn4 = hasClippingKey() && !controller.isActive() ? tr(STR_CLIP_SHORT) : nullptr;
   const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), btn2, btn3, btn4);
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   wordSelectHintsVisible_ = false;

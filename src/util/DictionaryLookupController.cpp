@@ -12,6 +12,7 @@
 #include "../activities/Activity.h"
 #include "../activities/reader/DictionarySuggestionsActivity.h"
 #include "CrossPointSettings.h"
+#include "DeviceCapabilities.h"
 #include "DictionaryLookupWorker.h"
 #include "MappedInputManager.h"
 #include "Memory.h"
@@ -40,6 +41,8 @@ DictionaryLookupController::DictionaryLookupController(GfxRenderer& renderer, Ma
 }
 
 DictionaryLookupController::~DictionaryLookupController() { onExit(); }
+
+bool DictionaryLookupController::hasClippingKey() const { return allowCreateClipping_ && boardKeepsKeysBesideTouch(); }
 
 namespace {
 constexpr int kDictionarySwitchTouchHeight = 56;
@@ -224,6 +227,10 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
       return LookupEvent::CreateClipping;
     }
 #endif
+    if (hasClippingKey() && mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+      state = LookupState::Idle;
+      return LookupEvent::CreateClipping;
+    }
     return LookupEvent::None;
   }
 
@@ -259,6 +266,11 @@ DictionaryLookupController::LookupEvent DictionaryLookupController::handleInput(
     if (mappedInput.wasReleased(MappedInputManager::Button::Left)) {
       state = LookupState::Idle;
       return LookupEvent::SwitchDictionary;
+    }
+    if (state == LookupState::NotFound && hasClippingKey() &&
+        mappedInput.wasReleased(MappedInputManager::Button::Right)) {
+      state = LookupState::Idle;
+      return LookupEvent::CreateClipping;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       state = LookupState::Idle;
@@ -382,16 +394,22 @@ bool DictionaryLookupController::render() {
       const int maxLines = std::max(1, textArea.height / renderer.getLineHeight(UI_10_FONT_ID));
       UITheme::drawCenteredWrappedText(renderer, textArea, UI_10_FONT_ID, y, altFormWord.c_str(), maxLines);
     }
+    const auto drawKeyHints = [this] {
+      const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), tr(STR_CONFIRM), "",
+                                                hasClippingKey() ? tr(STR_CLIP_SHORT) : "");
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    };
 #if CROSSINK_APP_CAP_TOUCH
     if (mappedInput.hasTouch()) {
       altFormUiReady = false;
       altFormUiApp.render();
       altFormUiReady = true;
+      // Silkscreen: the keys work beside the touch buttons (Confirm Yes, Back No, Right the clipping).
+      if (boardKeepsKeysBesideTouch()) drawKeyHints();
     } else
 #endif
     {
-      const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), tr(STR_CONFIRM), "", "");
-      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+      drawKeyHints();
     }
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     return true;
@@ -425,8 +443,8 @@ bool DictionaryLookupController::render() {
         altFormUiApp.render();
         altFormUiReady = true;
       }
-      const auto labels =
-          mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), tr(STR_DONE), tr(STR_DICT_SWITCH), "");
+      const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), tr(STR_DONE),
+                                                tr(STR_DICT_SWITCH), hasClippingKey() ? tr(STR_CLIP_SHORT) : "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
       renderer.displayBuffer(HalDisplay::FAST_REFRESH);
       return true;
@@ -440,8 +458,8 @@ bool DictionaryLookupController::render() {
                         std::max(1, bottom - y)};
     const int maxLines = std::max(1, textArea.height / renderer.getLineHeight(UI_10_FONT_ID));
     UITheme::drawCenteredWrappedText(renderer, textArea, UI_10_FONT_ID, y, lookupWord.c_str(), maxLines);
-    const auto labels =
-        mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), tr(STR_DONE), tr(STR_DICT_SWITCH), "");
+    const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), tr(STR_DONE),
+                                              tr(STR_DICT_SWITCH), hasClippingKey() ? tr(STR_CLIP_SHORT) : "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);
     return true;

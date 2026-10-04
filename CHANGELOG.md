@@ -49,6 +49,7 @@
 - Silkscreen: the front light panel's bottom row of Reading Stats, Sync & Transfer, Night mode, Settings and touchscreen icons is left out when no touchscreen is fitted, and its Sync & Transfer icon is left out when the panel was opened from Settings, the reader menu or any screen other than Home and the readers, where its choices did nothing.
 - Silkscreen: when a received file already exists, the Nearby transfer screen shows which of Replace, Keep Both and Cancel the buttons have selected, and starts on Cancel so a stray Confirm cannot overwrite the file.
 - Silkscreen: in the Reading Stats date editor, holding Back for a second throws the edits away, as the touchscreen's Cancel button does; Back pressed briefly still saves them. The editor says so under the dates.
+- Silkscreen: in a dictionary lookup from a book, the Right button creates a clipping from the selected words, on the definition and on the "not found" and alternate-form prompts, where only a touchscreen button did. Its hint is "Clip".
 
 ## [v1.6.1] - 2026-09-30
 

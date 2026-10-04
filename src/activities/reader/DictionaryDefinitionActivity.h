@@ -220,6 +220,7 @@ class DictionaryDefinitionActivity final : public Activity {
 #endif
   int dictionaryFooterHeight() const;
   bool hasModalBackground() const { return backgroundContext_ && backgroundRender_; }
+  bool hasClippingKey() const;
   void sizeModalForCurrentPage();
   void drawModalFrame() const;
   int getMixedWidth(std::vector<IpaTextSpan>& ipaRuns, const char* text, EpdFontFamily::Style style);
