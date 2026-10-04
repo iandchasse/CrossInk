@@ -1627,6 +1627,12 @@ void setup() {
     // A wake that goes on: the key was held through the verification, or any press passes under the click-wake rule.
     const bool powerWake = wakeupReason == HalGPIO::WakeupReason::PowerButton;
     freeink::batterylog::onWake({powerWake && !shortPressWakes, powerWake && shortPressWakes});
+    // One line per verified wake, for the bench: serial only, after the wake burst.
+    const auto s = freeink::batterylog::status();
+    LOG_INF("BATLOG", "wake rst=%d state=%u row=%lu drop=%u bad=%u skip=%u now=%d",
+            static_cast<int>(esp_reset_reason()), static_cast<unsigned>(s.state), static_cast<unsigned long>(s.nextRow),
+            static_cast<unsigned>(s.drop), static_cast<unsigned>(s.sdBad), static_cast<unsigned>(s.sdSkip),
+            freeink::batterylog::sdBackoff() ? 1 : 0);
   }
 #endif
   // This boot stays up: start the touch probe deferred above.
