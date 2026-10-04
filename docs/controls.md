@@ -202,7 +202,7 @@ Available actions include:
 - Quick Lock
 - Quick Actions
 - Toggle Frontlight (on supported devices)
-- Light Controls (on devices with a frontlight and front buttons): opens the frontlight panel, where Left and Right set the brightness, Up and Down the warmth and Confirm switches the light; press the same shortcut again to close it. It cannot be assigned to a chord.
+- Light Controls (on devices with a frontlight and front buttons): opens the frontlight panel, where Left and Right set the brightness, Up and Down the warmth and Confirm switches the light. Short Power, Long Power and long-press Confirm (hold it again) close the panel, as Back does; a side button or Quick Action assigned to it only opens the panel, because Up and Down set the warmth there. It cannot be assigned to a chord.
 - Toggle Touchscreen (on supported devices)
 
 Power short- and long-press actions are separate. A short press wakes the
