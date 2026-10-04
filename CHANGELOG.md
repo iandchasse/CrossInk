@@ -51,6 +51,7 @@
 - Silkscreen: in the Reading Stats date editor, holding Back for a second throws the edits away, as the touchscreen's Cancel button does; Back pressed briefly still saves them. The editor says so under the dates.
 - Silkscreen: in a dictionary lookup from a book, the Right button creates a clipping from the selected words, on the definition and on the "not found" and alternate-form prompts, where only a touchscreen button did. Its hint is "Clip".
 - Silkscreen: pressing Left on the first row of an OPDS catalogue to search no longer also moves the selection to the last row, which was where the list stood after the search.
+- Silkscreen: pressing Confirm to see the network list while the Wi-Fi screen is connecting to a saved network no longer connects to the first network on the list when the button is released.
 
 ## [v1.6.1] - 2026-09-30
 

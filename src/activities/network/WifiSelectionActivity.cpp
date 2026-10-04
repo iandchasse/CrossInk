@@ -14,6 +14,7 @@
 #include <algorithm>
 
 #include "CrossPointSettings.h"
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
 #include "WifiCredentialStore.h"
@@ -927,6 +928,9 @@ void WifiSelectionActivity::loop() {
   if (state == WifiSelectionState::CONNECTING || state == WifiSelectionState::AUTO_CONNECTING) {
     if (state == WifiSelectionState::AUTO_CONNECTING) {
       if (mappedInput.wasPressed(MappedInputManager::Button::Confirm)) {
+        // The list takes over while Confirm is still down, and its release would select row 0 and
+        // reconnect. Silkscreen only: other boards keep their behaviour.
+        if (boardKeepsKeysBesideTouch()) mappedInput.suppressNextConfirmRelease();
         showNetworkListFromAutoConnect();
         return;
       }
