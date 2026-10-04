@@ -33,6 +33,20 @@ inline bool boardHasFrontButtons() {
 #endif
 }
 
+// A touch board that keeps its front keys beside the panel (Silkscreen), from the board profile
+// (TouchConfig::buttonsAlongsideTouch): it holds whether or not the touch panel answered, and
+// unlike deviceHasFrontButtons() it is false on every keys-only board. Key-route fixes the audit
+// found on Silkscreen (hold-to-discard, extra key bindings and hints, input leaks) use this, so
+// every other board's keys behave exactly as they did. False in the simulator, whose boards keep
+// no keys beside touch.
+inline bool boardKeepsKeysBesideTouch() {
+#ifdef SIMULATOR
+  return false;
+#else
+  return BoardConfig::hasTouch() && BoardConfig::hasFrontButtons();
+#endif
+}
+
 // The front-light panel otherwise opens by touch gestures only. A board with a light
 // that keeps its front keys (Silkscreen) opens it from the keys: Settings > Display >
 // Frontlight, the reader menu's Settings tab, and the Light Controls shortcuts. Decided

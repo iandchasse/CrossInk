@@ -3,12 +3,16 @@
 #include <I18n.h>
 
 #include "BookStatsView.h"
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "util/InputReleaseGuard.h"
 
 namespace {
+
+// Silkscreen: Back held this long in the date editor throws the edits away; released sooner it saves them.
+constexpr unsigned long DATE_EDIT_DISCARD_HOLD_MS = 1000;
 
 void drawPageIndicators(const GfxRenderer& renderer, const int currentPage, const int totalPages) {
   if (totalPages <= 1) {
@@ -405,6 +409,14 @@ void BookStatsActivity::loop() {
         finishDateEditing(false);
         return;
       }
+    }
+    if (boardKeepsKeysBesideTouch() && mappedInput.isPressed(MappedInputManager::Button::Back) &&
+        mappedInput.getHeldTime() >= DATE_EDIT_DISCARD_HOLD_MS) {
+      // The touch Cancel button has no key. Eat the release of this hold, or the stats page
+      // it returns to would take it for a Back and leave the screen.
+      mappedInput.suppressNextBackRelease();
+      finishDateEditing(false);
+      return;
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       finishDateEditing(true);

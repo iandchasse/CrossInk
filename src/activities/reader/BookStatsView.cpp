@@ -9,6 +9,7 @@
 #include <array>
 #include <cstdio>
 
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "components/CompactHeader.h"
 #include "components/TouchActionButtons.h"
@@ -748,6 +749,11 @@ void renderEditBookDatesPage(GfxRenderer& renderer, const MappedInputManager* ma
     TouchRegistry::getInstance().add(actions.buttons[1], BookStatsTouchTarget::DateCancel, TouchRegistry::Item);
   }
 #endif
+
+  if (showButtonHints && mappedInput && boardKeepsKeysBesideTouch()) {
+    // BookStatsActivity::loop(): Back saves, and held Back discards (the touch Cancel button has no key).
+    renderer.drawCenteredText(SMALL_FONT_ID, cardY + cardH + 14, tr(STR_HOLD_BACK_TO_DISCARD));
+  }
 
   if (showButtonHints && mappedInput) {
     const auto labels = mappedInput->mapLabels(mappedInput->withBackArrow(tr(STR_BACK)), tr(STR_NEXT_FIELD),
