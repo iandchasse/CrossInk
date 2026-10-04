@@ -161,6 +161,7 @@ def get_hardware_version(project_dir, pioenv):
         'x4-pro': '-x4-pro',
         'x4-classic': '-x4-classic',
         'silkscreen': '-silkscreen',
+        'silkscreen-batlog': '-silkscreen-batlog',
     }[pioenv]
     return f'{base_version}{device_suffix}'
 
@@ -176,7 +177,7 @@ def inject_version(env):
         ('CROSSINK_GIT_DIRTY', f'\\"{get_git_dirty(project_dir)}\\"'),
     ]
 
-    if pioenv in {'default', 'sticky', 'x4-pro', 'x4-classic', 'silkscreen'}:
+    if pioenv in {'default', 'sticky', 'x4-pro', 'x4-classic', 'silkscreen', 'silkscreen-batlog'}:
         version_string = get_hardware_version(project_dir, pioenv)
         if os.environ.get('CROSSINK_RC_HASH'):
             print(f'CrossInk RC build version: {version_string}')

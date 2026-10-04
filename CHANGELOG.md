@@ -3,6 +3,7 @@
 ### Added
 
 - Silkscreen: add `silkscreen` and `silkscreen-debug` firmware builds for the Silkscreen reader board (ESP32-S3, 4.26" 800x480 panel, touchscreen and eight buttons, SDMMC card slot, USB Drive).
+- Silkscreen: add a `silkscreen-batlog` firmware build, the `silkscreen` build plus a battery sleep/wake log. It appends one row per sleep and wake to `/silkscreen-battery/battery.csv` on the card (the battery's volts at sleep and at wake, how the session ended, early re-sleeps, and the time spent with the front light, Wi-Fi and the fast clock on) to find where the charge goes; read the file with USB Drive or the web file manager. It has no setting and no screen: flash it to log and `silkscreen` to stop, and the two swap over an SD card firmware update.
 - Silkscreen: the front light checks for a connected light each time it is switched on and stays off if none answers; waking and the light schedule then leave it off until a light is found.
 - Silkscreen: the clock is set from the network again on the next Wi-Fi connection after the clock chip loses its time.
 - Silkscreen: the battery icon shows charging on any USB supply, wall chargers included, read from the charger's status output.

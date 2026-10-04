@@ -3,13 +3,14 @@
 # multi-repo procedure is crosspoint-reader/docs/silkscreen/UPSTREAM-SYNC.md).
 #
 # Usage: scripts/silkscreen/build_matrix.sh [--full] [--label NAME] [env ...]
-#   no envs : silkscreen x4-pro x4-classic c3check
+#   no envs : silkscreen silkscreen-batlog x4-pro x4-classic c3check
 #   --full  : adds silkscreen-debug, x4-pro-debug and stickycheck
 # Prints one line per env (exit code, flash/RAM bytes, warning counts, log path) and exits
 # non-zero if any env or check failed. Logs go to .cache/silkscreen-builds/ (gitignored).
 #
 # What builds on the Windows bench host, and how:
-#   silkscreen*  : the real platformio.ini (these envs pin pioarduino 55.03.311 per env).
+#   silkscreen*  : the real platformio.ini (these envs pin pioarduino 55.03.311 per env;
+#       silkscreen-batlog is the release image plus the battery log, -DSILKSCREEN_BATLOG=1).
 #   x4-pro*, x4-classic* : CrossInk's real envs through a proxy config whose only change is
 #       [base]'s platform, 55.03.37 -> the installed 55.03.311. 55.03.37 needs the Arduino 3.3.7
 #       framework package; installing it would replace the framework copy CrossPoint builds with.
@@ -50,8 +51,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 if [ ${#envs[@]} -eq 0 ]; then
-  envs=(silkscreen x4-pro x4-classic c3check)
-  [ $full = 1 ] && envs=(silkscreen silkscreen-debug x4-pro x4-pro-debug x4-classic c3check stickycheck)
+  envs=(silkscreen silkscreen-batlog x4-pro x4-classic c3check)
+  [ $full = 1 ] && envs=(silkscreen silkscreen-batlog silkscreen-debug x4-pro x4-pro-debug x4-classic c3check stickycheck)
 fi
 
 real=()
