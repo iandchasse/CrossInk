@@ -40,6 +40,8 @@ constexpr uint8_t RESULT_OK = 0;
 constexpr uint8_t RESULT_FAILED = 1;
 constexpr uint8_t REJECT_USER = 1;
 constexpr uint8_t REJECT_STORAGE = 2;
+// The "file exists" prompt lists Replace, Keep Both, Cancel in that order.
+constexpr int COLLISION_CANCEL_INDEX = 2;
 TouchActionButtons::Layout touchActionLayout(const Rect& screen, const uint8_t count) {
   constexpr int sideMargin = 24;
   constexpr int bottomMargin = 12;
@@ -551,7 +553,11 @@ void NearbyBookTransferActivity::rejectOffer() {
 
 void NearbyBookTransferActivity::setState(const State state) {
   state_ = state;
-  selectedIndex_ = 0;
+  // Replace overwrites a file, so where front keys drive the touch layout of the "file exists" prompt (Silkscreen),
+  // the highlight starts on Cancel and a stray Confirm cannot replace anything. Every other board starts on row 0.
+  selectedIndex_ = state == State::CollisionPrompt && mappedInput.hasTouchHardware() && deviceHasFrontButtons(gpio)
+                       ? COLLISION_CANCEL_INDEX
+                       : 0;
   uiReady_ = false;
   app_.clearTapFlash();
   lastUiMs_ = millis();
@@ -953,7 +959,9 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
     const Rect safeArea = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
     const auto actions = touchActionLayout(safeArea, 3);
     const char* actionLabels[] = {tr(STR_REPLACE), tr(STR_KEEP_BOTH), tr(STR_CANCEL)};
-    TouchActionButtons::draw(renderer, actions, actionLabels, 0, -1, UI_10_FONT_ID);
+    // Front keys move selectedIndex_ and Confirm runs it, so show it (Silkscreen).
+    TouchActionButtons::draw(renderer, actions, actionLabels, 0, deviceHasFrontButtons(gpio) ? selectedIndex_ : -1,
+                             UI_10_FONT_ID);
   } else if (showTouchActions) {
     const Rect safeArea = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
     const bool hasBack = state_ == State::OfferPrompt || mode_ == Mode::Receive;
