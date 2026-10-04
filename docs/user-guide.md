@@ -262,6 +262,13 @@ device model and build.
   - "OFF" (default) - Disable the fix
   - "ON" - Enable the fix
 
+- **Key hints on touch screens** (devices with both a touchscreen and front
+  buttons, such as Silkscreen): Choose whether screens laid out for touch also
+  show the labelled button hints along the bottom edge, so that it is clear
+  which button does what. "ON" (default) shows them; "OFF" leaves those screens
+  as they are on a touch-only device. Screens that already show the hints
+  (Home, Library, Settings and others) are not affected.
+
 - **Frontlight and wake schedule** (on supported devices with a frontlight and
   real-time clock): Open **Settings > Display > Frontlight**.
   - **Restore Light on Wake**: When enabled, a frontlight that was on before

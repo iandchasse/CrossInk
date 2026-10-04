@@ -8,6 +8,7 @@
 #include <iterator>
 
 #include "AppCapabilities.h"
+#include "CrossPointSettings.h"
 
 // Physical front keys (Back, Confirm, Left, Right) are fitted: every board
 // without a working touch panel, and touch boards that keep their keys
@@ -44,6 +45,21 @@ inline bool boardKeepsKeysBesideTouch() {
   return false;
 #else
   return BoardConfig::hasTouch() && BoardConfig::hasFrontButtons();
+#endif
+}
+
+// Whether a touch layout draws its key hint band. A board without a touch panel always has the
+// band, as before; a touch-only board never does. A touch board that keeps its front keys
+// (Silkscreen) draws it unless the user turned off Settings > Display > Key hints on touch
+// screens. Only the touch layouts that otherwise show no hints ask this: the screens that always
+// drew the band on such a board (Home, Library, Settings, ...) still draw it through the theme,
+// which asks deviceHasFrontButtons().
+inline bool shouldDrawKeyHints(const HalGPIO& gpio) {
+#if CROSSINK_APP_CAP_TOUCH
+  return !gpio.hasTouch() || (deviceHasFrontButtons(gpio) && SETTINGS.showKeyHintsOnTouch != 0);
+#else
+  (void)gpio;
+  return true;
 #endif
 }
 

@@ -692,6 +692,10 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t quickResumeSleepScreen = QUICK_RESUME_NEVER;
   // Master switch for automatic reading statistics; Time Left pace remains independent.
   uint8_t trackReadingStats = 1;
+  // Draw the key hint band on touch screens that also have front keys (Silkscreen). Boards
+  // without touch always draw it and touch-only boards never do, so the setting only exists
+  // where both are fitted; see shouldDrawKeyHints() in DeviceCapabilities.h.
+  uint8_t showKeyHintsOnTouch = 1;
 
   ~CrossPointSettings() = default;
 

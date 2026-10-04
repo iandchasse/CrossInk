@@ -586,7 +586,7 @@ inline SettingInfo buildSideButtonActionSetting(const StrId nameId, uint8_t Cros
 // can use it directly; mutable device UI lists use getSettingsList(), which
 // returns an owned copy and can add SD-card font and dictionary options.
 // Four edge gesture entries are compiled only for touch devices.
-inline constexpr size_t BASE_SETTINGS_CAPACITY = 104 + (CROSSINK_APP_CAP_TOUCH ? 4 : 0);
+inline constexpr size_t BASE_SETTINGS_CAPACITY = 105 + (CROSSINK_APP_CAP_TOUCH ? 4 : 0);
 
 inline const std::vector<SettingInfo>& getBaseSettingsList() {
   static const std::vector<SettingInfo> baseList = [] {
@@ -653,6 +653,10 @@ inline const std::vector<SettingInfo>& getBaseSettingsList() {
     add(SettingInfo::Value16(StrId::STR_END, &CrossPointSettings::frontlightScheduleEnd,
                              {0, FrontlightSchedule::kUnsetTimeOfDay, 1}, "frontlightScheduleEnd",
                              StrId::STR_CAT_DISPLAY));
+    // Only touch boards that keep their front keys (Silkscreen) offer it: getSettingsList() and the
+    // web API drop it everywhere else, where the hint band is either always or never drawn.
+    add(SettingInfo::Toggle(StrId::STR_KEY_HINTS_ON_TOUCH, &CrossPointSettings::showKeyHintsOnTouch,
+                            "showKeyHintsOnTouch", StrId::STR_CAT_DISPLAY));
 
     // --- Reader ---
     // Built-in font-family entry. Replaced per-call with a registry-aware
@@ -1038,20 +1042,18 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   }
   const bool hasTouch = gpio.hasTouch();
   if (!hasTouch) {
-    v.erase(std::remove_if(v.begin(), v.end(),
-                           [](const SettingInfo& s) {
-                             return s.nameId == StrId::STR_TOUCH_READER_CONTROLS ||
-                                    s.nameId == StrId::STR_DISABLE_TOUCHSCREEN || s.nameId == StrId::STR_NEXT_PAGE ||
-                                    s.nameId == StrId::STR_PREV_PAGE || s.nameId == StrId::STR_TAP_HIDE_STATUS_BAR ||
-                                    s.nameId == StrId::STR_PINCH_FONT_RESIZE ||
-                                    s.nameId == StrId::STR_TWO_FINGER_ROTATION ||
-                                    s.nameId == StrId::STR_TWO_FINGER_SWIPE_UP ||
-                                    s.nameId == StrId::STR_TWO_FINGER_SWIPE_DOWN ||
-                                    s.nameId == StrId::STR_TWO_FINGER_SWIPE_LEFT ||
-                                    s.nameId == StrId::STR_TWO_FINGER_SWIPE_RIGHT ||
-                                    s.nameId == StrId::STR_LEFT_EDGE_UP || s.nameId == StrId::STR_LEFT_EDGE_DOWN ||
-                                    s.nameId == StrId::STR_RIGHT_EDGE_UP || s.nameId == StrId::STR_RIGHT_EDGE_DOWN;
-                           }),
+    v.erase(std::remove_if(
+                v.begin(), v.end(),
+                [](const SettingInfo& s) {
+                  return s.nameId == StrId::STR_TOUCH_READER_CONTROLS || s.nameId == StrId::STR_DISABLE_TOUCHSCREEN ||
+                         s.nameId == StrId::STR_NEXT_PAGE || s.nameId == StrId::STR_PREV_PAGE ||
+                         s.nameId == StrId::STR_TAP_HIDE_STATUS_BAR || s.nameId == StrId::STR_PINCH_FONT_RESIZE ||
+                         s.nameId == StrId::STR_TWO_FINGER_ROTATION || s.nameId == StrId::STR_TWO_FINGER_SWIPE_UP ||
+                         s.nameId == StrId::STR_TWO_FINGER_SWIPE_DOWN || s.nameId == StrId::STR_TWO_FINGER_SWIPE_LEFT ||
+                         s.nameId == StrId::STR_TWO_FINGER_SWIPE_RIGHT || s.nameId == StrId::STR_LEFT_EDGE_UP ||
+                         s.nameId == StrId::STR_LEFT_EDGE_DOWN || s.nameId == StrId::STR_RIGHT_EDGE_UP ||
+                         s.nameId == StrId::STR_RIGHT_EDGE_DOWN || s.nameId == StrId::STR_KEY_HINTS_ON_TOUCH;
+                }),
             v.end());
   }
   if (!gpio.supportsMultiTouch()) {
@@ -1093,12 +1095,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
   if (hasTouch) {
     // Sunlight Fading Fix is hidden on touch boards without front keys. A board
     // that keeps its keys alongside touch (Silkscreen) keeps the row; without its
-    // optional touch panel it never gets here.
+    // optional touch panel it never gets here. Key hints on touch screens is the
+    // reverse: it exists only where touch and front keys are both there.
     const bool keepFadingFix = deviceHasFrontButtons(gpio);
     v.erase(std::remove_if(v.begin(), v.end(),
                            [keepFadingFix](const SettingInfo& s) {
                              return s.nameId == StrId::STR_FRONT_BTN_FOLLOW_ORIENTATION ||
-                                    (!keepFadingFix && s.nameId == StrId::STR_SUNLIGHT_FADING_FIX);
+                                    (!keepFadingFix && (s.nameId == StrId::STR_SUNLIGHT_FADING_FIX ||
+                                                        s.nameId == StrId::STR_KEY_HINTS_ON_TOUCH));
                            }),
             v.end());
 
@@ -1395,7 +1399,7 @@ inline std::vector<SettingInfo> buildControlsSideButtonSettingsList(const std::v
 
 inline std::vector<SettingInfo> buildGroupedDisplaySettingsList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> displaySettings;
-  displaySettings.reserve(9);
+  displaySettings.reserve(10);
 
   auto addDisplaySetting = [&](StrId nameId) {
     const auto it = std::find_if(allSettings.begin(), allSettings.end(),
@@ -1418,6 +1422,7 @@ inline std::vector<SettingInfo> buildGroupedDisplaySettingsList(const std::vecto
   addDisplaySetting(StrId::STR_UI_THEME);
   addDisplaySetting(StrId::STR_UI_SCALE);
   addDisplaySetting(StrId::STR_SUNLIGHT_FADING_FIX);
+  addDisplaySetting(StrId::STR_KEY_HINTS_ON_TOUCH);
 
   return displaySettings;
 }

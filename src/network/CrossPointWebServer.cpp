@@ -23,6 +23,7 @@
 
 #include "AppVersion.h"
 #include "CrossPointSettings.h"
+#include "DeviceCapabilities.h"
 #include "FontInstaller.h"
 #include "OpdsServerStore.h"
 #include "QuickActions.h"
@@ -143,6 +144,10 @@ bool isWebSettingAvailable(const SettingInfo& setting) {
       setting.nameId == StrId::STR_LEFT_EDGE_DOWN || setting.nameId == StrId::STR_RIGHT_EDGE_UP ||
       setting.nameId == StrId::STR_RIGHT_EDGE_DOWN;
   if (isTouchSetting && !gpio.hasTouch()) {
+    return false;
+  }
+  // Key hints on touch screens exists only where a touch panel and the front keys are both fitted.
+  if (setting.nameId == StrId::STR_KEY_HINTS_ON_TOUCH && !(gpio.hasTouch() && deviceHasFrontButtons(gpio))) {
     return false;
   }
 
