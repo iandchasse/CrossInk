@@ -11,6 +11,10 @@
 
 #include <cassert>
 
+#if SILKSCREEN_BATLOG
+#include <BatteryLog.h>
+#endif
+
 HalClock halClock;  // Singleton instance
 
 namespace {
@@ -298,5 +302,9 @@ bool HalClock::syncSystemTimeFromNTP() {
     return false;
   }
 
+#if SILKSCREEN_BATLOG
+  // The system clock was just set, so the battery log may write utc from now on (never from a stale clock).
+  freeink::batterylog::noteClockSynced();
+#endif
   return true;
 }
