@@ -76,7 +76,7 @@ CrossInk follows freeink-sdk's rule that feature code never keys off a device na
   - `HalFrontlight`: the probe settle and notices.
 - **The simulator.** Its HAL is the external `uxjulia/crossink-simulator` library, which this repo cannot stub. Every new HAL call from `src/` is therefore under `#ifndef SIMULATOR` or behind an `include/` or `src/` shim that returns the old answer in the simulator:
   - `include/CrossInkHalFrontlight.h`;
-  - `include/DeviceCapabilities.h` `deviceHasFrontButtons()` and `boardHasFrontButtons()`;
+  - `include/DeviceCapabilities.h` `deviceHasFrontButtons()`, `boardHasFrontButtons()` and `boardKeepsKeysBesideTouch()`;
   - `src/network/RadioIdle.h`;
   - `BaseTheme::showsNoBattery()`.
 - **Cross-board changes.** Two kinds reach every board:
@@ -107,6 +107,8 @@ The user's decisions for this port:
   - Settings > Display > Sunlight Fading Fix (`getSettingsList()`), so Silkscreen keeps the row whether or not its touch panel answered, as in CrossPoint.
 
   These routed gates use `deviceHasFrontButtons(gpio)`, which equals the old `!gpio.hasTouch()` on every other board. The gates the port added, the light panel's key entry points (`frontlightPanelFromKeys()`: Light Controls in Settings > Display > Frontlight, in the reader menu and as a shortcut) and the panel's Up/Down warmth keys and key steps, use `boardHasFrontButtons()` (the board profile) instead, so an X4 Pro whose touch panel fails its probe gains none of them.
+
+  Key-route fixes that only Silkscreen needs (held Back discarding a Reading Stats date edit, Right creating a clipping in a dictionary lookup, the OPDS search and Wi-Fi network-list input leaks, the frontlight time picker's labels and 5-minute step) use `boardKeepsKeysBesideTouch()` instead: the board profile's touch + keys flag, which is false on every keys-only board as well, so X3/X4 and the touch-only boards keep their behaviour exactly.
 
   The rest of CrossInk's touch UI is unchanged. The remap screen keeps its touch header. These key hints stay touch-gated on purpose, so with the touch panel fitted Silkscreen does not show them, although the keys work:
   - the side-button hints (`BaseTheme`/`LyraTheme::drawSideButtonHints()`, the keyboard's `>` `<`): their only caller is the keyboard, whose touch layout (56-px keys) starts at about y 430-490 in portrait, under the hints' fixed 345-506 band at the right edge, so they would cover its top-right keys; the key layout without touch starts below them;
