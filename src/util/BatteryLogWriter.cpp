@@ -86,7 +86,7 @@ bool append(const bool orphan, const bool earlierBad) {
   size_t written = 0;
   bool ok = true;
   if (size == 0) ok = putLine(file, bl::formatHeader(lineBuf, sizeof(lineBuf)), written);
-  // After a new file, an orphan row (a new image or a lost record) or a failed attempt, which may have cost the line.
+  // After a new file, an orphan row (a new image or a lost record) or an earlier loss, which may have cost the line.
   if (ok && (size == 0 || orphan || earlierBad)) {
     // The one line that differs from CrossPoint's copy of this file (and the AppVersion.h include): CrossPoint passes
     // its CROSSPOINT_VERSION macro here, but CrossInk's CROSSINK_VERSION reaches BuildInfo.cpp only, so the version
@@ -113,7 +113,9 @@ bool append(const bool orphan, const bool earlierBad) {
 void flush() {
   if (!Storage.ready()) return;
   const bl::Pending pending = bl::pending();
-  const bool earlierBad = bl::sdBadCount() != 0;
+  // A bad attempt, or a row lost since the last one that reached the card (an orphan row that never reached it
+  // included): the "# fw" line may be missing from the file.
+  const bool earlierBad = bl::sdBadCount() != 0 || bl::status().drop != 0;
   const unsigned long startMs = millis();
   const bool ok = append(pending.orphan, earlierBad);
   const uint32_t ms = millis() - startMs;
