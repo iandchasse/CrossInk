@@ -3,6 +3,7 @@
 #include <DNSServer.h>
 #include <ESPmDNS.h>
 #include <GfxRenderer.h>
+#include <HalPowerManager.h>
 #include <I18n.h>
 #include <LibraryBuilder.h>
 #include <Memory.h>
@@ -347,6 +348,9 @@ void CrossPointWebServerActivity::startWebServer() {
 
 bool CrossPointWebServerActivity::checkUploadCancellation() {
   if (leaveRequested) return true;
+  // BAT-01: a multipart upload blocks the loop until it ends, so the low-battery cutoff is polled
+  // here too. The latch makes the next loop pass sleep; the stop is not a user's leave request.
+  if (powerManager.lowBatteryCutoffTripped()) return true;
   // Only poll here while a multipart body blocks the main loop. HalGPIO::update
   // already re-samples pending physical-button debounce; no extra delay needed.
   mappedInput.update();

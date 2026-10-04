@@ -5,6 +5,7 @@
 #include <DateFormatting.h>
 #include <Epub.h>
 #include <FsHelpers.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <I18n.h>
 #include <LibraryBuilder.h>
@@ -242,6 +243,10 @@ void LibraryActivity::drawScanScreen(const char* message) const {
 bool LibraryActivity::scanCancelRequested(void* context) {
   auto* self = static_cast<LibraryActivity*>(context);
   auto& input = self->mappedInput;
+  // BAT-01: the build blocks the main loop for as long as the card takes (a large Library, on a board with
+  // PSRAM), so the low-battery cutoff is polled here as in the web uploads. The latch makes the next loop pass
+  // sleep; it is false on every board without a cutoff.
+  if (powerManager.lowBatteryCutoffTripped()) return true;
   // The build blocks the main loop, so poll here as web uploads do.
   input.update();
   int x = 0;
