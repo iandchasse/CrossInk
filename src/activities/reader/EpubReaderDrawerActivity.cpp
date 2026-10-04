@@ -291,6 +291,23 @@ constexpr int16_t dualSliderHintHeight(const int16_t hintLineHeight, const int16
   return static_cast<int16_t>((hintLineHeight + gap) * (inlineRow ? 1 : 2));
 }
 
+// The Auto Page Turn pane's slider (its value line, track and endpoint labels) with the two key step
+// hint lines under it. buildAutoPageTurnPane() draws the hints only when its body holds this much, and
+// drawerHeight() grows the sheet to hold it when they are on, so both ask the same question.
+int16_t autoPageTurnStepHintsBlockHeight(const int16_t bodyLineHeight, const int16_t smallLineHeight,
+                                         const fui::ThemeTokens& theme) {
+  ReaderSliderRowProps slider;
+  slider.value = slider.minimumLabel = slider.maximumLabel = " ";
+  return static_cast<int16_t>(readerSliderRowHeight(bodyLineHeight, slider) + smallLineHeight * 2 + theme.spaceMd +
+                              theme.spaceSm);
+}
+
+// The Confirm button's band at the foot of the touch Auto Page Turn pane (buildConfirmButton()): the
+// button and the space above and below it.
+int16_t confirmButtonBandHeight(const fui::ThemeTokens& theme) {
+  return static_cast<int16_t>(std::max<int16_t>(theme.minTouchSize, theme.rowHeight) + theme.spaceLg * 2);
+}
+
 template <size_t MaxInteractions>
 void drawDualReaderSliderRows(fui::Screen<MaxInteractions>& screen, const ReaderSliderRowProps& first,
                               const ReaderSliderRowProps& second, const bool showButtonHints) {
@@ -909,6 +926,22 @@ int16_t EpubReaderDrawerActivity::drawerHeight() const {
           std::min<int16_t>(static_cast<int16_t>(drawerHeight + (needed - available)), renderer.getScreenHeight());
     }
   }
+  if (mappedInput.hasTouchHardware() && showsStepHints() && state.pane == ReaderDrawerPane::AutoPageTurn) {
+    // The same for Auto Page Turn: its step hints (buildAutoPageTurnPane()) appear only when the body
+    // above the Confirm button holds the slider and both lines, and in landscape the sheet is about
+    // 100 px short of that. With no hint line in the sheet either, the pane would name no key at all.
+    const auto& theme = app.theme();
+    const int16_t needed =
+        static_cast<int16_t>(theme.headerHeight +
+                             autoPageTurnStepHintsBlockHeight(uiTarget.lineHeight(theme.bodyText.font),
+                                                              uiTarget.lineHeight(theme.smallText.font), theme) +
+                             confirmButtonBandHeight(theme));
+    const int16_t available = static_cast<int16_t>(drawerHeight - grabberBand - sheet.ruleWidth - tabBarHeight);
+    if (needed > available) {
+      drawerHeight =
+          std::min<int16_t>(static_cast<int16_t>(drawerHeight + (needed - available)), renderer.getScreenHeight());
+    }
+  }
   return drawerHeight;
 }
 
@@ -1452,19 +1485,16 @@ void EpubReaderDrawerActivity::buildAutoPageTurnPane(UiApp::ScreenType& screen) 
   slider.decrement = ACTION_STEP;
   slider.increment = ACTION_STEP;
   configureReaderSliderScale(slider, "5s", "120s");
-  const int16_t hintLineHeight = screen.target().lineHeight(screen.theme().smallText.font);
-  const int16_t hintsHeight =
-      static_cast<int16_t>(hintLineHeight * 2 + screen.theme().spaceMd + screen.theme().spaceSm);
+  const int16_t blockHeight =
+      autoPageTurnStepHintsBlockHeight(screen.target().lineHeight(screen.theme().bodyText.font),
+                                       screen.target().lineHeight(screen.theme().smallText.font), screen.theme());
   // A keys-only reader always names the step sizes. A touch unit with keys does too, unless Key hints on
-  // touch screens is off, and only when the room left above the Confirm button holds the slider and both
-  // hint lines: otherwise the pane stays as the touch sheet lays it out.
-  const bool stepHints =
-      buttonDevice || (showsStepHints() && screen.body().height >= readerSliderRowHeight(screen, slider) + hintsHeight);
-  const int16_t top =
-      stepHints
-          ? std::max<int16_t>(0, static_cast<int16_t>(
-                                     (screen.body().height - readerSliderRowHeight(screen, slider) - hintsHeight) / 2))
-          : centeredReaderSliderControlTop(screen, slider);
+  // touch screens is off: drawerHeight() grows the sheet until the room left above the Confirm button
+  // holds the slider and both hint lines, so the test only fails when the screen is too short to grow
+  // it, and then the pane stays as the touch sheet lays it out.
+  const bool stepHints = buttonDevice || (showsStepHints() && screen.body().height >= blockHeight);
+  const int16_t top = stepHints ? std::max<int16_t>(0, static_cast<int16_t>((screen.body().height - blockHeight) / 2))
+                                : centeredReaderSliderControlTop(screen, slider);
   screen.spacer(top);
   drawReaderSliderRow(screen, slider);
   if (stepHints) {
