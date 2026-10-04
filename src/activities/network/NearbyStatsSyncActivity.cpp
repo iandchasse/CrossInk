@@ -78,6 +78,7 @@ void NearbyStatsSyncActivity::setState(const State state) {
 #include <string>
 
 #include "CrossPointSettings.h"
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
 #include "activities/reader/GlobalReadingStats.h"
@@ -705,7 +706,10 @@ void NearbyStatsSyncActivity::render(RenderLock&&) {
       const auto actions = touchActionLayout(renderer);
       const char* actionLabels[] = {tr(STR_NEARBY_STATS_SYNC_BUTTON), tr(STR_CANCEL)};
       TouchActionButtons::draw(renderer, actions, actionLabels, 0, -1, UI_10_FONT_ID);
-    } else {
+    }
+    // touchActionLayout() keeps the touch buttons clear of the hint band (safe area with hints), so
+    // a touch unit with front keys can show the band under them.
+    if (!mappedInput.hasTouch() || shouldDrawKeyHints(gpio)) {
       const auto labels =
           mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), tr(STR_NEARBY_STATS_SYNC_BUTTON), "", "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

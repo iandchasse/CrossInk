@@ -110,10 +110,19 @@ The user's decisions for this port:
 
   Key-route fixes that only Silkscreen needs (held Back discarding a Reading Stats date edit, Right creating a clipping in a dictionary lookup, the OPDS search and Wi-Fi network-list input leaks, the frontlight time picker's labels and 5-minute step) use `boardKeepsKeysBesideTouch()` instead: the board profile's touch + keys flag, which is false on every keys-only board as well, so X3/X4 and the touch-only boards keep their behaviour exactly.
 
-  The rest of CrossInk's touch UI is unchanged. The remap screen keeps its touch header. These key hints stay touch-gated on purpose, so with the touch panel fitted Silkscreen does not show them, although the keys work:
+  **Key hints on touch layouts.** Settings > Display > Key hints on touch screens (`showKeyHintsOnTouch`, on by default; the row and the web setting exist only where a touch panel and the front keys are both fitted) decides whether the touch layouts that otherwise show no key labels draw them. `shouldDrawKeyHints(gpio)` in `include/DeviceCapabilities.h` is the one test: true without a touch panel, false on a touch-only board, the setting on a touch unit with keys. The screens that always drew the band on Silkscreen (Home, Library, Settings, the Nearby menus, KOReader sync's progress choice, ...) are not affected by it. With the setting on, these touch layouts draw their labels:
+  - the hint band under the touch buttons of ClearCache, Nearby stats sync, Nearby position sync, Nearby book transfer (offer, collision and result prompts), the clipping detail, IntervalSelection (Back, Select, `-`, `+`), and the dictionary lookup's alternate-form prompt. Each lays its touch buttons out in `UITheme::getScreenSafeArea(renderer, true, false)`, which already excludes the band in all four orientations, so nothing overlaps it. IntervalSelection used to lay out its touch layout on the full screen, so its safe area now follows the same test (`shouldDrawKeyHints()`) in `render()` and `loop()`;
+  - Calibre's connection-failed screen, which waited for Back with no hint on any board, gets one on a touch unit with keys only;
+  - the reader menu's sheet: one line above its tab bar (`keyHintLineText()`), which is where the key layout's band would sit. `drawerHeight()` grows the sheet by that line, so the list keeps its rows. The Spacing, Margins and Auto Page Turn panes name their keys in the step hints under their sliders instead (`showsStepHints()` follows the setting; Auto Page Turn draws them only when they fit above its Confirm button). The panes Go to % and Go to Page never open on this layout;
+  - the light panel: two lines at the foot of its sheet (`keyHintsShown`), added to `panelBottom` only when the taller panel still fits the screen;
+  - the keyboard: one tip line between the text field and the keys, only when that gap holds it. The keyboard's own band was already drawn.
+
+  Still left out on purpose:
   - the side-button hints (`BaseTheme`/`LyraTheme::drawSideButtonHints()`, the keyboard's `>` `<`): their only caller is the keyboard, whose touch layout (56-px keys) starts at about y 430-490 in portrait, under the hints' fixed 345-506 band at the right edge, so they would cover its top-right keys; the key layout without touch starts below them;
-  - IntervalSelection's front and side step hints and its hint band, which share the room of its touch step buttons;
-  - the keyboard's key tips and hint lines (`hasTouchHardware()`), which share the room of the taller touch keyboard.
+  - IntervalSelection's front and side step hint lines, which share the room of its touch step buttons (its hint band is drawn);
+  - the keyboard's full tip block (`hasTouchHardware()`), which needs more room than the taller touch keyboard leaves.
+
+  On the reader menu's sub-lists the front Left and Right keys, which only switch tabs on the Root pane, step the rows on Silkscreen (`frontKeysStepRows()`, `boardKeepsKeysBesideTouch()`), so the key layout's band can label them Up and Down there, as the edge-button boards do.
 
   `STR_FRONT_BTN_FOLLOW_ORIENTATION` in `getSettingsList()`'s touch erase names no setting in CrossInk; the front-key orientation setting is `frontButtonOrientationAware` under Controls > Front Buttons, which is routed.
 - **Network OTA and the Nearby screens kept**, reworked with battery limits on Silkscreen only ([POWER.md §3.1](POWER.md#31-network-screens-aw-02), CI-06).
@@ -389,8 +398,9 @@ CrossInk keys a few layout and naming choices on device macros. Silkscreen gets 
      - Home in Lyra, Minimal, Dashboard and Cover Grid;
      - Library, File Browser and Settings;
      - Controls, Reader and TTF options;
-     - the keyboard (its bottom row above the hints) and clip selection;
-     - KOReader sync and the Nearby menus.
+     - the keyboard (its bottom row above the hints, and one tip line above the keys) and clip selection;
+     - KOReader sync and the Nearby menus;
+     - with Key hints on touch screens on: ClearCache, the Nearby stats, position and transfer screens, the clipping detail, IntervalSelection (Sleep timeout, Auto Page Turn, line spacing, margins), the dictionary alternate-form prompt and Calibre's connection-failed screen draw the band under their buttons; the reader menu's sheet shows its one-line key hint above the tab bar on every tab and sub-list (and keeps its rows); the light panel shows two lines of key hints. With the setting off, none of these changes, and the layouts are the touch-only ones.
    - Controls > Front Buttons lists Remap (x2), Orientation, Long-press behaviour, Long Back and Long Menu, with no `Unexpected controls menu counts` in the log.
    - Remap shows the live mapping, and Quick Actions lists Long Back and Long Menu.
    - On Minimal and Dashboard home, the front keys act as labelled.

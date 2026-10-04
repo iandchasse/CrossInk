@@ -877,6 +877,13 @@ int16_t EpubReaderDrawerActivity::drawerHeight() const {
                                         readerDrawerListHeightForRows(LANDSCAPE_ROOT_ROWS, rowHeight, gap));
     drawerHeight = std::min<int16_t>(drawerHeight, renderer.getScreenHeight());
   }
+  // The key hint line (touch unit with keys) takes its room from the sheet, not from the list, so the
+  // list keeps the rows it has without the line. The preview above is the reader page and simply ends
+  // that much higher.
+  if (const int16_t hintLine = keyHintLineHeight(); hintLine > 0) {
+    drawerHeight = std::min<int16_t>(static_cast<int16_t>(drawerHeight + hintLine),
+                                     static_cast<int16_t>(renderer.getScreenHeight()));
+  }
   if (mappedInput.hasTouchHardware() && showsStepHints() && readerDrawerSliderPreviewsText(state.pane)) {
     // The touch layout of Spacing and Margins fills its sheet to the pixel. The
     // key step hints under the two sliders (drawDualReaderSliderRows) need their
@@ -947,6 +954,15 @@ void EpubReaderDrawerActivity::buildDrawer(UiApp::ScreenType& screen) {
   // become taller with the row.
   const fui::Rect tabs = buttonDevice ? screen.takeTop(tabBarHeight) : screen.takeBottom(tabBarHeight);
   buildTabBar(screen, tabs, buttonDevice);
+  if (const char* keyHint = keyHintLineText()) {
+    // Above the tab bar, which is where the key layout's hint band would sit: the line and the gap above
+    // it are exactly what keyHintLineHeight() added to the sheet.
+    fui::TextStyle hintStyle = screen.theme().smallText;
+    hintStyle.align = fui::TextAlign::Center;
+    hintStyle.maxLines = 1;
+    const fui::Rect hintRow = screen.takeBottom(screen.target().lineHeight(hintStyle.font), screen.theme().spaceSm);
+    screen.target().text(hintRow, keyHint, hintStyle);
+  }
   samplePreviewBounds = {};
 #if CROSSINK_APP_READER_SAMPLE_PREVIEW
   if (showsSamplePreview()) {
@@ -1095,7 +1111,35 @@ bool EpubReaderDrawerActivity::keyNavigation() const {
   return !mappedInput.hasTouchHardware() || deviceHasFrontButtons(gpio);
 }
 
-bool EpubReaderDrawerActivity::showsStepHints() const { return keyNavigation(); }
+bool EpubReaderDrawerActivity::showsStepHints() const { return keyNavigation() && shouldDrawKeyHints(gpio); }
+
+const char* EpubReaderDrawerActivity::keyHintLineText() const {
+  if (CROSSINK_APP_READER_SAMPLE_PREVIEW || !mappedInput.hasTouchHardware() || !shouldDrawKeyHints(gpio))
+    return nullptr;
+  switch (state.pane) {
+    case ReaderDrawerPane::Root:
+      return tr(STR_DRAWER_KEY_HINT_ROOT);
+    case ReaderDrawerPane::Spacing:
+    case ReaderDrawerPane::Margins:
+    case ReaderDrawerPane::AutoPageTurn:
+      return nullptr;  // The step hints under their sliders name the keys.
+    case ReaderDrawerPane::Percent:
+    case ReaderDrawerPane::StablePage:
+      return nullptr;  // Never opened on a touch unit with keys: its rows use the full-screen selectors.
+    default:
+      return tr(STR_DRAWER_KEY_HINT_LIST);
+  }
+}
+
+bool EpubReaderDrawerActivity::frontKeysStepRows() const {
+  return boardKeepsKeysBesideTouch() && state.pane != ReaderDrawerPane::Root;
+}
+
+int16_t EpubReaderDrawerActivity::keyHintLineHeight() const {
+  if (keyHintLineText() == nullptr) return 0;
+  const auto& theme = app.theme();
+  return static_cast<int16_t>(uiTarget.lineHeight(theme.smallText.font) + theme.spaceSm);
+}
 
 const std::vector<EpubReaderDrawerActivity::RowId>& EpubReaderDrawerActivity::activeRows() const {
   return state.pane == ReaderDrawerPane::Root ? rootRows[static_cast<size_t>(state.tab)] : paneRows;
@@ -1391,17 +1435,22 @@ void EpubReaderDrawerActivity::buildAutoPageTurnPane(UiApp::ScreenType& screen) 
   slider.decrement = ACTION_STEP;
   slider.increment = ACTION_STEP;
   configureReaderSliderScale(slider, "5s", "120s");
-  const int16_t hintLineHeight = buttonDevice ? screen.target().lineHeight(screen.theme().smallText.font) : 0;
+  const int16_t hintLineHeight = screen.target().lineHeight(screen.theme().smallText.font);
   const int16_t hintsHeight =
-      buttonDevice ? static_cast<int16_t>(hintLineHeight * 2 + screen.theme().spaceMd + screen.theme().spaceSm) : 0;
+      static_cast<int16_t>(hintLineHeight * 2 + screen.theme().spaceMd + screen.theme().spaceSm);
+  // A keys-only reader always names the step sizes. A touch unit with keys does too, unless Key hints on
+  // touch screens is off, and only when the room left above the Confirm button holds the slider and both
+  // hint lines: otherwise the pane stays as the touch sheet lays it out.
+  const bool stepHints =
+      buttonDevice || (showsStepHints() && screen.body().height >= readerSliderRowHeight(screen, slider) + hintsHeight);
   const int16_t top =
-      buttonDevice
+      stepHints
           ? std::max<int16_t>(0, static_cast<int16_t>(
                                      (screen.body().height - readerSliderRowHeight(screen, slider) - hintsHeight) / 2))
           : centeredReaderSliderControlTop(screen, slider);
   screen.spacer(top);
   drawReaderSliderRow(screen, slider);
-  if (buttonDevice) {
+  if (stepHints) {
     screen.spacer(screen.theme().spaceMd);
     drawButtonSliderStepHints(screen, 1, 5, "");
   }
@@ -2902,6 +2951,14 @@ void EpubReaderDrawerActivity::loop() {
     buttonNavigator.onRelease({left, left}, [this] { changeTab(adjacentReaderDrawerTab(state.tab, false)); });
     buttonNavigator.onContinuous({right, right}, [this] { changeTab(adjacentReaderDrawerTab(state.tab, true)); });
     buttonNavigator.onContinuous({left, left}, [this] { changeTab(adjacentReaderDrawerTab(state.tab, false)); });
+  } else if (frontKeysStepRows()) {
+    // Left and Right only switch tabs on the Root pane, so in the other lists they did nothing while the
+    // hint band named them. On Silkscreen they step the rows like Up and Down, and the band says "Up" and
+    // "Down" over them (render()), as it does over the front keys of the edge-button boards.
+    buttonNavigator.onRelease({right, right}, [this] { moveSelection(true, false); });
+    buttonNavigator.onRelease({left, left}, [this] { moveSelection(false, false); });
+    buttonNavigator.onContinuous({right, right}, [this] { moveSelection(true, true); });
+    buttonNavigator.onContinuous({left, left}, [this] { moveSelection(false, true); });
   }
   if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
     if (!mappedInput.hasTouchHardware() && state.pane == ReaderDrawerPane::Root && !buttonFocusActive) {
@@ -2991,7 +3048,8 @@ void EpubReaderDrawerActivity::render(RenderLock&&) {
     const bool menuNavigation = state.pane != ReaderDrawerPane::Percent &&
                                 state.pane != ReaderDrawerPane::AutoPageTurn &&
                                 !readerDrawerStepChangesSettings(state.pane);
-    const bool horizontalFront = menuNavigation && !deviceUsesHorizontalSideButtonsForMenus(gpio);
+    const bool horizontalFront =
+        menuNavigation && !frontKeysStepRows() && !deviceUsesHorizontalSideButtonsForMenus(gpio);
     const char* previousLabel = horizontalFront ? tr(STR_DIR_LEFT) : tr(STR_DIR_UP);
     const char* nextLabel = horizontalFront ? tr(STR_DIR_RIGHT) : tr(STR_DIR_DOWN);
     if (state.pane == ReaderDrawerPane::Percent && percentKeypadActive) {

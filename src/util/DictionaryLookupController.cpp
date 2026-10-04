@@ -404,8 +404,10 @@ bool DictionaryLookupController::render() {
       altFormUiReady = false;
       altFormUiApp.render();
       altFormUiReady = true;
-      // Silkscreen: the keys work beside the touch buttons (Confirm Yes, Back No, Right the clipping).
-      if (boardKeepsKeysBesideTouch()) drawKeyHints();
+      // Silkscreen: the keys work beside the touch buttons (Confirm Yes, Back No, Right the clipping),
+      // and the band sits below them: buildAltFormPromptScreen() and the phrase area above both stop
+      // buttonHintsHeight (plus spaceLg) short of the screen's bottom edge.
+      if (boardKeepsKeysBesideTouch() && shouldDrawKeyHints(gpio)) drawKeyHints();
     } else
 #endif
     {

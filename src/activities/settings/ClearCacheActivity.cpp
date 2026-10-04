@@ -7,6 +7,7 @@
 
 #include <algorithm>
 
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "components/TouchActionButtons.h"
 #include "components/TouchHeaderBackButton.h"
@@ -65,7 +66,10 @@ void ClearCacheActivity::render(RenderLock&&) {
       const auto actions = touchActionLayout(renderer);
       const char* labels[] = {tr(STR_CLEAR_BUTTON), tr(STR_CANCEL)};
       TouchActionButtons::draw(renderer, actions, labels, 0, -1, UI_10_FONT_ID);
-    } else {
+    }
+    // The touch buttons above already sit clear of the hint band (touchActionLayout() reserves it
+    // in the safe area), so a touch unit with front keys can show the band under them.
+    if (!mappedInput.hasTouch() || shouldDrawKeyHints(gpio)) {
       const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), tr(STR_CLEAR_BUTTON), "", "");
       GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
     }

@@ -26,6 +26,8 @@ constexpr int KEYBOARD_PANEL_PADDING = 4;
 constexpr int BUTTON_KEY_HEIGHT = 42;
 constexpr int BUTTON_KEYBOARD_HINT_GAP = 4;
 constexpr int SIDE_HINT_CLEARANCE = 6;
+// Space kept above and below the one key tip drawn on the touch layout.
+constexpr int TOUCH_TIP_MARGIN = 4;
 
 int keyboardGap(const ThemeMetrics& metrics) { return std::max(metrics.keyboardKeySpacing, KEYBOARD_MIN_GAP); }
 
@@ -1063,6 +1065,27 @@ void KeyboardEntryActivity::render(RenderLock&&) {
       if (!text.empty()) {
         drawTip(tr(STR_KB_HINT_CLEAR_TEXT), y);
       }
+    }
+  }
+
+  // The taller touch keyboard leaves no room for the key tips above, so a touch unit with front keys
+  // (Silkscreen) gets ONE line between the field and the keys, and only when that gap can hold it
+  // clear of both. It names the key route that is not visible on the keys themselves (the band
+  // below already labels Back, Select, Left and Right).
+  if (mappedInput.hasTouchHardware() && shouldDrawKeyHints(gpio)) {
+    const char* touchTip = nullptr;
+    if (cursorMode) {
+      touchTip = tr(STR_KB_HINT_RETURN_KEYBOARD);
+    } else if (!text.empty()) {
+      touchTip = tr(STR_KB_HINT_EDIT_ENTRY);
+    } else if (inputType == InputType::Url && !urlPanel && !symbols) {
+      touchTip = tr(STR_KB_HINT_SECONDARY_CHAR);
+    } else if (!urlPanel && !symbols) {
+      touchTip = shifted ? tr(STR_KB_HINT_LOWER_SECONDARY) : tr(STR_KB_HINT_UPPER_SECONDARY);
+    }
+    const int gap = kbRect.y - underlineBottom;
+    if (touchTip != nullptr && gap >= tipsLh + 2 * TOUCH_TIP_MARGIN) {
+      drawTip(touchTip, underlineBottom + (gap - tipsLh) / 2);
     }
   }
 

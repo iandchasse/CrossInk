@@ -55,6 +55,7 @@ class FrontlightPanelActivity final : public Activity {
   // Bottom edge of the drop-down (px). Content lays out above it and the
   // handle occupies its final band. Set by render() before the app lays out.
   int panelBottom = 0;
+  bool keyHintsShown = false;
   freeink::ui::Rect drawerHandleRect{};
   std::vector<std::string> readerTitleLines;
 
@@ -80,6 +81,14 @@ class FrontlightPanelActivity final : public Activity {
   // sliders + toggle). Same layout math as buildPanelScreen so the frame,
   // content margin, and dismiss threshold all agree.
   int computePanelBottom() const;
+  // Two lines of key hints at the end of the content, for Silkscreen (its profile, with or
+  // without a working touch panel) unless Settings > Display > Key hints on touch screens is
+  // off. The reader-details panel has no key controls. render() adds keyHintsHeight() to
+  // panelBottom and sets keyHintsShown only when the taller panel still fits the screen;
+  // buildPanelScreen() draws them from that flag, so the frame and the content agree.
+  bool showsKeyHints() const;
+  int16_t keyHintsHeight(const freeink::ui::ThemeTokens& tokens) const;
+  void drawKeyHints(UiApp::ScreenType& screen) const;
   void prepareReaderDetailsLayout();
   void drawReaderDetails(freeink::ui::Screen<20>& screen);
   void adjustBrightness(int delta);

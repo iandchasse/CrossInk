@@ -495,6 +495,27 @@ void FrontlightPanelActivity::loop() {
   }
 }
 
+bool FrontlightPanelActivity::showsKeyHints() const {
+  return !context.showReaderDetails && boardKeepsKeysBesideTouch() && shouldDrawKeyHints(gpio);
+}
+
+int16_t FrontlightPanelActivity::keyHintsHeight(const fui::ThemeTokens& tokens) const {
+  return static_cast<int16_t>(uiTarget.lineHeight(tokens.smallText.font) * 2);
+}
+
+void FrontlightPanelActivity::drawKeyHints(UiApp::ScreenType& screen) const {
+  const auto& theme = screen.theme();
+  fui::TextStyle hint = theme.smallText;
+  hint.align = fui::TextAlign::Center;
+  hint.maxLines = 1;
+  const int16_t lineHeight = screen.target().lineHeight(hint.font);
+  // Up and Down set the warmth only on a light with a colour to set: a single string leaves it pinned.
+  const bool warmthKeys = Frontlight.hasColorTemperature() && boardHasFrontButtons() && !warmthLocked();
+  screen.target().text(screen.takeTop(lineHeight),
+                       warmthKeys ? tr(STR_PANEL_KEY_HINT_BRIGHTNESS_WARMTH) : tr(STR_PANEL_KEY_HINT_BRIGHTNESS), hint);
+  screen.target().text(screen.takeTop(lineHeight), tr(STR_PANEL_KEY_HINT_LIGHT), hint);
+}
+
 bool FrontlightPanelActivity::showsActionBar() const {
   return showsFrontlightActionBar(boardHasFrontButtons(), mappedInput.hasTouchHardware());
 }
@@ -694,6 +715,8 @@ void FrontlightPanelActivity::buildPanelScreen(UiApp::ScreenType& screen) {
 #endif
   }
 
+  if (keyHintsShown) drawKeyHints(screen);
+
   screen.spacer(theme.spaceLg);
 }
 
@@ -795,6 +818,14 @@ void FrontlightPanelActivity::render(RenderLock&&) {
   // over) intact below the panel; only the top third is repainted. No full
   // clearScreen — same as the theme popups draw over the current frame.
   panelBottom = computePanelBottom();
+  keyHintsShown = false;
+  if (showsKeyHints()) {
+    const int withHints = panelBottom + keyHintsHeight(uiThemeTokens(uiTarget));
+    if (withHints <= renderer.getScreenHeight()) {
+      panelBottom = withHints;
+      keyHintsShown = true;
+    }
+  }
   uiReady = false;
   app.render();
   uiReady = true;

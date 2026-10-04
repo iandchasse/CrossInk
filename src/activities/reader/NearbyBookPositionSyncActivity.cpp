@@ -461,6 +461,7 @@ void NearbyBookPositionSyncActivity::renderComparison() const {
 #include <string>
 
 #include "CrossPointSettings.h"
+#include "DeviceCapabilities.h"
 #include "Epub/Section.h"
 #include "EpubReaderUtils.h"
 #include "KOReaderCredentialStore.h"
@@ -1357,7 +1358,10 @@ void NearbyBookPositionSyncActivity::render(RenderLock&&) {
     if (mappedInput.hasTouch()) {
       drawTouchActionButtons(renderer, screen, metrics, tr(STR_NEARBY_POSITION_SHARE_BUTTON),
                              state_ == State::SYNCED && sourceMode_);
-    } else {
+    }
+    // The touch buttons sit at the bottom of `screen`, the safe area that already excludes the hint
+    // band, so a touch unit with front keys can show the band under them.
+    if (!mappedInput.hasTouch() || shouldDrawKeyHints(gpio)) {
       const auto labels = state_ == State::SYNCED && sourceMode_
                               ? mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), "", "", "")
                               : mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)),
@@ -1449,9 +1453,11 @@ void NearbyBookPositionSyncActivity::renderComparison() const {
   renderer.drawText(UI_10_FONT_ID, screen.x + metrics.contentSidePadding, optionY, tr(STR_APPLY_NEARBY_POSITION),
                     false);
 
-  if (mappedInput.hasTouch() && !sourceMode_) {
+  const bool touchButtons = mappedInput.hasTouch() && !sourceMode_;
+  if (touchButtons) {
     drawTouchActionButtons(renderer, screen, metrics, tr(STR_CONFIRM));
-  } else {
+  }
+  if (!touchButtons || shouldDrawKeyHints(gpio)) {
     const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), tr(STR_SELECT), "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, true);
   }

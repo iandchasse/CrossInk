@@ -237,9 +237,21 @@ class EpubReaderDrawerActivity final : public Activity {
   // touch reader whose keys sit beside the panel (Silkscreen). Touch-only boards
   // keep the touch-only menu.
   bool keyNavigation() const;
-  // The Spacing and Margins panes name the keys' step sizes under their sliders.
-  // A separate query so the hints can be hidden without switching the keys off.
+  // The Spacing, Margins and Auto Page Turn panes name the keys' step sizes under their sliders.
+  // A separate query so the hints can be hidden without switching the keys off: on a touch unit
+  // with keys it follows Settings > Display > Key hints on touch screens.
   bool showsStepHints() const;
+  // The touch sheet's tab bar sits where the key layout draws its hint band, so a touch unit with
+  // keys that shows key hints gets one line of them inside the sheet, above the tab bar. Null for
+  // the panes that name their keys elsewhere (the sliders' step hints) and for every other board.
+  const char* keyHintLineText() const;
+  // On Silkscreen (touch with keys, or the same board without its touch panel) the front Left and
+  // Right keys step the rows of the sub-lists, where they used to do nothing: they only switch tabs
+  // on the Root pane. Every other board keeps them inert there.
+  bool frontKeysStepRows() const;
+  // Height the line takes from the sheet (its text line and the gap above it), or 0 without one.
+  // drawerHeight() grows the sheet by the same amount, so the list keeps its rows.
+  int16_t keyHintLineHeight() const;
   const std::vector<RowId>& activeRows() const;
   int activeTopIndex() const;
   void activateRow(RowId row);

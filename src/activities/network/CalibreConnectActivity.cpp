@@ -7,6 +7,7 @@
 #include <WiFi.h>
 #include <esp_task_wdt.h>
 
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "SdCardFontSystem.h"
 #include "SilentRestart.h"
@@ -197,6 +198,13 @@ void CalibreConnectActivity::render(RenderLock&&) {
     renderer.drawCenteredText(UI_12_FONT_ID, top, tr(STR_CALIBRE_STARTING));
   } else if (state == CalibreConnectState::ERROR) {
     renderer.drawCenteredText(UI_12_FONT_ID, top, tr(STR_CONNECTION_FAILED), true, EpdFontFamily::BOLD);
+    // This state waits for Back and showed no hint on any board. A touch unit with front keys (Silkscreen)
+    // gets one; every other board keeps the bare screen. The line above is centred on the screen, well
+    // clear of the 40 px band along the bottom edge.
+    if (mappedInput.hasTouchHardware() && shouldDrawKeyHints(gpio)) {
+      const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_EXIT)), "", "", "");
+      GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+    }
   } else if (state == CalibreConnectState::SERVER_RUNNING) {
     const int subHeaderTop = CompactHeader::contentTop(metrics);
     GUI.drawSubHeader(renderer, Rect{0, subHeaderTop, pageWidth, metrics.tabBarHeight}, connectedSSID.c_str());

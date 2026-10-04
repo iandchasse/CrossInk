@@ -969,7 +969,10 @@ void NearbyBookTransferActivity::render(RenderLock&&) {
     const auto actions = touchActionLayout(safeArea, actionCount);
     const char* actionLabels[] = {confirm, hasBack ? back : nullptr};
     TouchActionButtons::draw(renderer, actions, actionLabels, 0, -1, UI_10_FONT_ID);
-  } else {
+  }
+  // The touch buttons above are laid out in the safe area, which already excludes the hint band, so a
+  // touch unit with front keys can show the band under them.
+  if (!(showTouchCollisionActions || showTouchActions) || shouldDrawKeyHints(gpio)) {
     const auto labels = mappedInput.mapLabels(back, confirm, showNavigation ? tr(STR_DIR_UP) : "",
                                               showNavigation ? tr(STR_DIR_DOWN) : "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);

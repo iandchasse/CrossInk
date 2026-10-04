@@ -430,7 +430,10 @@ void IntervalSelectionActivity::loop() {
 
   int tx = 0;
   int ty = 0;
-  const Rect touchScreen = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouchHardware(), false);
+  // The band is reserved when this screen draws it: always without touch, never on a touch-only board,
+  // and on a touch unit with front keys (Silkscreen) unless Key hints on touch screens is off. render()
+  // lays out the same screen, so what is drawn and what is hit-tested agree.
+  const Rect touchScreen = UITheme::getInstance().getScreenSafeArea(renderer, shouldDrawKeyHints(gpio), false);
 #if CROSSINK_APP_CAP_TOUCH
   const int screenWidth = renderer.getScreenWidth();
   const int barWidth = std::min(360, std::max(0, screenWidth - 40));
@@ -570,8 +573,15 @@ void IntervalSelectionActivity::render(RenderLock&&) {
 
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int screenWidth = renderer.getScreenWidth();
-  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouchHardware(), false);
+  const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, shouldDrawKeyHints(gpio), false);
   const Rect touchScreen = safe;
+  // On touch, only the band: the front and side step hint lines below share the room of the touch step
+  // controls and stay out of the touch layouts on purpose (docs/silkscreen/PORTING.md).
+  const auto drawTouchLayoutKeyHints = [this] {
+    if (!shouldDrawKeyHints(gpio)) return;
+    const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), tr(STR_SELECT), "-", "+");
+    GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4, readerActivity);
+  };
 
 #if CROSSINK_APP_CAP_TOUCH
   if (usesReaderSlider()) {
@@ -585,6 +595,7 @@ void IntervalSelectionActivity::render(RenderLock&&) {
     const auto actions = touchActionLayout(touchScreen);
     const char* labels[] = {tr(STR_CONFIRM), tr(STR_CANCEL)};
     TouchActionButtons::draw(renderer, actions, labels, 0, -1, UI_10_FONT_ID);
+    drawTouchLayoutKeyHints();
     renderer.displayBuffer();
     return;
   }
@@ -675,6 +686,7 @@ void IntervalSelectionActivity::render(RenderLock&&) {
     const auto actions = touchActionLayout(touchScreen);
     const char* labels[] = {tr(STR_CONFIRM), tr(STR_CANCEL)};
     TouchActionButtons::draw(renderer, actions, labels, 0, -1, UI_10_FONT_ID);
+    drawTouchLayoutKeyHints();
   } else {
     // Two-line step hint: front buttons do the small step, side buttons the large step. Built from
     // separate label + value strings (rather than splitting one localized sentence) so the layout

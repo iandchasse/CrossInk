@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <cstdio>
 
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "ReaderUtils.h"
 #include "activities/ActivityResult.h"
@@ -604,7 +605,9 @@ void EpubReaderClippingListActivity::renderDetail() {
         openButton.x + (openButton.width - renderer.getTextWidth(UI_10_FONT_ID, label, EpdFontFamily::BOLD)) / 2;
     const int labelY = openButton.y + (openButton.height - renderer.getLineHeight(UI_10_FONT_ID)) / 2;
     renderer.drawText(UI_10_FONT_ID, labelX, labelY, label, true, EpdFontFamily::BOLD);
-    return;
+    // The Open button sits inside `safe`, which already excludes the hint band, so a touch unit
+    // with front keys can show the band under it.
+    if (!shouldDrawKeyHints(gpio)) return;
   }
 #endif
 
