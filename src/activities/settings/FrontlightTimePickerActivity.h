@@ -38,6 +38,7 @@ class FrontlightTimePickerActivity final : public Activity {
   uint8_t numericEntryDigits = 0;
 
   void adjustActiveField(int delta);
+  void adjustActiveFieldHeld(int direction);
   void selectNextField(int delta);
   void complete();
   bool selectFieldAt(int x, int y, bool togglePeriod);

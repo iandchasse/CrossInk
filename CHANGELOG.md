@@ -52,6 +52,7 @@
 - Silkscreen: in a dictionary lookup from a book, the Right button creates a clipping from the selected words, on the definition and on the "not found" and alternate-form prompts, where only a touchscreen button did. Its hint is "Clip".
 - Silkscreen: pressing Left on the first row of an OPDS catalogue to search no longer also moves the selection to the last row, which was where the list stood after the search.
 - Silkscreen: pressing Confirm to see the network list while the Wi-Fi screen is connecting to a saved network no longer connects to the first network on the list when the button is released.
+- Silkscreen: the front light schedule's time picker labels its Left and Right buttons "Prev Field" and "Next Field" instead of "Up" and "Down", says under the fields that Up and Down change the value, and holding Up or Down steps the minutes by 5. Holding Left or Right no longer also changes the value.
 
 ## [v1.6.1] - 2026-09-30
 

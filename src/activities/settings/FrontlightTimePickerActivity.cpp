@@ -9,6 +9,7 @@
 #include <cstdio>
 #include <utility>
 
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
@@ -115,6 +116,22 @@ void FrontlightTimePickerActivity::adjustActiveField(const int delta) {
       break;
     case Field::Count:
       break;
+  }
+}
+
+// A held Up or Down. Silkscreen steps the minutes to the next multiple of 5, so any time is a few seconds away;
+// the hours, AM/PM and every other board keep the single step.
+void FrontlightTimePickerActivity::adjustActiveFieldHeld(const int direction) {
+  if (!boardKeepsKeysBesideTouch() || activeField != Field::Minute) {
+    adjustActiveField(direction);
+    return;
+  }
+  clearNumericEntry();
+  const int current = minute;
+  if (direction > 0) {
+    minute = static_cast<uint8_t>((current / 5 + 1) * 5 % 60);
+  } else {
+    minute = static_cast<uint8_t>(current % 5 == 0 ? (current + 55) % 60 : current / 5 * 5);
   }
 }
 
@@ -260,14 +277,23 @@ void FrontlightTimePickerActivity::loop() {
     adjustActiveField(-1);
     requestUpdate();
   });
-  buttonNavigator.onNextContinuous([this] {
-    adjustActiveField(+1);
+  const auto holdNext = [this] {
+    adjustActiveFieldHeld(+1);
     requestUpdate();
-  });
-  buttonNavigator.onPreviousContinuous([this] {
-    adjustActiveField(-1);
+  };
+  const auto holdPrevious = [this] {
+    adjustActiveFieldHeld(-1);
     requestUpdate();
-  });
+  };
+  if (boardKeepsKeysBesideTouch()) {
+    // The front Left and Right pick the field, so only the side keys repeat the change. Held, Right would
+    // otherwise also step the value, and then move to the next field on its release.
+    buttonNavigator.onContinuous({MappedInputManager::Button::Down}, holdNext);
+    buttonNavigator.onContinuous({MappedInputManager::Button::Up}, holdPrevious);
+  } else {
+    buttonNavigator.onNextContinuous(holdNext);
+    buttonNavigator.onPreviousContinuous(holdPrevious);
+  }
 }
 
 void FrontlightTimePickerActivity::render(RenderLock&&) {
@@ -353,8 +379,15 @@ void FrontlightTimePickerActivity::render(RenderLock&&) {
     keyboardInteractionsReady.store(true, std::memory_order_release);
   }
 
-  const auto labels =
-      mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), tr(STR_SELECT), tr(STR_DIR_UP), tr(STR_DIR_DOWN));
+  // The front Left and Right pick the field and the side Up and Down change it, so Silkscreen names what the
+  // front keys do (the hint slots are theirs) and says what the side keys do under the fields.
+  const bool namesFieldKeys = boardKeepsKeysBesideTouch();
+  if (namesFieldKeys) {
+    renderer.drawCenteredText(SMALL_FONT_ID, layout.hourRect.y + kFieldHeight + 24, tr(STR_TIME_PICKER_KEYS_HINT));
+  }
+  const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), tr(STR_SELECT),
+                                            namesFieldKeys ? tr(STR_TIME_FIELD_PREV) : tr(STR_DIR_UP),
+                                            namesFieldKeys ? tr(STR_TIME_FIELD_NEXT) : tr(STR_DIR_DOWN));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer();
 }
