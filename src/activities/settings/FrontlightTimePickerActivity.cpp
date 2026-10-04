@@ -383,7 +383,13 @@ void FrontlightTimePickerActivity::render(RenderLock&&) {
   // front keys do (the hint slots are theirs) and says what the side keys do under the fields.
   const bool namesFieldKeys = boardKeepsKeysBesideTouch();
   if (namesFieldKeys) {
-    renderer.drawCenteredText(SMALL_FONT_ID, layout.hourRect.y + kFieldHeight + 24, tr(STR_TIME_PICKER_KEYS_HINT));
+    // The tip sits 24 px under the fields, but never over the touch keypad: landscape starts the keypad about
+    // 26 px under them (800x480: fields end at 167, keypad at 193), so the tip moves up to end just above it
+    // and is left out when even that does not clear the fields.
+    const int fieldBottom = layout.hourRect.y + kFieldHeight;
+    const int limit = mappedInput.hasTouch() ? keyboardRect(renderer).y : renderer.getScreenHeight();
+    const int tipY = std::min(fieldBottom + 24, limit - renderer.getLineHeight(SMALL_FONT_ID) - 3);
+    if (tipY >= fieldBottom + 2) renderer.drawCenteredText(SMALL_FONT_ID, tipY, tr(STR_TIME_PICKER_KEYS_HINT));
   }
   const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), tr(STR_SELECT),
                                             namesFieldKeys ? tr(STR_TIME_FIELD_PREV) : tr(STR_DIR_UP),
