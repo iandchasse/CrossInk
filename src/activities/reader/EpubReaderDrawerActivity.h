@@ -249,7 +249,11 @@ class EpubReaderDrawerActivity final : public Activity {
   // Right keys step the rows of the sub-lists, where they used to do nothing: they only switch tabs
   // on the Root pane. Every other board keeps them inert there.
   bool frontKeysStepRows() const;
-  // Height the line takes from the sheet (its text line and the gap above it), or 0 without one.
+  // Lines the key hint takes: one, or two (it wraps at a space) when its text is wider than the
+  // sheet's width at the UI scale in use. The Root line is about 560 px at the default scale and
+  // 670 px at Large, against 474 px on a portrait panel, so it cannot stay a fixed single line.
+  int keyHintLineCount(const char* text) const;
+  // Height the line takes from the sheet (its text lines and the gap above them), or 0 without one.
   // drawerHeight() grows the sheet by the same amount, so the list keeps its rows.
   int16_t keyHintLineHeight() const;
   const std::vector<RowId>& activeRows() const;

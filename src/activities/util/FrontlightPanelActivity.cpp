@@ -499,21 +499,41 @@ bool FrontlightPanelActivity::showsKeyHints() const {
   return !context.showReaderDetails && boardKeepsKeysBesideTouch() && shouldDrawKeyHints(gpio);
 }
 
+const char* FrontlightPanelActivity::keyHintBrightnessText() const {
+  // Up and Down set the warmth only on a light with a colour to set: a single string leaves it pinned.
+  const bool warmthKeys = Frontlight.hasColorTemperature() && boardHasFrontButtons() && !warmthLocked();
+  return warmthKeys ? tr(STR_PANEL_KEY_HINT_BRIGHTNESS_WARMTH) : tr(STR_PANEL_KEY_HINT_BRIGHTNESS);
+}
+
+int FrontlightPanelActivity::keyHintLineCount(const fui::ThemeTokens& tokens, const char* text) const {
+  // The content spans the screen less the viewable margins (buildPanelScreen() adds no side margin).
+  int top = 0;
+  int right = 0;
+  int bottom = 0;
+  int left = 0;
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  const int16_t width = static_cast<int16_t>(renderer.getScreenWidth() - left - right);
+  return uiTarget.measureText(tokens.smallText.font, text, tokens.smallText).width <= width ? 1 : 2;
+}
+
 int16_t FrontlightPanelActivity::keyHintsHeight(const fui::ThemeTokens& tokens) const {
-  return static_cast<int16_t>(uiTarget.lineHeight(tokens.smallText.font) * 2);
+  const int lines =
+      keyHintLineCount(tokens, keyHintBrightnessText()) + keyHintLineCount(tokens, tr(STR_PANEL_KEY_HINT_LIGHT));
+  return static_cast<int16_t>(uiTarget.lineHeight(tokens.smallText.font) * lines);
 }
 
 void FrontlightPanelActivity::drawKeyHints(UiApp::ScreenType& screen) const {
   const auto& theme = screen.theme();
   fui::TextStyle hint = theme.smallText;
   hint.align = fui::TextAlign::Center;
-  hint.maxLines = 1;
   const int16_t lineHeight = screen.target().lineHeight(hint.font);
-  // Up and Down set the warmth only on a light with a colour to set: a single string leaves it pinned.
-  const bool warmthKeys = Frontlight.hasColorTemperature() && boardHasFrontButtons() && !warmthLocked();
-  screen.target().text(screen.takeTop(lineHeight),
-                       warmthKeys ? tr(STR_PANEL_KEY_HINT_BRIGHTNESS_WARMTH) : tr(STR_PANEL_KEY_HINT_BRIGHTNESS), hint);
-  screen.target().text(screen.takeTop(lineHeight), tr(STR_PANEL_KEY_HINT_LIGHT), hint);
+  // A text wider than the panel wraps onto a second line (keyHintsHeight() reserved it) instead of
+  // losing its tail to an ellipsis.
+  for (const char* text : {keyHintBrightnessText(), tr(STR_PANEL_KEY_HINT_LIGHT)}) {
+    const int lines = keyHintLineCount(theme, text);
+    hint.maxLines = static_cast<uint8_t>(lines);
+    screen.target().text(screen.takeTop(static_cast<int16_t>(lineHeight * lines)), text, hint);
+  }
 }
 
 bool FrontlightPanelActivity::showsActionBar() const {

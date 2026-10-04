@@ -955,12 +955,15 @@ void EpubReaderDrawerActivity::buildDrawer(UiApp::ScreenType& screen) {
   const fui::Rect tabs = buttonDevice ? screen.takeTop(tabBarHeight) : screen.takeBottom(tabBarHeight);
   buildTabBar(screen, tabs, buttonDevice);
   if (const char* keyHint = keyHintLineText()) {
-    // Above the tab bar, which is where the key layout's hint band would sit: the line and the gap above
-    // it are exactly what keyHintLineHeight() added to the sheet.
+    // Above the tab bar, which is where the key layout's hint band would sit: the lines and the gap above
+    // them are exactly what keyHintLineHeight() added to the sheet. A text wider than the sheet wraps
+    // onto a second line instead of losing its tail (Back) to an ellipsis.
+    const int hintLines = keyHintLineCount(keyHint);
     fui::TextStyle hintStyle = screen.theme().smallText;
     hintStyle.align = fui::TextAlign::Center;
-    hintStyle.maxLines = 1;
-    const fui::Rect hintRow = screen.takeBottom(screen.target().lineHeight(hintStyle.font), screen.theme().spaceSm);
+    hintStyle.maxLines = static_cast<uint8_t>(hintLines);
+    const fui::Rect hintRow = screen.takeBottom(
+        static_cast<int16_t>(screen.target().lineHeight(hintStyle.font) * hintLines), screen.theme().spaceSm);
     screen.target().text(hintRow, keyHint, hintStyle);
   }
   samplePreviewBounds = {};
@@ -1135,10 +1138,24 @@ bool EpubReaderDrawerActivity::frontKeysStepRows() const {
   return boardKeepsKeysBesideTouch() && state.pane != ReaderDrawerPane::Root;
 }
 
+int EpubReaderDrawerActivity::keyHintLineCount(const char* text) const {
+  // buildDrawer() takes the line before it insets the content, so its width is the screen's less the
+  // viewable margins (the safe area the sheet's content starts from).
+  int top = 0;
+  int right = 0;
+  int bottom = 0;
+  int left = 0;
+  renderer.getOrientedViewableTRBL(&top, &right, &bottom, &left);
+  const int16_t width = static_cast<int16_t>(renderer.getScreenWidth() - left - right);
+  const fui::TextStyle style = app.theme().smallText;
+  return uiTarget.measureText(style.font, text, style).width <= width ? 1 : 2;
+}
+
 int16_t EpubReaderDrawerActivity::keyHintLineHeight() const {
-  if (keyHintLineText() == nullptr) return 0;
+  const char* text = keyHintLineText();
+  if (text == nullptr) return 0;
   const auto& theme = app.theme();
-  return static_cast<int16_t>(uiTarget.lineHeight(theme.smallText.font) + theme.spaceSm);
+  return static_cast<int16_t>(uiTarget.lineHeight(theme.smallText.font) * keyHintLineCount(text) + theme.spaceSm);
 }
 
 const std::vector<EpubReaderDrawerActivity::RowId>& EpubReaderDrawerActivity::activeRows() const {

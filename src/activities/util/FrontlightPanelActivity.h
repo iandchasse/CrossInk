@@ -87,6 +87,11 @@ class FrontlightPanelActivity final : public Activity {
   // panelBottom and sets keyHintsShown only when the taller panel still fits the screen;
   // buildPanelScreen() draws them from that flag, so the frame and the content agree.
   bool showsKeyHints() const;
+  // The brightness hint, with the warmth keys only where the light has a colour to set.
+  const char* keyHintBrightnessText() const;
+  // One line, or two when the text is wider than the panel at the UI scale in use (it wraps). The
+  // brightness and warmth hint is about 481 px at the Large scale, over a 480 px panel.
+  int keyHintLineCount(const freeink::ui::ThemeTokens& tokens, const char* text) const;
   int16_t keyHintsHeight(const freeink::ui::ThemeTokens& tokens) const;
   void drawKeyHints(UiApp::ScreenType& screen) const;
   void prepareReaderDetailsLayout();
