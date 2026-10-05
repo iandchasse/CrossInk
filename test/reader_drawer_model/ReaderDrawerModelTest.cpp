@@ -336,6 +336,15 @@ TEST(ReaderDrawerModel, DirtyPreviewCanReplaceAStaleExternalBackdrop) {
   EXPECT_TRUE(readerDrawerNeedsExternalBackdrop(true, false, false));
 }
 
+TEST(ReaderDrawerModel, FullScreenMenuOnKeysOnlyBuildsAndOnASilkscreenWithoutItsTouchPanel) {
+  // Arguments: sample-preview (keys-only) build, touch panel answered, board keeps its keys beside touch.
+  EXPECT_TRUE(readerDrawerUsesFullScreen(true, false, false));    // X3, X4, X4 Classic
+  EXPECT_TRUE(readerDrawerUsesFullScreen(false, false, true));    // Silkscreen without its touch tail
+  EXPECT_FALSE(readerDrawerUsesFullScreen(false, true, true));    // Silkscreen with its touch tail
+  EXPECT_FALSE(readerDrawerUsesFullScreen(false, true, false));   // Sticky, X4 Pro
+  EXPECT_FALSE(readerDrawerUsesFullScreen(false, false, false));  // a touch-only board whose probe failed
+}
+
 TEST(PendingOverlayResume, ConsumptionIsOneShot) {
   PendingOverlayResume stored;
   stored.origin = PendingOverlayOrigin::Reader;

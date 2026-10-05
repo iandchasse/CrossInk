@@ -878,8 +878,17 @@ void EpubReaderDrawerActivity::drawerScreen(UiApp::ScreenType& screen, void* use
   static_cast<EpubReaderDrawerActivity*>(user)->buildDrawer(screen);
 }
 
+bool EpubReaderDrawerActivity::useFullScreenMenu() const {
+  return readerDrawerUsesFullScreen(CROSSINK_APP_READER_SAMPLE_PREVIEW, mappedInput.hasTouchHardware(),
+                                    boardKeepsKeysBesideTouch());
+}
+
+bool EpubReaderDrawerActivity::fullScreenMenuWithoutPreview() const {
+  return !CROSSINK_APP_READER_SAMPLE_PREVIEW && useFullScreenMenu();
+}
+
 int16_t EpubReaderDrawerActivity::drawerHeight() const {
-  if (CROSSINK_APP_READER_SAMPLE_PREVIEW) return renderer.getScreenHeight();
+  if (useFullScreenMenu()) return renderer.getScreenHeight();
   fui::SheetProps sheet;
   sheet.ruleWidth = DRAWER_RULE_WIDTH;
   const int16_t grabberBand = DrawerHandle::bandHeight(sheet);
@@ -964,7 +973,7 @@ void EpubReaderDrawerActivity::buildDrawer(UiApp::ScreenType& screen) {
   sheet.radius = 0;
   sheet.ruleWidth = DRAWER_RULE_WIDTH;
   const int16_t tabBarHeight = static_cast<int16_t>(TAB_BAR_HEIGHT + TAB_BAR_VERTICAL_PADDING * 2);
-  if (CROSSINK_APP_READER_SAMPLE_PREVIEW) {
+  if (useFullScreenMenu()) {
     screen.target().fill(screen.device().screen(), fui::Paint::solid(fui::Color::White));
     const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
     screen.setContentMarginFromScreen(fui::Insets{
@@ -1584,7 +1593,7 @@ void EpubReaderDrawerActivity::buildFontFamilyPane(UiApp::ScreenType& screen) {
   const int top = std::clamp<int>(state.paneTopIndex, 0, std::max(0, total - visibleRows));
   state.paneTopIndex = static_cast<int16_t>(top);
   const int drawCount = std::min<int>({visibleRows, WINDOW_SIZE, total - top});
-  if (!CROSSINK_APP_READER_SAMPLE_PREVIEW) evenlySpaceDrawerListRows(props, listBounds, drawCount);
+  if (!useFullScreenMenu()) evenlySpaceDrawerListRows(props, listBounds, drawCount);
   const int selectedFontIndex = currentFontSelectionIndex();
   for (int i = 0; i < drawCount; ++i) {
     itemWindow[static_cast<size_t>(i)] = fui::ListItem{};
@@ -1612,9 +1621,8 @@ void EpubReaderDrawerActivity::buildEnumOptionsPane(UiApp::ScreenType& screen) {
   const int top = std::clamp<int>(state.paneTopIndex, 0, std::max(0, total - visibleRows));
   state.paneTopIndex = static_cast<int16_t>(top);
   const int drawCount = std::min<int>({visibleRows, WINDOW_SIZE, total - top});
-  if (!CROSSINK_APP_READER_SAMPLE_PREVIEW &&
-      (enumOptionRow == RowId::FontSize || enumOptionRow == RowId::DictionaryFontFamily ||
-       enumOptionRow == RowId::DictionaryFontSize)) {
+  if (!useFullScreenMenu() && (enumOptionRow == RowId::FontSize || enumOptionRow == RowId::DictionaryFontFamily ||
+                               enumOptionRow == RowId::DictionaryFontSize)) {
     evenlySpaceDrawerListRows(props, listBounds, drawCount);
   }
   const int selectedIndex = previewedEnumOptionIndex >= 0 ? previewedEnumOptionIndex : enumOptionSelectedIndex;
@@ -1872,7 +1880,8 @@ void EpubReaderDrawerActivity::activateRow(const RowId row) {
       // The sheet's Percent pane has no key route on a touch unit with keys, and
       // Confirm there would jump to the position the pane opened with. The
       // full-screen selector takes taps and keys both. A keys-only reader keeps
-      // its own Percent pane.
+      // its own Percent pane, which on Silkscreen without its touch tail has the
+      // full-screen menu's room (useFullScreenMenu()) for the slider and the keypad.
       if (mappedInput.hasTouchHardware() && deviceHasFrontButtons(gpio)) {
         closeAndReturn(false, EpubReaderMenuAction::GO_TO_PERCENT, true);
         return;
@@ -2727,6 +2736,8 @@ void EpubReaderDrawerActivity::renderPreviewUnavailable() {
 bool EpubReaderDrawerActivity::renderPreview(int& previewFontId,
                                              std::optional<FontCacheManager::PrewarmScope>& prewarmScope) {
   previewFontId = -1;
+  // This menu has no preview model and shows none: the pass below would only paint "Preview unavailable".
+  if (fullScreenMenuWithoutPreview()) return false;
 #if CROSSINK_APP_READER_SAMPLE_PREVIEW
   if (!showsSamplePreview()) return false;
 #endif

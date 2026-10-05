@@ -70,12 +70,9 @@ class EpubReaderDrawerActivity final : public Activity {
   // A dirty preview can rebuild the page area itself; after a TTF ID change,
   // an unavailable text snapshot is replaced with a safe blank background.
   bool requiresFreshBackdrop() const override {
-#if CROSSINK_APP_READER_SAMPLE_PREVIEW
-    return false;  // The full-screen menu paints every pixel itself.
-#else
+    if (useFullScreenMenu()) return false;  // The full-screen menu paints every pixel itself.
     return readerDrawerNeedsExternalBackdrop(previewDirty, previewModel && previewModel->valid(),
                                              previewFontMetricsChanged);
-#endif
   }
   bool allowPowerAsConfirmInReaderMode() const override { return true; }
   bool allowGlobalHomeGesture() const override { return true; }
@@ -211,6 +208,15 @@ class EpubReaderDrawerActivity final : public Activity {
 
   void buildDrawer(UiApp::ScreenType& screen);
   void drawButtonBookHeader();
+  // The menu paints the whole screen, with no half-height sheet over the reader: always on a keys-only
+  // build (its sample preview), and on the touch build for a board that keeps its keys beside the touch
+  // panel when the panel is absent (Silkscreen without its touch tail). Every other touch board keeps the
+  // sheet, whether or not its touch probe answers.
+  bool useFullScreenMenu() const;
+  // The touch build's full-screen menu has no preview of any kind: the page snapshot it would show is
+  // taken only for touch hardware, and the sample preview is compiled out of the touch image. Its panes
+  // get the room the preview takes on a keys-only build, and it never draws "Preview unavailable".
+  bool fullScreenMenuWithoutPreview() const;
   bool showsSamplePreview() const;
   void renderPreviewUnavailable();
   void renderSamplePreviewText(const ReaderSettingsDraft& settings, int fontId);

@@ -275,6 +275,16 @@ constexpr bool readerDrawerNeedsTallLandscapeSheet(const ReaderDrawerPane pane) 
          pane == ReaderDrawerPane::StablePage;
 }
 
+// The menu takes the whole screen on a keys-only build, which paints its sample preview, and on a touch
+// build whose board keeps its keys beside the touch panel when that panel is not fitted (Silkscreen
+// without its touch tail). That one has no preview, but the half-height touch sheet would leave its
+// panes about 200 px. A unit with a touch panel, and every board whose keys are not beside one, keeps
+// the sheet.
+constexpr bool readerDrawerUsesFullScreen(const bool samplePreviewBuild, const bool hasTouchHardware,
+                                          const bool boardKeepsKeysBesideTouch) {
+  return samplePreviewBuild || (!hasTouchHardware && boardKeepsKeysBesideTouch);
+}
+
 constexpr bool readerDrawerNeedsExternalBackdrop(const bool previewDirty, const bool previewModelValid,
                                                  const bool activeFontChanged) {
   return !previewDirty || (!previewModelValid && !activeFontChanged);
