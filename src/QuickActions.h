@@ -109,7 +109,10 @@ inline bool isActionAvailable(const uint8_t action) {
   if (action == CrossPointSettings::TOGGLE_FRONTLIGHT) return Frontlight.present();
   if (action == CrossPointSettings::FRONTLIGHT_PANEL) return frontlightPanelFromKeys();
   if (action == CrossPointSettings::TOGGLE_TOUCHSCREEN) return gpio.hasTouch();
-  if (action == CrossPointSettings::HOME_READER) return !gpio.hasTouch();
+  // Needs the physical keys, which a touch unit that keeps them beside the panel (Silkscreen) has too. The
+  // handler (ActivityManager::handleHomeReaderShortcut()) takes no gate, and Power, side-key, chord and Quick
+  // Actions triggers all reach it through dispatchShortcutAction(). Equal to !gpio.hasTouch() on every other board.
+  if (action == CrossPointSettings::HOME_READER) return deviceHasFrontButtons(gpio);
   if (action < CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT) {
     return action != CrossPointSettings::TOGGLE_TILT_PAGE_TURN || supportsTiltPageTurn();
   }

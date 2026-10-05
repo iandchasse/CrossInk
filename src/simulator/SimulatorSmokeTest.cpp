@@ -591,8 +591,10 @@ class SimulatorSmokeTest {
         std::string(I18N.get(StrId::STR_HOME_READER)) != "Home/Reader") {
       fail("Home/Reader shortcut label mismatch");
     }
-    if (QuickActions::isActionAvailable(CrossPointSettings::HOME_READER) != !gpio.hasTouch()) {
-      fail("Home/Reader capability gating does not match button-only devices");
+    // Offered wherever the front keys are fitted: button-only devices, and a touch unit that keeps its keys
+    // beside the panel (Silkscreen). In the simulator deviceHasFrontButtons() is !gpio.hasTouch().
+    if (QuickActions::isActionAvailable(CrossPointSettings::HOME_READER) != deviceHasFrontButtons(gpio)) {
+      fail("Home/Reader capability gating does not match devices with front buttons");
     }
     const auto containsShortcut = [](const std::vector<SettingInfo>& settings, const char* key,
                                      const ShortcutOptionCatalog catalog) {
@@ -605,7 +607,7 @@ class SimulatorSmokeTest {
              setting->enumValues[static_cast<size_t>(choice - setting->enumRawValues.begin())] ==
                  StrId::STR_HOME_READER;
     };
-    const bool shouldExposeHomeReader = !gpio.hasTouch();
+    const bool shouldExposeHomeReader = deviceHasFrontButtons(gpio);
     if (containsShortcut(allSettings, "shortPwrBtn", ShortcutOptionCatalog::PowerButton) != shouldExposeHomeReader ||
         containsShortcut(sideButtonSettings, "sideButtonUpShort", ShortcutOptionCatalog::SideButton) !=
             shouldExposeHomeReader ||

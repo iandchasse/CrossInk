@@ -33,7 +33,7 @@
 - Silkscreen: a front light with warm and cool strings now blends them for a warmth between the ends instead of picking one, once both strings have lit since the last reset (`-DSILKSCREEN_FRONTLIGHT_BLEND_HZ=0` in `frontlight_flags` keeps the fixed choice).
 - Silkscreen: the first warmth change after a wake that needs the light's other colour shows that colour for half a second while its string is checked, instead of going dark first; switching the light off or sleeping during the check waits for the light's power to settle before the colour changes.
 - Silkscreen: the battery percentage moves in 1% steps instead of 10% steps, estimated from the cell's voltage (the board has no fuel gauge), and rounds to the nearest percent so a full cell resting just under 4.2 V reads 100%. It reads a few percent low while the front light is on or the reader is busy, and high while charging. Other devices keep their readings.
-- Silkscreen: the Light Controls shortcut (Short Power, Long Power, a side button or a Quick Actions slot) is saved as a different value now, because upstream's Home/Reader shortcut took the one it used. A Light Controls shortcut saved by an earlier build reads as Home/Reader, which a touchscreen unit does not offer, so that setting goes back to its default: choose Light Controls again in Settings > Controls or Quick Actions. The long-press Confirm and long-press Back values are unchanged.
+- Silkscreen: the Light Controls shortcut (Short Power, Long Power, a side button or a Quick Actions slot) is saved as a different value now, because upstream's Home/Reader shortcut took the one it used. A Light Controls shortcut saved by an earlier build reads as Home/Reader, which a unit with the touchscreen fitted now offers too, so it runs Home/Reader until you change it: choose Light Controls again in Settings > Controls or Quick Actions. The long-press Confirm and long-press Back values are unchanged.
 
 ### Fixed
 
@@ -60,6 +60,7 @@
 - Silkscreen: the front light schedule's time picker labels its Left and Right buttons "Prev Field" and "Next Field" instead of "Up" and "Down", says under the fields that Up and Down change the value, and holding Up or Down steps the minutes by 5. Holding Left or Right no longer also changes the value.
 - Silkscreen: in the reader menu's sub-lists (font, dictionary, options and the like) the Left and Right buttons step up and down the list like Up and Down, where they did nothing while the hints under them still read "Left" and "Right"; the hints now read "Up" and "Down".
 - Silkscreen: on battery, a web upload (a file or a font from a browser form) or a Library scan that is running when the battery reaches its cutoff now stops, and the reader goes to sleep, instead of running to its end.
+- Silkscreen: with the touchscreen fitted, Settings > Controls and Quick Actions offer the Home/Reader shortcut (back to the open book, or Home) for Short Power, Long Power, a side button, the Power + Up chord and a Quick Actions slot, as without a touchscreen, so the buttons can leave a nested screen in one press.
 
 ## [v1.6.1] - 2026-09-30
 
