@@ -32,9 +32,15 @@ namespace {
 constexpr int TOUCH_STEP_BUTTON_SIZE = 56;
 constexpr int TOUCH_STEP_BUTTON_GAP = 32;
 constexpr int TOUCH_STEP_LABEL_HEIGHT = 56;
+// Space between the touch step controls or the slider and the line naming the side buttons' step.
+constexpr int SIDE_STEP_HINT_GAP = 8;
 #if CROSSINK_APP_CAP_TOUCH
 constexpr int16_t READER_SLIDER_CONTROL_HEIGHT = 30;
 constexpr int16_t READER_SLIDER_SCALE_GAP = 4;
+// The least the slider layout leaves its preview when the side-step line takes room from it. In portrait the
+// preview is about 390 px tall and keeps 360; held sideways it is 112 px (122 at the small UI scale), which the
+// 28 px line would cut to 84 (94), below this, so that layout goes without the line.
+constexpr int MIN_PREVIEW_AREA_WITH_HINT = 120;
 #endif
 
 Rect touchStepButtonRect(const Rect& screen, const int index) {
@@ -161,6 +167,14 @@ bool IntervalSelectionActivity::usesTextTouchStepControls() const {
          titleId == StrId::STR_LINE_SPACING || titleId == StrId::STR_TOP_BOTTOM || titleId == StrId::STR_LEFT_RIGHT;
 }
 
+bool IntervalSelectionActivity::showsSideStepHint() const {
+  // Up and Down take the large step wherever the keys exist. The touch layouts name Left and Right ("-" and "+" in
+  // the band) but not those two, and only a touch unit that keeps its keys (Silkscreen) has them: a keys-only board
+  // draws its own two step lines, a touch-only board has no Up and Down. It follows the Key hints on touch screens
+  // setting, like the band, and is left out when both steps are the same, since the band's keys already name it.
+  return mappedInput.hasTouchHardware() && shouldDrawKeyHints(gpio) && largeStep != smallStep;
+}
+
 #if CROSSINK_APP_CAP_TOUCH
 void IntervalSelectionActivity::sliderScreen(UiApp::ScreenType& screen, void* user) {
   static_cast<IntervalSelectionActivity*>(user)->buildSliderScreen(screen);
@@ -190,11 +204,21 @@ void IntervalSelectionActivity::buildSliderScreen(UiApp::ScreenType& screen) {
   const int16_t rowHeight = static_cast<int16_t>(lineHeight + READER_SLIDER_SCALE_GAP + READER_SLIDER_CONTROL_HEIGHT +
                                                  lineHeight + READER_SLIDER_SCALE_GAP);
   const int16_t controlTopInset = static_cast<int16_t>(lineHeight + READER_SLIDER_SCALE_GAP);
+  const bool hasReaderPreview = readerPreviewSetting != ReaderPreviewSetting::None;
+  // A touch unit that keeps its keys names the large step (Up and Down) in a line under the slider. The preview
+  // layout seats the slider at the foot of the body, so the line takes its room from the preview, and only while
+  // that keeps MIN_PREVIEW_AREA_WITH_HINT; the centred slider only needs the body to hold both.
+  sideStepHintY = -1;
+  const int sideStepHintHeight = renderer.getLineHeight(SMALL_FONT_ID) + SIDE_STEP_HINT_GAP;
+  const int roomBelowRow =
+      screen.body().height - rowHeight - (hasReaderPreview ? metrics.verticalSpacing + MIN_PREVIEW_AREA_WITH_HINT : 0);
+  const bool sideStepHintFits = showsSideStepHint() && roomBelowRow >= sideStepHintHeight;
+  if (sideStepHintFits) screen.takeBottom(static_cast<int16_t>(sideStepHintHeight));
   const int16_t top = std::max<int16_t>(
       0, static_cast<int16_t>((screen.body().height - READER_SLIDER_CONTROL_HEIGHT) / 2 - controlTopInset));
-  const bool hasReaderPreview = readerPreviewSetting != ReaderPreviewSetting::None;
   screen.spacer(hasReaderPreview ? 0 : top);
   const fui::Rect row = hasReaderPreview ? screen.takeBottom(rowHeight) : screen.takeTop(rowHeight);
+  if (sideStepHintFits) sideStepHintY = row.bottom() + SIDE_STEP_HINT_GAP;
   if (hasReaderPreview) {
     readerPreviewArea =
         Rect{touchScreen.x, contentTop, touchScreen.width, std::max(0, row.y - metrics.verticalSpacing - contentTop)};
@@ -581,8 +605,9 @@ void IntervalSelectionActivity::render(RenderLock&&) {
   const int screenWidth = renderer.getScreenWidth();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, shouldDrawKeyHints(gpio), false);
   const Rect touchScreen = safe;
-  // On touch, only the band: the front and side step hint lines below share the room of the touch step
-  // controls and stay out of the touch layouts on purpose (docs/silkscreen/PORTING.md).
+  // On touch, the band, and one line for the side buttons' large step (showsSideStepHint()). The front step
+  // line below stays out of the touch layouts: the band's "-" and "+" label those keys, and the line would share
+  // the room of the touch step controls (docs/silkscreen/PORTING.md).
   const auto drawTouchLayoutKeyHints = [this] {
     if (!shouldDrawKeyHints(gpio)) return;
     const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), tr(STR_SELECT), "-", "+");
@@ -595,6 +620,7 @@ void IntervalSelectionActivity::render(RenderLock&&) {
     app.render();
     uiReady = true;
     renderReaderPreview(readerPreviewArea);
+    if (sideStepHintY >= 0) drawStepHintLine(sideStepHintY, StrId::STR_STEP_HINT_SIDE, largeStep);
 
     const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
     TouchHeaderBackButton::draw(renderer, header, I18N.get(titleId), readerActivity);
@@ -698,6 +724,16 @@ void IntervalSelectionActivity::render(RenderLock&&) {
     const auto actions = touchActionLayout(touchScreen);
     const char* labels[] = {tr(STR_CONFIRM), tr(STR_CANCEL)};
     TouchActionButtons::draw(renderer, actions, labels, 0, -1, UI_10_FONT_ID);
+    if (showsSideStepHint()) {
+      // Under the step controls (all four share one top and height), and only while it ends above the first
+      // action button: 36 px to spare in landscape, where that button is highest.
+      const Rect stepRect =
+          usesTextTouchStepControls() ? touchStepLabelRect(touchScreen, 0) : touchStepButtonRect(touchScreen, 0);
+      const int hintY = stepRect.y + stepRect.height + SIDE_STEP_HINT_GAP;
+      if (hintY + renderer.getLineHeight(SMALL_FONT_ID) <= actions.buttons[0].y) {
+        drawStepHintLine(hintY, StrId::STR_STEP_HINT_SIDE, largeStep);
+      }
+    }
     drawTouchLayoutKeyHints();
   } else {
     // Two-line step hint: front buttons do the small step, side buttons the large step. Built from

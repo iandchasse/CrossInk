@@ -74,6 +74,7 @@
 - Silkscreen: in the image viewer, holding Confirm for a second opens the image's menu (Delete, Send Nearby, pin as sleep or boot image), as a long press on the screen does; Confirm pressed briefly still sets the sleep cover. Delete still asks first. The viewer says so above its button hints.
 - Silkscreen: with the touchscreen fitted, a swipe in the file browser, an OPDS catalogue, the OPDS server list or Bookmarks & Clippings puts the highlight on the first row of the page it scrolled to, so Confirm and a held Confirm no longer act on a row that has scrolled off the screen (in an OPDS catalogue that started a download).
 - Silkscreen: with the touchscreen fitted and Key hints on touch screens on, the on-screen keyboard's tips between the text field and the keys also say what the keys do in cursor mode (Left and Right move the cursor; in a password field, hold Right and press the [abc] switch to show or hide the password) and that holding DEL clears the text, as without a touchscreen, as many lines as fit. Held sideways the keyboard leaves no room for any.
+- Silkscreen: with the touchscreen fitted and Key hints on touch screens on, the interval pickers (sleep timeout, Auto Page Turn, line spacing, margins and the like) say what the side buttons do, with a line such as "Side buttons: 5 min" under the controls, as without a touchscreen. Held sideways, the pickers that show a text preview (line spacing and margins in Settings) leave it out, to keep the preview.
 
 ## [v1.6.1] - 2026-09-30
 

@@ -75,6 +75,7 @@ class IntervalSelectionActivity final : public Activity {
   freeink::ui::GfxRendererTarget uiTarget;
   UiApp app;
   std::atomic<bool> uiReady{false};
+  int sideStepHintY = -1;  // top of the side-button step line under the slider; -1 when it is not drawn
   bool sliderTapPending = false;
   bool draggingSlider = false;
 
@@ -94,6 +95,7 @@ class IntervalSelectionActivity final : public Activity {
   int clampedValue(int candidate) const;
   int tappedValue(int candidate) const;
   bool usesTextTouchStepControls() const;
+  bool showsSideStepHint() const;
   void drawStepHintLine(int y, StrId labelId, int step);
   void renderReaderPreview(const Rect& area);
 };
