@@ -236,6 +236,7 @@ device model and build.
   - "Never" (default) - Always show battery percentage
   - "In Reader" - Show battery percentage everywhere except in reading mode
   - "Always" - Always hide battery percentage
+  - On Silkscreen the percentage moves in 5% steps (100 from 98% up), estimated from the cell's voltage (there is no fuel gauge): it reads a few percent low while the front light is on or the device is busy, and high while charging. The diagnostic `silkscreen-batlog` build keeps 1% steps.
 
 - **Hide Clock**: On devices with a real-time clock, choose whether the clock is
   shown everywhere, hidden only in the reader, or always hidden.

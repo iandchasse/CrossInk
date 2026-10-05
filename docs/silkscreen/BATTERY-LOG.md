@@ -10,17 +10,26 @@ same analyzer (`crosspoint-reader/scripts/silkscreen/battery_log_report.py`). Th
 - **Its own env.** `silkscreen-batlog` is `[env:silkscreen]`'s flags plus `-DSILKSCREEN_BATLOG=1`, with the same
   `LOG_LEVEL=1` and no USB-serial wait, so boot timing and the ghost-wake path match `silkscreen`. There is no setting, screen,
   i18n key or Quick Action: stop logging by flashing `silkscreen`.
+- **The screen keeps 1% steps.** The release image shows the battery percentage in 5% steps (truncated, 100 from 98
+  up; [PORTING.md](PORTING.md)). This image leaves that out (`#if !SILKSCREEN_BATLOG` in `getBatteryPercentage()`), so
+  what its screen shows, and the log's `e_ui` and `w_ui`, stay at 1% resolution. Apart from the log, it is the one place
+  this image behaves differently from the release image.
 - **Flash:** `pio run -e silkscreen-batlog -t upload`. `scripts/silkscreen/build_matrix.sh` builds it after `silkscreen`.
 - **Size** (the final build matrix, 2026-10-04): 5622425 B of flash and 116080 B of static RAM, 8820 B and 544 B more than
   `silkscreen` (5613605 / 115536). The image is 5627616 B, 925984 B free in the 6553600 B slot (`silkscreen`: 934800 B free).
   Free RTC slow memory is 1464 B, against 1648 B on `silkscreen`: the record is 184 B. Every other env is the size it was,
-  to the byte. CrossPoint's BATTERY-LOG.md section 1 has both readers' figures.
+  to the byte. CrossPoint's BATTERY-LOG.md section 1 has both readers' figures. Since then the second key-access audit moved
+  the two to 5625565 / 116080 (`batlog`) and 5616853 / 115536 (`silkscreen`), and the 5% battery step (2026-10-05) added
+  28 B to `silkscreen` (5616881) and nothing to this image: its footprint over a `silkscreen` built after the step is
+  8684 B of flash and 544 B of RAM (the image is 5630768 B, 922832 B free).
 - **Version and image.** `1.6.1-silkscreen-batlog`: `scripts/git_branch.py` injects `CROSSINK_VERSION` only for the envs it
   lists, so this env is in its set (without that, `BuildInfo` would report `dev`). The image is
   `.pio/build/silkscreen-batlog/firmware.bin`, with `firmware-silkscreen.bin` beside it. `custom_firmware_device_type` stays
   `silkscreen`, so the SD card firmware update swaps it with the `silkscreen` image in either direction.
 - **Gated in code.** Every line of it is inside `#if SILKSCREEN_BATLOG`, which only this env defines; every other env compiles
-  to what it did before. CrossInk's own `BatteryDiagnosticLog` stays compiled out and untouched.
+  to what it did before. The one blocker that runs the other way round is the release image's 5% display step
+  (`#if FREEINK_DEVICE_SILKSCREEN && !SILKSCREEN_BATLOG`), which this image compiles out. CrossInk's own
+  `BatteryDiagnosticLog` stays compiled out and untouched.
 
 ## Where it is hooked
 
