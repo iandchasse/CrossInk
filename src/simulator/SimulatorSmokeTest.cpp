@@ -814,10 +814,15 @@ class SimulatorSmokeTest {
       JsonDocument slotSettings;
       SETTINGS.toJson(slotSettings);
       slotSettings["quickActionSlots"][0] = CrossPointSettings::FRONTLIGHT_PANEL;
+      // Home/Reader (36) too: isValidQuickActionSlot() once omitted it, so a slot set to it reset to Ignore
+      // at the next start. A slot keeps a known action whether or not this device offers it.
+      slotSettings["quickActionSlots"][1] = CrossPointSettings::HOME_READER;
       SETTINGS.fromJson(slotSettings.as<JsonVariantConst>());
       const bool slotKept = SETTINGS.quickActionSlots[0] == CrossPointSettings::FRONTLIGHT_PANEL;
+      const bool homeReaderSlotKept = SETTINGS.quickActionSlots[1] == CrossPointSettings::HOME_READER;
       SETTINGS.fromJson(originalSettings.as<JsonVariantConst>());
       if (!slotKept) fail("A Light Controls Quick Actions slot was not accepted from the settings file");
+      if (!homeReaderSlotKept) fail("A Home/Reader Quick Actions slot was not accepted from the settings file");
     }
 
     const uint8_t savedTrackReadingStats = SETTINGS.trackReadingStats;

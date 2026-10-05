@@ -61,6 +61,7 @@
 - Silkscreen: in the reader menu's sub-lists (font, dictionary, options and the like) the Left and Right buttons step up and down the list like Up and Down, where they did nothing while the hints under them still read "Left" and "Right"; the hints now read "Up" and "Down".
 - Silkscreen: on battery, a web upload (a file or a font from a browser form) or a Library scan that is running when the battery reaches its cutoff now stops, and the reader goes to sleep, instead of running to its end.
 - Silkscreen: with the touchscreen fitted, Settings > Controls and Quick Actions offer the Home/Reader shortcut (back to the open book, or Home) for Short Power, Long Power, a side button, the Power + Up chord and a Quick Actions slot, as without a touchscreen, so the buttons can leave a nested screen in one press.
+- A Home/Reader shortcut chosen for a Quick Actions slot is kept when the reader restarts, instead of being reset to Ignore at the next start.
 
 ## [v1.6.1] - 2026-09-30
 
