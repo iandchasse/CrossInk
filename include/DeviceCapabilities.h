@@ -34,17 +34,21 @@ inline bool boardHasFrontButtons() {
 #endif
 }
 
-// A touch board that keeps its front keys beside the panel (Silkscreen), from the board profile
-// (TouchConfig::buttonsAlongsideTouch): it holds whether or not the touch panel answered, and
-// unlike deviceHasFrontButtons() it is false on every keys-only board. Key-route fixes the audit
-// found on Silkscreen (hold-to-discard, extra key bindings and hints, input leaks) use this, so
-// every other board's keys behave exactly as they did. False in the simulator, whose boards keep
-// no keys beside touch.
+// A board profile that keeps its front keys beside a touch panel (Silkscreen), read from the
+// profile flag itself (TouchConfig::buttonsAlongsideTouch). The flag is never touched by the
+// touch probe, so it holds with the touch tail fitted and without it: Silkscreen's panel is
+// optional, and when neither controller answers the probe sets the profile's controller to None,
+// which makes BoardConfig::hasTouch() false. A test built on hasTouch() would be false on exactly
+// the unit without the tail. Unlike deviceHasFrontButtons() it is false on every keys-only board,
+// and on every touch-only board, whose profiles do not set the flag. Key-route fixes the audit
+// found on Silkscreen (hold-to-discard, extra key bindings and hints, input leaks, the full-screen
+// reader menu) use this, so every other board's keys behave exactly as they did. False in the
+// simulator, whose boards keep no keys beside touch.
 inline bool boardKeepsKeysBesideTouch() {
 #ifdef SIMULATOR
   return false;
 #else
-  return BoardConfig::hasTouch() && BoardConfig::hasFrontButtons();
+  return BoardConfig::ACTIVE.touch.buttonsAlongsideTouch;
 #endif
 }
 
