@@ -345,6 +345,19 @@ TEST(ReaderDrawerModel, FullScreenMenuOnKeysOnlyBuildsAndOnASilkscreenWithoutIts
   EXPECT_FALSE(readerDrawerUsesFullScreen(false, false, false));  // a touch-only board whose probe failed
 }
 
+TEST(ReaderDrawerModel, LandscapeFullScreenMenuWithoutAPreviewDropsTheBookBandOnlyForTheTallPanes) {
+  using Pane = ReaderDrawerPane;
+  // Arguments: full-screen menu without a preview, landscape, pane.
+  for (const auto pane : {Pane::Spacing, Pane::Margins, Pane::Percent, Pane::StablePage})
+    EXPECT_FALSE(readerDrawerShowsBookBand(true, true, pane));
+  for (const auto pane : {Pane::Root, Pane::AutoPageTurn, Pane::ReaderFont, Pane::FontFamily, Pane::EnumOptions})
+    EXPECT_TRUE(readerDrawerShowsBookBand(true, true, pane));
+  // Portrait, the keys-only build's menu (it has a sample preview) and the touch sheet keep the band.
+  EXPECT_TRUE(readerDrawerShowsBookBand(true, false, Pane::Spacing));
+  EXPECT_TRUE(readerDrawerShowsBookBand(false, true, Pane::Spacing));
+  EXPECT_TRUE(readerDrawerShowsBookBand(false, false, Pane::Percent));
+}
+
 TEST(PendingOverlayResume, ConsumptionIsOneShot) {
   PendingOverlayResume stored;
   stored.origin = PendingOverlayOrigin::Reader;

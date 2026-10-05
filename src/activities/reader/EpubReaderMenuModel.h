@@ -285,6 +285,15 @@ constexpr bool readerDrawerUsesFullScreen(const bool samplePreviewBuild, const b
   return samplePreviewBuild || (!hasTouchHardware && boardKeepsKeysBesideTouch);
 }
 
+// The key menu draws the book title and progress band above its tabs. The full-screen menu without a
+// preview cannot hold that band and the controls of the panes that need the room (the second slider and
+// its hints, the keypad) on a 480 px landscape screen, so those panes leave it out. Every other menu,
+// and portrait, keeps the band.
+constexpr bool readerDrawerShowsBookBand(const bool fullScreenWithoutPreview, const bool landscape,
+                                         const ReaderDrawerPane pane) {
+  return !(fullScreenWithoutPreview && landscape && readerDrawerNeedsTallLandscapeSheet(pane));
+}
+
 constexpr bool readerDrawerNeedsExternalBackdrop(const bool previewDirty, const bool previewModelValid,
                                                  const bool activeFontChanged) {
   return !previewDirty || (!previewModelValid && !activeFontChanged);

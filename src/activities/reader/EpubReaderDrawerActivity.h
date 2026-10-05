@@ -217,6 +217,10 @@ class EpubReaderDrawerActivity final : public Activity {
   // taken only for touch hardware, and the sample preview is compiled out of the touch image. Its panes
   // get the room the preview takes on a keys-only build, and it never draws "Preview unavailable".
   bool fullScreenMenuWithoutPreview() const;
+  // The book title and progress band the key menu draws above its tabs (buttonHeaderHeight, 129 px with the
+  // Lyra metrics). The full-screen menu without a preview leaves it off the panes that need the room on a
+  // landscape screen, which is only 480 px high; every other menu draws it on every pane.
+  bool showsBookBand() const;
   bool showsSamplePreview() const;
   void renderPreviewUnavailable();
   void renderSamplePreviewText(const ReaderSettingsDraft& settings, int fontId);

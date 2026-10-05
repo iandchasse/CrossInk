@@ -887,6 +887,11 @@ bool EpubReaderDrawerActivity::fullScreenMenuWithoutPreview() const {
   return !CROSSINK_APP_READER_SAMPLE_PREVIEW && useFullScreenMenu();
 }
 
+bool EpubReaderDrawerActivity::showsBookBand() const {
+  return readerDrawerShowsBookBand(fullScreenMenuWithoutPreview(), isLandscapeOrientation(renderer.getOrientation()),
+                                   state.pane);
+}
+
 int16_t EpubReaderDrawerActivity::drawerHeight() const {
   if (useFullScreenMenu()) return renderer.getScreenHeight();
   fui::SheetProps sheet;
@@ -985,7 +990,7 @@ void EpubReaderDrawerActivity::buildDrawer(UiApp::ScreenType& screen) {
     drawerHandleRect = DrawerHandle::registerTap(screen.frame(), sheetContent, sheet, ACTION_DISMISS);
   }
   int16_t buttonHeaderHeight = 0;
-  if (buttonDevice) {
+  if (buttonDevice && showsBookBand()) {
     const auto& metrics = UITheme::getInstance().getMetrics();
     buttonHeaderHeight = static_cast<int16_t>(metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) +
                                               metrics.tabBarHeight);
@@ -3074,7 +3079,7 @@ void EpubReaderDrawerActivity::render(RenderLock&&) {
   }
   app.setDevice(uiTarget.deviceContext());
   app.render();
-  if (buttonDevice) drawButtonBookHeader();
+  if (buttonDevice && showsBookBand()) drawButtonBookHeader();
 #if CROSSINK_APP_READER_SAMPLE_PREVIEW
   previewDirty = true;  // The full-screen UI cleared the sample area as well.
   previewRendered = renderPreview(previewFontId, previewPrewarmScope);
