@@ -301,6 +301,7 @@ class SettingsActivity final : public Activity {
   void applyUiSettingChange(uint8_t CrossPointSettings::* valuePtr);
 
   void enterCategory(int categoryIndex);
+  bool frontKeysStepRows() const;
   void setCurrentSettingsForCategory();
   StrId activeSubmenuTitleId() const;
   void openSubmenu(SettingAction action);

@@ -482,6 +482,14 @@ void SettingsActivity::enterCategory(int categoryIndex) {
   showSettingSelection = true;
 }
 
+// Left and Right switch the category on the top-level lists, which a submenu has no use for: there they
+// ejected you from it while the hint band named them. On a touch board that keeps its front keys
+// (Silkscreen) they step the rows like Up and Down, as in the reader menu's lists, and the band says "Up" and
+// "Down" over them (render()). Every other board keeps its keys as they were.
+bool SettingsActivity::frontKeysStepRows() const {
+  return !isFileBrowserView() && activeSubmenu != SettingAction::None && boardKeepsKeysBesideTouch();
+}
+
 StrId SettingsActivity::activeSubmenuTitleId() const {
   switch (activeSubmenu) {
     case SettingAction::DisplaySleepScreen:
@@ -968,6 +976,9 @@ void SettingsActivity::loop() {
   };
   const auto up = mappedInput.menuButton(MappedInputManager::Button::Up);
   const auto down = mappedInput.menuButton(MappedInputManager::Button::Down);
+  const auto left = mappedInput.menuButton(MappedInputManager::Button::Left);
+  const auto right = mappedInput.menuButton(MappedInputManager::Button::Right);
+  const bool stepRowsWithFrontKeys = frontKeysStepRows();
   const auto navigateRows = [this, &moveSelection](const bool forward) {
     const int index = isFileBrowserView()
                           ? (forward ? (selectedSettingIndex >= settingsCount ? 1 : selectedSettingIndex + 1)
@@ -976,8 +987,10 @@ void SettingsActivity::loop() {
                                      : ButtonNavigator::previousIndex(selectedSettingIndex, settingsCount + 1));
     moveSelection(index, forward);
   };
-  const auto previousButtons = isFileBrowserView() ? ButtonNavigator::getPreviousButtons() : std::array{up, up};
-  const auto nextButtons = isFileBrowserView() ? ButtonNavigator::getNextButtons() : std::array{down, down};
+  const auto previousButtons =
+      isFileBrowserView() ? ButtonNavigator::getPreviousButtons() : std::array{up, stepRowsWithFrontKeys ? left : up};
+  const auto nextButtons =
+      isFileBrowserView() ? ButtonNavigator::getNextButtons() : std::array{down, stepRowsWithFrontKeys ? right : down};
   buttonNavigator.onRelease(nextButtons, [&] { navigateRows(true); });
   buttonNavigator.onRelease(previousButtons, [&] { navigateRows(false); });
 
@@ -991,12 +1004,13 @@ void SettingsActivity::loop() {
                             : ButtonNavigator::previousIndex(selectedCategoryIndex, categoryCount));
       requestUpdate();
     };
-    const auto left = mappedInput.menuButton(MappedInputManager::Button::Left);
-    const auto right = mappedInput.menuButton(MappedInputManager::Button::Right);
-    buttonNavigator.onRelease({right, right}, [&] { changeCategory(true); });
-    buttonNavigator.onRelease({left, left}, [&] { changeCategory(false); });
-    buttonNavigator.onContinuous({right, right}, [&] { changeCategory(true); });
-    buttonNavigator.onContinuous({left, left}, [&] { changeCategory(false); });
+    // In a submenu on Silkscreen Left and Right are already row keys (above), so they switch no category.
+    if (!stepRowsWithFrontKeys) {
+      buttonNavigator.onRelease({right, right}, [&] { changeCategory(true); });
+      buttonNavigator.onRelease({left, left}, [&] { changeCategory(false); });
+      buttonNavigator.onContinuous({right, right}, [&] { changeCategory(true); });
+      buttonNavigator.onContinuous({left, left}, [&] { changeCategory(false); });
+    }
   }
 
   if (hasChangedCategory) {
@@ -1654,7 +1668,8 @@ void SettingsActivity::render(RenderLock&&) {
                  ? tr(STR_SELECT)
                  : tr(STR_TOGGLE));
 
-  const bool horizontalFront = !isFileBrowserView() && !deviceUsesHorizontalSideButtonsForMenus(gpio);
+  const bool horizontalFront =
+      !isFileBrowserView() && !deviceUsesHorizontalSideButtonsForMenus(gpio) && !frontKeysStepRows();
   const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), confirmLabel,
                                             (horizontalFront ? tr(STR_DIR_LEFT) : tr(STR_DIR_UP)),
                                             (horizontalFront ? tr(STR_DIR_RIGHT) : tr(STR_DIR_DOWN)));
