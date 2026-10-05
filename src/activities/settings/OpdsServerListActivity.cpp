@@ -117,6 +117,8 @@ void OpdsServerListActivity::loop() {
       const int next = scrollListBy(topIndex, delta, visibleRows, itemCount);
       if (next != topIndex) {
         topIndex = next;
+        // Confirm acts on the selection, so it must not scroll out of sight (Silkscreen).
+        if (swipeSelectsFirstRow(mappedInput)) selectedIndex = topIndex;
         requestUpdate();
       }
       return;

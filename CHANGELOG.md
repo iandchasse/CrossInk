@@ -72,6 +72,7 @@
 - Silkscreen: in a Settings submenu (Frontlight, Font options, Side Buttons and the like) the Left and Right buttons step up and down the rows like Up and Down, instead of switching to the next category and closing the submenu while the hints under them still read "Left" and "Right"; the hints now read "Up" and "Down". Back closes the submenu, and on the top-level lists Left and Right still switch the category.
 - Silkscreen: in plain-text (TXT) and XTC books, holding Back or holding Confirm opens Quick Actions when that is the long-press action, as in EPUB books; before, a held Confirm opened the reader menu and a held Back did nothing.
 - Silkscreen: in the image viewer, holding Confirm for a second opens the image's menu (Delete, Send Nearby, pin as sleep or boot image), as a long press on the screen does; Confirm pressed briefly still sets the sleep cover. Delete still asks first. The viewer says so above its button hints.
+- Silkscreen: with the touchscreen fitted, a swipe in the file browser, an OPDS catalogue, the OPDS server list or Bookmarks & Clippings puts the highlight on the first row of the page it scrolled to, so Confirm and a held Confirm no longer act on a row that has scrolled off the screen (in an OPDS catalogue that started a download).
 
 ## [v1.6.1] - 2026-09-30
 

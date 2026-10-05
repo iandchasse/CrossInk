@@ -6,6 +6,7 @@
 #include <atomic>
 #include <cstdint>
 
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "components/UIScale.h"
 #include "components/UITheme.h"
@@ -160,6 +161,14 @@ inline int followListSelection(const int selectedIndex, const int topIndex, cons
   return static_cast<int>(freeink::ui::listTopIndexFor(
       static_cast<int16_t>(selectedIndex), static_cast<uint16_t>(topIndex),
       static_cast<uint16_t>(visibleRows > 0 ? visibleRows : 1), static_cast<uint16_t>(count)));
+}
+
+// The protocol above lets a swipe leave the selection off-screen, and a Confirm or held Confirm then acts on a row
+// nobody can see (a download in the OPDS browser, the rename and delete menu in the file browser). A touch unit that
+// keeps its keys (Silkscreen) takes the first row of the page a swipe brought up as the selection instead, as
+// Library's grid does. A touch-only board has no front keys and a keys-only board no swipe, so they keep the protocol.
+inline bool swipeSelectsFirstRow(const MappedInputManager& mappedInput) {
+  return mappedInput.hasTouchHardware() && deviceHasFrontButtons(gpio);
 }
 
 template <size_t MaxInteractions>

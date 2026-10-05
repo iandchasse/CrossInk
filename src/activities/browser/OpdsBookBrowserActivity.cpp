@@ -253,6 +253,8 @@ void OpdsBookBrowserActivity::loop() {
         const int next = scrollListBy(topIndex, delta, visibleRows, static_cast<int>(entryCount));
         if (next != topIndex) {
           topIndex = next;
+          // Confirm downloads or opens the selection, so it must not scroll out of sight (Silkscreen).
+          if (swipeSelectsFirstRow(mappedInput)) selectorIndex = topIndex;
           requestUpdate();
         }
         return;

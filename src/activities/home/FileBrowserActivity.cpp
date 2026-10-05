@@ -1172,6 +1172,8 @@ void FileBrowserActivity::loop() {
         moved = listNav.scrollBy(swipe == MappedInputManager::SwipeDir::Up ? page : -page, listSize);
         topIndex = listNav.top;
       }
+      // Confirm and a held Confirm act on the selection, so it must not scroll out of sight (Silkscreen).
+      if (moved && swipeSelectsFirstRow(mappedInput)) selectorIndex = static_cast<size_t>(topIndex);
     }
     if (moved) {
       requestUpdate();
