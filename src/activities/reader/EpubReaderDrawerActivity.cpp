@@ -991,7 +991,8 @@ void EpubReaderDrawerActivity::buildDrawer(UiApp::ScreenType& screen) {
     drawerHandleRect = DrawerHandle::registerTap(screen.frame(), sheetContent, sheet, ACTION_DISMISS);
   }
   int16_t buttonHeaderHeight = 0;
-  if (buttonDevice && showsBookBand()) {
+  drawnWithBookBand = buttonDevice && showsBookBand();
+  if (drawnWithBookBand) {
     const auto& metrics = UITheme::getInstance().getMetrics();
     buttonHeaderHeight = static_cast<int16_t>(metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput) +
                                               metrics.tabBarHeight);
@@ -3085,7 +3086,7 @@ void EpubReaderDrawerActivity::render(RenderLock&&) {
   }
   app.setDevice(uiTarget.deviceContext());
   app.render();
-  if (buttonDevice && showsBookBand()) drawButtonBookHeader();
+  if (drawnWithBookBand) drawButtonBookHeader();
 #if CROSSINK_APP_READER_SAMPLE_PREVIEW
   previewDirty = true;  // The full-screen UI cleared the sample area as well.
   previewRendered = renderPreview(previewFontId, previewPrewarmScope);

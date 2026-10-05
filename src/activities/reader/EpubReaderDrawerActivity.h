@@ -143,6 +143,10 @@ class EpubReaderDrawerActivity final : public Activity {
   bool previewFontMetricsChanged = false;
   bool fontPreviewLoading = false;
   int16_t previousDrawerEdge = -1;
+  // Whether the frame buildDrawer() last built reserved the book band above its tabs. render() draws the
+  // band from this, not from showsBookBand() again: loop() changes the pane without the render lock, so a
+  // second read could disagree with the layout already built. Both sides run on the render task.
+  bool drawnWithBookBand = false;
   bool draggingSlider = false;
   bool sliderTapPending = false;
   bool buttonFocusActive = false;
