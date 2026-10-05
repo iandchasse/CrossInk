@@ -193,7 +193,9 @@ class HalPowerManager {
   // power, and with no cell fitted.
   bool firmwareUpdateBlockedByBattery() const;
 
-  // Get battery percentage (range 0-100)
+  // Get battery percentage (range 0-100). The number for display: on Silkscreen (no fuel gauge) it is read off the
+  // cell voltage and cut to 5% steps, 100 from 98 up (the silkscreen-batlog build keeps 1% steps), so it never reads
+  // 1-4. The low-battery cutoff and the firmware-update gate compare millivolts, not this.
   uint16_t getBatteryPercentage() const;
 
 #if SILKSCREEN_BATLOG
