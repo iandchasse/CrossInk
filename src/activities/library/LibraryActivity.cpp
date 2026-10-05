@@ -226,13 +226,18 @@ bool LibraryActivity::scanTouchEnabled() const {
 
 void LibraryActivity::drawScanScreen(const char* message) const {
   renderer.clearScreen();
-  if (scanTouchEnabled()) {
+  const bool touchCancel = scanTouchEnabled();
+  if (touchCancel) {
     int bounds[4]{};
     renderer.getOrientedViewableTRBL(&bounds[0], &bounds[1], &bounds[2], &bounds[3]);
     renderer.drawCenteredText(UI_10_FONT_ID,
                               renderer.getScreenHeight() - bounds[2] - renderer.getLineHeight(UI_10_FONT_ID) * 2,
                               tr(STR_TAP_TO_CANCEL));
-  } else {
+  }
+  // Back cancels as well (scanCancelRequested()). A touch unit that keeps its front keys (Silkscreen) names it
+  // beside the tap hint, as the Library list draws its hint band there; without the keys, or without touch,
+  // nothing else changes.
+  if (!touchCancel || deviceHasFrontButtons(gpio)) {
     const auto labels = mappedInput.mapLabels(tr(STR_CANCEL), "", "", "");
     GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   }
