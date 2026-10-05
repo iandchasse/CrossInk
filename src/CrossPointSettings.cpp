@@ -19,6 +19,7 @@
 #include <mutex>
 #include <string>
 
+#include "DeviceCapabilities.h"
 #include "I18nKeys.h"
 #include "QuickActions.h"
 #include "SettingsList.h"
@@ -227,12 +228,16 @@ uint8_t defaultEnumRawValue(const SettingInfo& info, const uint8_t fieldDefault)
 
 bool isSleepScreenSetting(const SettingInfo& info) { return info.key && strcmp(info.key, "sleepScreen") == 0; }
 
+// Home/Reader (36) is upstream's value and upstream's validator leaves it out, so a slot set to it is reset to
+// Ignore at the next start. Silkscreen keeps it, as it offers the shortcut with its touch tail fitted or not;
+// every other board keeps upstream's behaviour. The profile flag is valid this early, before the touch probe.
 bool isValidQuickActionSlot(const uint8_t action) {
   return action < CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT ||
          action == CrossPointSettings::TOGGLE_HOME_BUTTON_IN_READER ||
          action == CrossPointSettings::TOGGLE_FRONTLIGHT || action == CrossPointSettings::TOGGLE_TOUCHSCREEN ||
          action == CrossPointSettings::PREVIOUS_PAGE || action == CrossPointSettings::NEARBY_POSITION_SYNC ||
-         action == CrossPointSettings::LIBRARY || action == CrossPointSettings::HOME_READER ||
+         action == CrossPointSettings::LIBRARY ||
+         (action == CrossPointSettings::HOME_READER && boardKeepsKeysBesideTouch()) ||
          action == CrossPointSettings::FRONTLIGHT_PANEL;
 }
 
