@@ -954,6 +954,13 @@ void SettingsActivity::loop() {
     const int next = scrollListBy(topIndex, delta, visibleRows, settingsCount);
     if (next != topIndex) {
       topIndex = next;
+      if (swipeSelectsFirstRow(mappedInput)) {
+        // Confirm flips the selected row, so it must not scroll out of sight (Silkscreen). The rows are
+        // 1..settingsCount after the tab band at 0, and a section header cannot be selected.
+        int row = topIndex;
+        while (row < settingsCount && (*currentSettings)[row].type == SettingType::SECTION_HEADER) ++row;
+        if (row < settingsCount) selectedSettingIndex = row + 1;
+      }
       requestUpdate();
     }
     return;

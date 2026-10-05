@@ -1142,6 +1142,9 @@ void FontDownloadActivity::loop() {
         const int next = scrollListBy(topIndex_, delta, visibleRows_, listSize);
         if (next != topIndex_) {
           topIndex_ = next;
+          // Confirm starts a download or opens the delete prompt for the selection, so it must not scroll out of
+          // sight (Silkscreen).
+          if (swipeSelectsFirstRow(mappedInput)) selectedIndex_ = topIndex_;
           requestUpdate();
         }
         return;

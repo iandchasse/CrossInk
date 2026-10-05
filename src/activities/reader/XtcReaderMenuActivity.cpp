@@ -154,6 +154,8 @@ void XtcReaderMenuActivity::loop() {
     const int next = scrollListBy(topIndex, delta, visibleRows, static_cast<int>(items.size()));
     if (next != topIndex) {
       topIndex = next;
+      // Confirm runs the selected row, so it must not scroll out of sight (Silkscreen).
+      if (swipeSelectsFirstRow(mappedInput)) selectedIndex = topIndex;
       requestUpdate();
     }
     return;

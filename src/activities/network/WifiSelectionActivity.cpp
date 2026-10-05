@@ -1175,6 +1175,9 @@ void WifiSelectionActivity::loop() {
         const int next = scrollListBy(topIndex, delta, visibleRows, static_cast<int>(networks.size()));
         if (next != topIndex) {
           topIndex = next;
+          // Confirm connects to the selection and a held Confirm asks to forget it, so it must not scroll out of
+          // sight (Silkscreen).
+          if (swipeSelectsFirstRow(mappedInput)) selectedNetworkIndex = static_cast<size_t>(topIndex);
           requestUpdate();
         }
         return;

@@ -639,10 +639,19 @@ void ReaderOptionsActivity::loop() {
 
   if (mappedInput.hasTouch()) {
     const auto swipe = mappedInput.wasSwipe();
+    // Confirm flips the selected row, so a swipe must not leave it scrolled out of sight (Silkscreen). A section
+    // header cannot be selected.
+    const auto selectFirstRowOfPage = [this] {
+      if (!swipeSelectsFirstRow(mappedInput)) return;
+      int row = topIndex;
+      while (row < settingsCount && (*currentSettings)[row].type == SettingType::SECTION_HEADER) ++row;
+      if (row < settingsCount) selectedIndex = row;
+    };
     if (swipe == MappedInputManager::SwipeDir::Up) {
       const int next = scrollListBy(topIndex, visibleRows, visibleRows, settingsCount);
       if (next != topIndex) {
         topIndex = next;
+        selectFirstRowOfPage();
         requestUpdate();
       }
       return;
@@ -651,6 +660,7 @@ void ReaderOptionsActivity::loop() {
       const int next = scrollListBy(topIndex, -visibleRows, visibleRows, settingsCount);
       if (next != topIndex) {
         topIndex = next;
+        selectFirstRowOfPage();
         requestUpdate();
       }
       return;

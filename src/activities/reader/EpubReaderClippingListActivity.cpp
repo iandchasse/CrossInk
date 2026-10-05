@@ -444,6 +444,8 @@ void EpubReaderClippingListActivity::loop() {
                                   visibleRows, total);
     if (next != topIndex) {
       topIndex = next;
+      // A held Confirm opens the selection's action menu, so it must not scroll out of sight (Silkscreen).
+      if (swipeSelectsFirstRow(mappedInput)) selectedIndex = topIndex;
       requestUpdate();
     } else if (swipe == MappedInputManager::SwipeDir::Down && topIndex == 0) {
       // Match the physical Previous button: the touch gesture for the previous

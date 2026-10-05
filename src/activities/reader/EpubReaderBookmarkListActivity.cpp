@@ -126,6 +126,9 @@ void EpubReaderBookmarkListActivity::loop() {
                                   visibleRows, total);
     if (next != topIndex) {
       topIndex = next;
+      // Confirm opens the selection and a held Confirm asks to delete it, so it must not scroll out of sight
+      // (Silkscreen).
+      if (swipeSelectsFirstRow(mappedInput)) selectedIndex = topIndex;
       requestUpdate();
     }
     return;
