@@ -175,6 +175,10 @@ void TxtReaderActivity::openReaderMenu() {
   if (!txt) return;
   std::vector<FileBrowserActionActivity::MenuItem> items;
   items.push_back({FileBrowserAction::SendNearby, StrId::STR_SEND_NEARBY_BOOK});
+  // Where the front light panel opens from the keys (a Silkscreen), the menu offers it as the EPUB and XTC menus do.
+  if (frontlightPanelFromKeys()) {
+    items.push_back({FileBrowserAction::LightControls, StrId::STR_FRONTLIGHT_CONTROLS});
+  }
   auto menu = makeUniqueNoThrow<FileBrowserActionActivity>(renderer, mappedInput, txt->getTitle(), std::move(items));
   if (!menu) {
     LOG_ERR("NBOOK", "OOM: TXT nearby transfer menu");
@@ -182,10 +186,13 @@ void TxtReaderActivity::openReaderMenu() {
   }
   startActivityForResult(std::move(menu), [this](const ActivityResult& result) {
     const auto* action = std::get_if<FileBrowserActionResult>(&result.data);
-    if (!result.isCancelled && action &&
-        static_cast<FileBrowserAction>(action->action) == FileBrowserAction::SendNearby) {
+    const bool picked = !result.isCancelled && action;
+    if (picked && static_cast<FileBrowserAction>(action->action) == FileBrowserAction::SendNearby) {
       saveProgress(currentPage);
       activityManager.goToNearbyBookSend(txt ? txt->getPath() : std::string{}, true);
+    } else if (picked && static_cast<FileBrowserAction>(action->action) == FileBrowserAction::LightControls) {
+      // The panel opens over the page, dark, and saves its own changes on the way out.
+      if (!activityManager.pushFrontlightPanel(*this)) requestUpdate();
     } else {
       requestUpdate();
     }

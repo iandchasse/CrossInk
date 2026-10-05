@@ -1667,6 +1667,7 @@ void LibraryActivity::showBookActionMenu(const size_t bookIndex, const bool igno
                  case FileBrowserAction::DeleteBookmarks:
                  case FileBrowserAction::DeleteClippings:
                  case FileBrowserAction::Rename:
+                 case FileBrowserAction::LightControls:
                    return;
                }
              });
