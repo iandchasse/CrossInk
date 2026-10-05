@@ -374,6 +374,14 @@ class SimulatorSmokeTest {
     } else if (!gestures.empty()) {
       fail("Touch gestures exposed on a button-only device");
     }
+    // Disable Touchscreen joins this list (the reader menu's Controls row opens it) only where the
+    // board keeps its keys beside a fitted touch panel (Silkscreen). No simulated board does.
+    const bool listsDisableTouchscreen = std::any_of(gestures.begin(), gestures.end(), [](const auto& item) {
+      return item.nameId == StrId::STR_DISABLE_TOUCHSCREEN;
+    });
+    if (listsDisableTouchscreen != (boardKeepsKeysBesideTouch() && gpio.hasTouch())) {
+      fail("Disable Touchscreen in Taps and Gestures does not follow the keys beside touch");
+    }
     const auto device = buildSystemDeviceSettingsList(all);
     if (device.size() < 3 || device[1].nameId != StrId::STR_TIME_TO_SLEEP ||
         device[2].nameId != StrId::STR_CUSTOM_BOOTSCREEN) {

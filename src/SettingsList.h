@@ -882,8 +882,13 @@ inline std::vector<SettingInfo> buildControlsTapsGesturesSettingsList(const std:
   const bool hasRotation = hasSettingByName(allSettings, StrId::STR_TWO_FINGER_ROTATION);
   const bool hasTwoFingerSwipe = hasSettingByName(allSettings, StrId::STR_TWO_FINGER_SWIPE_UP);
   const bool hasEdgeGestures = hasSettingByName(allSettings, StrId::STR_LEFT_EDGE_UP);
+  // The reader menu's Controls row opens this list, so on a board that keeps its keys beside the
+  // touch panel (Silkscreen) Disable Touchscreen is here too, where the menu has no tab slot for
+  // it. getSettingsList() has already dropped the row when the touch panel is not fitted.
+  const bool hasDisableTouchscreen =
+      boardKeepsKeysBesideTouch() && hasSettingByName(allSettings, StrId::STR_DISABLE_TOUCHSCREEN);
   settings.reserve(3 + (hasPinch ? 1u : 0u) + (hasRotation ? 1u : 0u) + (hasTwoFingerSwipe ? 1u : 0u) +
-                   (hasEdgeGestures ? 1u : 0u));
+                   (hasEdgeGestures ? 1u : 0u) + (hasDisableTouchscreen ? 1u : 0u));
   addSettingByName(settings, allSettings, StrId::STR_NEXT_PAGE);
   addSettingByName(settings, allSettings, StrId::STR_PREV_PAGE);
   if (hasPinch) addSettingByName(settings, allSettings, StrId::STR_PINCH_FONT_RESIZE);
@@ -895,6 +900,7 @@ inline std::vector<SettingInfo> buildControlsTapsGesturesSettingsList(const std:
   if (hasEdgeGestures) {
     settings.push_back(SettingInfo::Submenu(StrId::STR_EDGE_GESTURES, SettingAction::ControlsEdgeGestures));
   }
+  if (hasDisableTouchscreen) addSettingByName(settings, allSettings, StrId::STR_DISABLE_TOUCHSCREEN);
   return settings;
 }
 
