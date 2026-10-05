@@ -130,6 +130,7 @@ class HomeActivity final : public Activity {
   void loadRecentBooks(int maxBooks);
   void loadCoverGridThumbnails();
   void activateCoverGridSelection();
+  bool openReadingStatsFromCoverGrid();
   void loadAllBookStats();
   void loadRecentCovers(int coverHeight);
 

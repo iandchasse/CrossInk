@@ -2024,10 +2024,26 @@ void HomeActivity::activateCoverGridSelection() {
   }
 }
 
+// The Cover Grid has no Reading Stats tab. A Silkscreen (keys beside the touch panel, boardKeepsKeysBesideTouch())
+// opens it from the grid through the Reading Stats shortcut instead. The other Home themes list it as a tab and
+// other boards leave the shortcut to the readers, as before.
+bool HomeActivity::openReadingStatsFromCoverGrid() {
+  if (!coverGridUi || !boardKeepsKeysBesideTouch()) return false;
+  // The grid's selection moves without reloading the highlighted book's stats, which onReadingStatsOpen() reads.
+  updateHighlightedBookContext(false);
+  if (!hasReadingStats) return false;
+  onReadingStatsOpen();
+  return true;
+}
+
 bool HomeActivity::handleShortcutAction(const CrossPointSettings::SHORT_PWRBTN action) {
   if (action == CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER) {
     onFileBrowserOpen();
     return true;
+  }
+
+  if (action == CrossPointSettings::SHORT_PWRBTN::READING_STATS) {
+    return openReadingStatsFromCoverGrid();
   }
 
   if (action != CrossPointSettings::SHORT_PWRBTN::QUICK_ACTIONS) {
@@ -2051,9 +2067,11 @@ bool HomeActivity::handleShortcutAction(const CrossPointSettings::SHORT_PWRBTN a
         }
         dispatchShortcutAction(selectedAction);
       },
-      [](const auto selectedAction) {
+      [this](const auto selectedAction) {
         return isPowerButtonActionAvailableOutsideReader(selectedAction) ||
-               selectedAction == CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER;
+               selectedAction == CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER ||
+               (selectedAction == CrossPointSettings::SHORT_PWRBTN::READING_STATS && coverGridUi && hasReadingStats &&
+                boardKeepsKeysBesideTouch());
       });
   return true;
 }

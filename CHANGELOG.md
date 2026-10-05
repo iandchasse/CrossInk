@@ -25,6 +25,7 @@
 - Silkscreen: with the touchscreen fitted, Disable Touchscreen is also in Settings > Controls > Taps and Gestures, so the reader menu's Controls row reaches it from the buttons.
 - Silkscreen: the XTC reader menu has a Light Controls row, so the front light panel opens from the buttons while reading an XTC book. It opens the panel without switching the light on, and the menu is back when the panel closes.
 - Silkscreen: the menu that Confirm opens in a plain-text (TXT) book has a Light Controls row after Send Nearby Book, so the front light panel opens from the buttons while reading one. It opens the panel without switching the light on.
+- Silkscreen: on the Cover Grid Home theme, which has no Reading Stats tab, the Reading Stats shortcut (Short Power, Long Power or a Quick Actions slot) opens Reading Stats: the highlighted book's stats and the totals. It does nothing while there are no stats to show, and Quick Actions leaves it out then.
 - Silkscreen: port notes in `docs/silkscreen/`: the board's firmware requirements and modularity notes (copied from CrossPoint), the battery-drain rules with where CrossInk implements each, the porting and weekly upkeep procedure, and the bring-up checklist.
 
 ### Changed
