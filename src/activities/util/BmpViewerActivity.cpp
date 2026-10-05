@@ -8,9 +8,11 @@
 #include <SdCardFontSystem.h>
 
 #include <algorithm>
+#include <cstdio>
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DeviceCapabilities.h"
 #include "Epub/converters/PngToFramebufferConverter.h"
 #include "activities/boot_sleep/ImageFolderIndex.h"
 #include "activities/home/BookActions.h"
@@ -20,6 +22,9 @@
 #include "fontIds.h"
 
 namespace {
+
+// How long a finger or Confirm is held on the image to open the context menu.
+constexpr unsigned long CONTEXT_MENU_HOLD_MS = 1000;
 
 bool isViewableImageFile(const std::string& filename) {
   return FsHelpers::hasBmpExtension(filename) || FsHelpers::hasPngExtension(filename);
@@ -39,6 +44,30 @@ void drawImageError(GfxRenderer& renderer, const MappedInputManager& mappedInput
   const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), "", "", "");
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
   renderer.displayBuffer(HalDisplay::HALF_REFRESH);
+}
+
+// Silkscreen: the context menu opens from a held Confirm (loop()), which has no button of its own in the hint
+// band, so name it on a small label just above the band. Drawn wherever the band is, with the same primitives.
+void drawMenuHoldHint(GfxRenderer& renderer) {
+  if (!boardKeepsKeysBesideTouch() || !shouldDrawKeyHints(gpio)) return;
+
+  char text[48];
+  snprintf(text, sizeof(text), I18N.get(StrId::STR_HOLD_FOR_MENU), tr(STR_SELECT));
+
+  // The key hint band is always drawn in portrait, whatever the renderer's orientation is.
+  const GfxRenderer::Orientation orig_orientation = renderer.getOrientation();
+  renderer.setOrientation(GfxRenderer::Orientation::Portrait);
+  constexpr int padding = 4;
+  constexpr int gapAboveBand = 6;
+  const int width = renderer.getTextWidth(SMALL_FONT_ID, text) + 2 * padding;
+  const int height = renderer.getLineHeight(SMALL_FONT_ID) + 2 * padding;
+  const int x = (renderer.getScreenWidth() - width) / 2;
+  const int y =
+      renderer.getScreenHeight() - UITheme::getInstance().getMetrics().buttonHintsHeight - gapAboveBand - height;
+  renderer.fillRect(x, y, width, height, false);
+  renderer.drawRect(x, y, width, height);
+  renderer.drawText(SMALL_FONT_ID, x + padding, y + padding, text);
+  renderer.setOrientation(orig_orientation);
 }
 
 }  // namespace
@@ -133,6 +162,7 @@ bool BmpViewerActivity::renderPngImage() {
   const auto labels = mappedInput.mapLabels(mappedInput.withBackArrow(tr(STR_BACK)), tr(STR_SET_SLEEP_COVER),
                                             (hasPrevious ? "<" : nullptr), (hasNext ? ">" : nullptr));
   GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+  drawMenuHoldHint(renderer);
   renderer.displayBuffer(HalDisplay::FAST_REFRESH);
   return true;
 }
@@ -214,6 +244,7 @@ void BmpViewerActivity::drawImage() {
       const auto drawFrame = [&]() {
         if (!renderer.drawBitmap(bitmap, x, y, pageWidth, pageHeight)) return false;
         GUI.drawButtonHints(renderer, labels.btn1, labels.btn2, labels.btn3, labels.btn4);
+        drawMenuHoldHint(renderer);
         return true;
       };
       renderer.clearScreen();
@@ -368,7 +399,7 @@ void BmpViewerActivity::promptDeleteImage() {
       });
 }
 
-void BmpViewerActivity::showContextMenu() {
+void BmpViewerActivity::showContextMenu(const bool fromConfirmHold) {
   std::vector<FileBrowserActionActivity::MenuItem> items = BookActions::buildBookActionItems(filePath, false);
   if (BookActions::canSendNearby(filePath)) {
     items.push_back({FileBrowserAction::SendNearby, StrId::STR_SEND_NEARBY_BOOK});
@@ -386,7 +417,7 @@ void BmpViewerActivity::showContextMenu() {
 
   needsImageRedraw.store(true, std::memory_order_release);  // the menu draws over the image
   startActivityForResult(std::make_unique<FileBrowserActionActivity>(renderer, mappedInput, imageDisplayName(filePath),
-                                                                     std::move(items), false, false),
+                                                                     std::move(items), fromConfirmHold, false),
                          [this](const ActivityResult& result) {
                            if (result.isCancelled) return;
 
@@ -471,7 +502,6 @@ void BmpViewerActivity::loop() {
   }
 
   if (mappedInput.hasTouchHardware()) {
-    constexpr unsigned long CONTEXT_MENU_HOLD_MS = 1000;
     int touchX = 0;
     int touchY = 0;
     if (mappedInput.isScreenTouchLongPress(touchX, touchY, CONTEXT_MENU_HOLD_MS)) {
@@ -481,6 +511,20 @@ void BmpViewerActivity::loop() {
     }
     if (mappedInput.wasScreenTapped(touchX, touchY)) {
       showContextMenu();
+      return;
+    }
+  }
+
+  // Silkscreen: the touch hold has no key, so Confirm held opens the same menu. A short Confirm still sets the
+  // sleep cover on its release, so the hold eats its own release (and the menu ignores it, or it would pick the
+  // first row, Delete). The menu's rows act on a new press, and Delete still asks first, starting on Cancel.
+  if (boardKeepsKeysBesideTouch()) {
+    if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) {
+      confirmHoldHandled = false;
+    } else if (!confirmHoldHandled && mappedInput.getHeldTime() >= CONTEXT_MENU_HOLD_MS) {
+      confirmHoldHandled = true;
+      mappedInput.suppressNextConfirmRelease();
+      showContextMenu(true);
       return;
     }
   }

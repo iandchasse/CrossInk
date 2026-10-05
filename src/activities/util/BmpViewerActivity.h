@@ -23,7 +23,7 @@ class BmpViewerActivity final : public Activity {
   void loadSiblingImages();
   bool renderPngImage();
   void doSetSleepCover();
-  void showContextMenu();
+  void showContextMenu(bool fromConfirmHold = false);
   void promptDeleteImage();
   void pinSleepFavorite();
   void unpinSleepFavorite();
@@ -33,6 +33,9 @@ class BmpViewerActivity final : public Activity {
   std::string filePath;
   std::vector<std::string> siblingImages;
   int currentImageIndex = -1;
+  // Set while a held Confirm has opened the context menu, until Confirm is let go: a menu
+  // closed with the key still down must not open again.
+  bool confirmHoldHandled = false;
   // Set when the image must be decoded and drawn again: on entry, after changing
   // images, and after an overlay (top panel, menus, prompts) drew over it. Other
   // update requests (battery, USB) leave the image on screen as is.
