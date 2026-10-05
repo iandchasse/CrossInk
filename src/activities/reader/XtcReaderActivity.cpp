@@ -19,6 +19,7 @@
 #include "BookStatsTracking.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DeviceCapabilities.h"
 #include "GlobalActions.h"
 #include "MappedInputManager.h"
 #include "QuickActions.h"
@@ -317,6 +318,18 @@ void XtcReaderActivity::loop() {
     longPressMenuHandled = mappedInput.isPressed(MappedInputManager::Button::Confirm);
     mappedInput.suppressNextConfirmRelease();
     handleGlobalPowerButtonAction(CrossPointSettings::SHORT_PWRBTN::FRONTLIGHT_PANEL);
+    return;
+  }
+
+  // Silkscreen: a held Confirm set to Quick Actions opens the popup, as in the EPUB reader. Elsewhere it falls
+  // through to the reader menu, as it always has here.
+  if (boardKeepsKeysBesideTouch() && longPressMenuAction == CrossPointSettings::LONG_MENU_QUICK_ACTIONS &&
+      mappedInput.getHeldTime() >= LONG_PRESS_MENU_MS &&
+      (mappedInput.isPressed(MappedInputManager::Button::Confirm) ||
+       mappedInput.wasReleased(MappedInputManager::Button::Confirm))) {
+    longPressMenuHandled = mappedInput.isPressed(MappedInputManager::Button::Confirm);
+    mappedInput.suppressNextConfirmRelease();
+    handleShortcutAction(CrossPointSettings::SHORT_PWRBTN::QUICK_ACTIONS);
     return;
   }
 
@@ -1125,6 +1138,9 @@ bool XtcReaderActivity::executeLongPressBackAction() {
       return true;
     case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_FRONTLIGHT_PANEL:
       return handleGlobalPowerButtonAction(CrossPointSettings::SHORT_PWRBTN::FRONTLIGHT_PANEL);
+    case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_QUICK_ACTIONS:
+      // Silkscreen only: elsewhere a long Back set to Quick Actions does nothing here, as before.
+      return boardKeepsKeysBesideTouch() && handleShortcutAction(CrossPointSettings::SHORT_PWRBTN::QUICK_ACTIONS);
     case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_CREATE_CLIPPING:
       return false;
     case CrossPointSettings::LONG_PRESS_MENU_ACTION::LONG_MENU_QUICK_LOCK:

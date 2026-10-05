@@ -67,6 +67,7 @@
 - A Home/Reader shortcut chosen for a Quick Actions slot is kept when the reader restarts, instead of being reset to Ignore at the next start.
 - Silkscreen: with no touchscreen fitted, the reader menu fills the screen as it does on the X4, with its tabs along the top, instead of a half-height sheet: the second slider of the Spacing and Page Margins panes and the slider hints, the Go to % slider and keypad, and the Auto Page Turn hints are on the screen and clear of the button hints. It shows no text preview there, so it no longer says "Preview unavailable" above the menu. Held sideways, the Spacing, Page Margins and Go to % panes leave out the book title and progress band so their controls fit.
 - Silkscreen: in a Settings submenu (Frontlight, Font options, Side Buttons and the like) the Left and Right buttons step up and down the rows like Up and Down, instead of switching to the next category and closing the submenu while the hints under them still read "Left" and "Right"; the hints now read "Up" and "Down". Back closes the submenu, and on the top-level lists Left and Right still switch the category.
+- Silkscreen: in plain-text (TXT) and XTC books, holding Back or holding Confirm opens Quick Actions when that is the long-press action, as in EPUB books; before, a held Confirm opened the reader menu and a held Back did nothing.
 
 ## [v1.6.1] - 2026-09-30
 
