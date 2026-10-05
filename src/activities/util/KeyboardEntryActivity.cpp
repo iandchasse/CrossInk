@@ -26,8 +26,12 @@ constexpr int KEYBOARD_PANEL_PADDING = 4;
 constexpr int BUTTON_KEY_HEIGHT = 42;
 constexpr int BUTTON_KEYBOARD_HINT_GAP = 4;
 constexpr int SIDE_HINT_CLEARANCE = 6;
-// Space kept above and below the one key tip drawn on the touch layout.
+// Space kept above and below the key tips drawn on the touch layout.
 constexpr int TOUCH_TIP_MARGIN = 4;
+// Space kept clear at each side of a tip line on the touch layout.
+constexpr int TOUCH_TIP_SIDE_MARGIN = 8;
+// Most tip lines the touch layout names at once (cursor mode in a password field).
+constexpr int MAX_TOUCH_TIPS = 3;
 
 int keyboardGap(const ThemeMetrics& metrics) { return std::max(metrics.keyboardKeySpacing, KEYBOARD_MIN_GAP); }
 
@@ -1068,24 +1072,53 @@ void KeyboardEntryActivity::render(RenderLock&&) {
     }
   }
 
-  // The taller touch keyboard leaves no room for the key tips above, so a touch unit with front keys
-  // (Silkscreen) gets ONE line between the field and the keys, and only when that gap can hold it
-  // clear of both. It names the key route that is not visible on the keys themselves (the band
-  // below already labels Back, Select, Left and Right).
+  // The taller touch keyboard leaves no room for the full key tips above, so a touch unit with front keys
+  // (Silkscreen) gets a few lines between the field and the keys instead: as many as that gap can hold
+  // clear of both, the first line before the others. They name the key routes that are not visible on the
+  // keys themselves (the band below already labels Back, Select, Left and Right): the key that starts
+  // cursor mode, what the cursor keys and the password toggle do there, and how to clear the field. In
+  // portrait on Lyra the gap is about 220 px (three 20 px lines and their margins need 68), shrinking by
+  // one 30 px field line for each wrapped line of text; held sideways the keyboard leaves none, as before.
   if (mappedInput.hasTouchHardware() && shouldDrawKeyHints(gpio)) {
-    const char* touchTip = nullptr;
+    const char* touchTips[MAX_TOUCH_TIPS] = {};
+    int touchTipCount = 0;
+    // A line after the first is dropped when its translation is wider than the screen; the first keeps
+    // the one-line tip's behaviour.
+    const int tipMaxWidth = pageWidth - 2 * TOUCH_TIP_SIDE_MARGIN;
+    const auto addTouchTip = [&](const char* tip) {
+      if (touchTipCount >= MAX_TOUCH_TIPS) return;
+      if (touchTipCount > 0 && renderer.getTextWidth(SMALL_FONT_ID, tip) > tipMaxWidth) return;
+      touchTips[touchTipCount++] = tip;
+    };
     if (cursorMode) {
-      touchTip = tr(STR_KB_HINT_RETURN_KEYBOARD);
+      addTouchTip(tr(STR_KB_HINT_RETURN_KEYBOARD));
+      if (!text.empty()) {
+        // The same lines, in the same cases, as the layout without touch draws above the tips.
+        if (isPassword && togglePos) {
+          addTouchTip(passwordVisible ? tr(STR_KB_HINT_TOGGLE_HIDE_PASSWORD) : tr(STR_KB_HINT_TOGGLE_SHOW_PASSWORD));
+          addTouchTip(tr(STR_KB_HINT_RETURN_CURSOR));
+        } else {
+          addTouchTip(tr(STR_KB_HINT_MOVE_CURSOR));
+          if (isPassword) {
+            addTouchTip(passwordVisible ? tr(STR_KB_HINT_HIDE_PASSWORD) : tr(STR_KB_HINT_SHOW_PASSWORD));
+          }
+        }
+      }
     } else if (!text.empty()) {
-      touchTip = tr(STR_KB_HINT_EDIT_ENTRY);
+      addTouchTip(tr(STR_KB_HINT_EDIT_ENTRY));
+      addTouchTip(tr(STR_KB_HINT_CLEAR_TEXT));
     } else if (inputType == InputType::Url && !urlPanel && !symbols) {
-      touchTip = tr(STR_KB_HINT_SECONDARY_CHAR);
+      addTouchTip(tr(STR_KB_HINT_SECONDARY_CHAR));
     } else if (!urlPanel && !symbols) {
-      touchTip = shifted ? tr(STR_KB_HINT_LOWER_SECONDARY) : tr(STR_KB_HINT_UPPER_SECONDARY);
+      addTouchTip(shifted ? tr(STR_KB_HINT_LOWER_SECONDARY) : tr(STR_KB_HINT_UPPER_SECONDARY));
     }
     const int gap = kbRect.y - underlineBottom;
-    if (touchTip != nullptr && gap >= tipsLh + 2 * TOUCH_TIP_MARGIN) {
-      drawTip(touchTip, underlineBottom + (gap - tipsLh) / 2);
+    const int lines = tipsLh > 0 ? std::min(touchTipCount, (gap - 2 * TOUCH_TIP_MARGIN) / tipsLh) : 0;
+    if (lines > 0) {
+      int y = underlineBottom + (gap - lines * tipsLh) / 2;
+      for (int i = 0; i < lines; i++, y += tipsLh) {
+        drawTip(touchTips[i], y);
+      }
     }
   }
 
