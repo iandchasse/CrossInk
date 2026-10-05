@@ -11,8 +11,11 @@ same analyzer (`crosspoint-reader/scripts/silkscreen/battery_log_report.py`). Th
   `LOG_LEVEL=1` and no USB-serial wait, so boot timing and the ghost-wake path match `silkscreen`. There is no setting, screen,
   i18n key or Quick Action: stop logging by flashing `silkscreen`.
 - **The screen keeps 1% steps.** The release image shows the battery percentage in 5% steps (truncated, 100 from 98
-  up; [PORTING.md](PORTING.md)). This image leaves that out (`#if !SILKSCREEN_BATLOG` in `getBatteryPercentage()`), so
-  what its screen shows, and the log's `e_ui` and `w_ui`, stay at 1% resolution. Apart from the log, it is the one place
+  up; [PORTING.md](PORTING.md)). This image leaves that out (`#if FREEINK_DEVICE_SILKSCREEN && !SILKSCREEN_BATLOG`: the
+  helper and its `static_assert`s above `HalPowerManager::getBatteryPercentage()`, the return inside it), so what its
+  screen shows still matches the log: `e_ui` and `w_ui` are tenths of a percent read from the raw cache and from the first
+  fresh burst, so the display step would never have coarsened them, but the analyzer (CrossPoint's `ui_pct()`) derives the
+  percent the screen showed from them, and that is only what a 1% screen shows. Apart from the log, it is the one place
   this image behaves differently from the release image.
 - **Flash:** `pio run -e silkscreen-batlog -t upload`. `scripts/silkscreen/build_matrix.sh` builds it after `silkscreen`.
 - **Size** (the final build matrix, 2026-10-04): 5622425 B of flash and 116080 B of static RAM, 8820 B and 544 B more than
