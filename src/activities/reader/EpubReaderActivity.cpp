@@ -4453,6 +4453,10 @@ void EpubReaderActivity::onReaderMenuConfirm(EpubReaderMenuAction action, const 
       });
       break;
     }
+    case EpubReaderMenuAction::TOGGLE_DARK_MODE:
+      // The reader menu's Night mode row (Silkscreen): the same path as the Dark Mode shortcut.
+      executeReaderQuickAction(CrossPointSettings::LONG_MENU_TOGGLE_DARK_MODE);
+      break;
     case EpubReaderMenuAction::ROTATE_SCREEN:
     case EpubReaderMenuAction::READER_OPTIONS:
       break;

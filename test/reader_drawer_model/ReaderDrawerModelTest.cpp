@@ -233,6 +233,48 @@ TEST(ReaderDrawerModel, LightControlsFollowsControlsOnlyWhereThePanelOpensFromTh
   EXPECT_LE(fullSettings.count, fullSettings.items.size());
 }
 
+TEST(ReaderDrawerModel, NightModeIsTheLastMoreRowOnlyWhereTheBoardAsksForIt) {
+  const ReaderDrawerCatalog without = makeReaderDrawerCatalog({});
+  const auto& withoutMore = without[static_cast<size_t>(ReaderDrawerTab::More)];
+  for (uint8_t i = 0; i < withoutMore.count; ++i) {
+    EXPECT_NE(withoutMore.items[i], ReaderDrawerCatalogItem::NightMode);
+  }
+
+  // The flag is after lightControls in ReaderDrawerAvailability, so the positional initialisers
+  // above keep their meaning; this one names it.
+  ReaderDrawerAvailability available{};
+  available.nightMode = true;
+  const ReaderDrawerCatalog catalog = makeReaderDrawerCatalog(available);
+  const auto& more = catalog[static_cast<size_t>(ReaderDrawerTab::More)];
+  EXPECT_EQ(more.count, static_cast<uint8_t>(withoutMore.count + 1));
+  EXPECT_EQ(more.items[more.count - 1], ReaderDrawerCatalogItem::NightMode);
+  for (uint8_t i = 0; i < withoutMore.count; ++i) {
+    EXPECT_EQ(more.items[i], withoutMore.items[i]);  // The rows before it keep their places.
+  }
+  // It is the More tab's row: the Settings tab (12 of 13 slots) and the others do not gain one.
+  for (size_t tab = 0; tab < READER_DRAWER_TAB_COUNT; ++tab) {
+    if (tab == static_cast<size_t>(ReaderDrawerTab::More)) continue;
+    EXPECT_EQ(catalog[tab].count, without[tab].count);
+  }
+
+  // The menu action is appended after the existing ones.
+  EXPECT_EQ(static_cast<uint8_t>(EpubReaderMenuAction::TOGGLE_DARK_MODE),
+            static_cast<uint8_t>(EpubReaderMenuAction::RESET_BOOK_READER_SETTINGS) + 1);
+}
+
+TEST(ReaderDrawerModel, EveryTabFitsTheCatalogWithEveryConditionalRowOn) {
+  ReaderDrawerAvailability full{true, true, true, true, true, true, true, true, true, true};
+  full.nightMode = true;
+  const ReaderDrawerCatalog catalog = makeReaderDrawerCatalog(full);
+  for (size_t tab = 0; tab < READER_DRAWER_TAB_COUNT; ++tab) {
+    EXPECT_LE(catalog[tab].count, catalog[tab].items.size());
+  }
+  // Lookup, Lookup History, Select Chapter, Go to %, Go to Stable Page, Auto Page Turn,
+  // Reading Stats, Footnotes, Night mode.
+  EXPECT_EQ(catalog[static_cast<size_t>(ReaderDrawerTab::More)].count, 9);
+  EXPECT_EQ(catalog[static_cast<size_t>(ReaderDrawerTab::Settings)].count, 12);
+}
+
 TEST(ReaderDrawerModel, ChangeMaskSeparatesPreviewRelayoutAndOrientation) {
   const auto mask =
       ReaderSettingsChangeMask::Preview | ReaderSettingsChangeMask::Relayout | ReaderSettingsChangeMask::Orientation;

@@ -486,10 +486,11 @@ void EpubReaderDrawerActivity::onEnter() {
   // Reading Stats, Sync Progress, Nearby Position Sync and Send Nearby Book are
   // rows of the key menu. A touch unit with keys has no other in-book route to
   // them (the light panel's tiles need a Home key to open), so it lists them too. For the
-  // same reason its Settings tab lists Light Controls, the panel's only route from a book.
+  // same reason its Settings tab lists Light Controls, the panel's only route from a book,
+  // and its More tab lists Night mode, whose only other routes are Settings and a shortcut.
   const ReaderDrawerCatalog catalog = makeReaderDrawerCatalog(
       {hasFootnotes, hasDictionary, hasBookmarks, hasClippings, showReadingPaceReset, stablePageCount > 0,
-       keyNavigation(), globalStatsEnabled, bookStatsEnabled, frontlightPanelFromKeys()});
+       keyNavigation(), globalStatsEnabled, bookStatsEnabled, frontlightPanelFromKeys(), boardKeepsKeysBesideTouch()});
   for (size_t tab = 0; tab < rootRows.size(); ++tab) {
     rootRows[tab].reserve(catalog[tab].count);
     rootRows[tab].assign(catalog[tab].items.begin(), catalog[tab].items.begin() + catalog[tab].count);
@@ -1946,6 +1947,11 @@ void EpubReaderDrawerActivity::activateRow(const RowId row) {
       activityManager.pushFrontlightPanel(*this);
 #endif
       return;
+    case RowId::NightMode:
+      // The reader flips the inversion through its Dark Mode quick action, as the shortcut does,
+      // and shows the page that way once this menu has closed.
+      closeAndReturn(false, EpubReaderMenuAction::TOGGLE_DARK_MODE);
+      return;
     case RowId::ResetBookReaderSettings:
       closeAndReturn(false, EpubReaderMenuAction::RESET_BOOK_READER_SETTINGS);
       return;
@@ -3249,6 +3255,8 @@ const char* EpubReaderDrawerActivity::rowLabel(const RowId row) const {
       return tr(STR_CAT_CONTROLS);
     case RowId::LightControls:
       return tr(STR_FRONTLIGHT_CONTROLS);
+    case RowId::NightMode:
+      return tr(STR_NIGHT_MODE);
     case RowId::ResetReadingPace:
       return tr(STR_RESET_READING_PACE);
     case RowId::ResetBookReaderSettings:
@@ -3368,6 +3376,7 @@ const char* EpubReaderDrawerActivity::rowValue(const RowId row, char* buffer, co
 bool EpubReaderDrawerActivity::rowIsToggle(const RowId row) const {
   switch (row) {
     case RowId::TrackBookStats:
+    case RowId::NightMode:
     case RowId::TextAa:
     case RowId::Focus:
     case RowId::GuideDots:
@@ -3414,6 +3423,8 @@ bool EpubReaderDrawerActivity::rowToggleValue(const RowId row) const {
   switch (row) {
     case RowId::TrackBookStats:
       return bookStatsEnabled;
+    case RowId::NightMode:
+      return SETTINGS.screenInverted != 0;
     case RowId::TextAa:
       return draft.textAntiAliasing;
     case RowId::Focus:

@@ -35,6 +35,7 @@ enum class EpubReaderMenuAction : uint8_t {
   SET_BOOK_DICTIONARY,
   STATUS_BAR_SETTINGS,
   RESET_BOOK_READER_SETTINGS,
+  TOGGLE_DARK_MODE,
 };
 
 enum class ReaderDrawerTab : uint8_t { Font = 0, Layout = 1, More = 2, Location = 3, Settings = 4, Count };
@@ -151,6 +152,7 @@ enum class ReaderDrawerCatalogItem : uint8_t {
   NearbyPositionSync,
   SendNearbyBook,
   LightControls,
+  NightMode,
 };
 
 struct ReaderDrawerAvailability {
@@ -166,6 +168,9 @@ struct ReaderDrawerAvailability {
   // The front-light panel opens from the keys (frontlightPanelFromKeys()). Last, so a
   // positional initialiser written before it still means what it did.
   bool lightControls = false;
+  // A Night mode row in the More tab, for a board whose keys have no other in-book route to it
+  // (boardKeepsKeysBesideTouch(), Silkscreen). Also last, for the same reason.
+  bool nightMode = false;
 };
 
 struct ReaderDrawerTabCatalog {
@@ -210,6 +215,9 @@ constexpr ReaderDrawerCatalog makeReaderDrawerCatalog(const ReaderDrawerAvailabi
   if (available.buttonDevice && available.globalStatsEnabled && available.bookStatsEnabled)
     more.add(ReaderDrawerCatalogItem::ReadingStats);
   if (available.hasFootnotes) more.add(ReaderDrawerCatalogItem::Footnotes);
+  // Last, so the rows above keep their places. With every row above present the tab holds 9 of
+  // the catalog's 13 slots (add() has no bounds check; the Settings tab holds 12 and is not for this).
+  if (available.nightMode) more.add(ReaderDrawerCatalogItem::NightMode);
 
   auto& location = catalog[static_cast<size_t>(ReaderDrawerTab::Location)];
   location.add(ReaderDrawerCatalogItem::BookmarkToggle);
