@@ -1031,6 +1031,8 @@ void XtcReaderActivity::onReaderMenuConfirm(const int action) {
       activityManager.goToNearbyBookSend(xtc ? xtc->getPath() : std::string{}, true);
       return;
     case XtcReaderMenuActivity::MenuAction::DISABLE_TOUCHSCREEN:
+    case XtcReaderMenuActivity::MenuAction::LIGHT_CONTROLS:
+      // Both are handled in the menu, which stays open: neither reaches here.
       break;
   }
 }

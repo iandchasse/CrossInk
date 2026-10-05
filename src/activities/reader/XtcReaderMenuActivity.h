@@ -22,6 +22,7 @@ class XtcReaderMenuActivity final : public Activity {
     DELETE_CACHE,
     SEND_NEARBY_BOOK,
     DISABLE_TOUCHSCREEN,
+    LIGHT_CONTROLS,
   };
 
   XtcReaderMenuActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string title, bool hasChapters,
@@ -34,11 +35,16 @@ class XtcReaderMenuActivity final : public Activity {
   bool isReaderActivity() const override { return true; }
   bool allowPowerAsConfirmInReaderMode() const override { return true; }
   bool allowGlobalHomeGesture() const override { return false; }
+  // A Sync & Transfer pick would leave the book from under this menu, so the panel opened from the Light Controls
+  // row leaves that tile out on a board that keeps its front keys (a Silkscreen), as over the EPUB menu.
+  bool handlesFrontlightPanelAction() const override { return false; }
+  void onFrontlightPanelClosed() override;
 
  private:
-  using UiHost = UiAppHost<9, 2>;
+  // Every row, the touch toggle and the Light Controls row on: nine. One interaction per row, and one spare.
+  static constexpr size_t kMaxMenuItems = 9;
+  using UiHost = UiAppHost<kMaxMenuItems + 1, 2>;
   using UiApp = UiHost::App;
-  static constexpr size_t kMaxMenuItems = 8;
 
   struct MenuItem {
     MenuAction action;
@@ -46,7 +52,7 @@ class XtcReaderMenuActivity final : public Activity {
   };
 
   static std::vector<MenuItem> buildMenuItems(bool hasChapters, bool isBookCompleted, bool hasTouch,
-                                              bool globalStatsEnabled, bool bookStatsEnabled);
+                                              bool globalStatsEnabled, bool bookStatsEnabled, bool lightControls);
   void finishCancelled();
 
   ButtonNavigator buttonNavigator;

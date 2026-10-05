@@ -23,6 +23,7 @@
 - Silkscreen: on USB with no battery, or one too flat to charge, the battery shows "No battery" with an empty icon instead of a percentage and the charging bolt.
 - Silkscreen: the reader menu's More tab has a Dark Mode row, so Dark Mode can be switched on and off from the buttons while reading, without a shortcut set up or a trip to Settings. Its switch shows the current setting, and the menu closes to show the page that way.
 - Silkscreen: with the touchscreen fitted, Disable Touchscreen is also in Settings > Controls > Taps and Gestures, so the reader menu's Controls row reaches it from the buttons.
+- Silkscreen: the XTC reader menu has a Light Controls row, so the front light panel opens from the buttons while reading an XTC book. It opens the panel without switching the light on, and the menu is back when the panel closes.
 - Silkscreen: port notes in `docs/silkscreen/`: the board's firmware requirements and modularity notes (copied from CrossPoint), the battery-drain rules with where CrossInk implements each, the porting and weekly upkeep procedure, and the bring-up checklist.
 
 ### Changed

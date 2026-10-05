@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "CrossPointSettings.h"
+#include "DeviceCapabilities.h"
 #include "MappedInputManager.h"
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
@@ -31,17 +32,15 @@ XtcReaderMenuActivity::XtcReaderMenuActivity(GfxRenderer& renderer, MappedInputM
     : Activity("XtcReaderMenu", renderer, mappedInput),
       title(std::move(title)),
       items(buildMenuItems(hasChapters, isBookCompleted, mappedInput.hasTouchHardware(), globalStatsEnabled,
-                           bookStatsEnabled)),
+                           bookStatsEnabled, frontlightPanelFromKeys())),
       bookStatsEnabled(bookStatsEnabled),
       ui(renderer) {}
 
-std::vector<XtcReaderMenuActivity::MenuItem> XtcReaderMenuActivity::buildMenuItems(const bool hasChapters,
-                                                                                   const bool isBookCompleted,
-                                                                                   const bool hasTouch,
-                                                                                   const bool globalStatsEnabled,
-                                                                                   const bool bookStatsEnabled) {
+std::vector<XtcReaderMenuActivity::MenuItem> XtcReaderMenuActivity::buildMenuItems(
+    const bool hasChapters, const bool isBookCompleted, const bool hasTouch, const bool globalStatsEnabled,
+    const bool bookStatsEnabled, const bool lightControls) {
   std::vector<MenuItem> menuItems;
-  menuItems.reserve(7 + (hasTouch ? 1u : 0u));
+  menuItems.reserve(7 + (hasTouch ? 1u : 0u) + (lightControls ? 1u : 0u));
   if (hasChapters) {
     menuItems.push_back({MenuAction::SELECT_CHAPTER, StrId::STR_SELECT_CHAPTER});
   }
@@ -55,6 +54,10 @@ std::vector<XtcReaderMenuActivity::MenuItem> XtcReaderMenuActivity::buildMenuIte
     menuItems.push_back({MenuAction::DELETE_STATS, StrId::STR_DELETE_BOOK_STATS});
   menuItems.push_back({MenuAction::DELETE_CACHE, StrId::STR_DELETE_CACHE});
   menuItems.push_back({MenuAction::SEND_NEARBY_BOOK, StrId::STR_SEND_NEARBY_BOOK});
+  // Where the front light panel opens from the keys (a Silkscreen), the menu offers it as the EPUB menu does.
+  if (lightControls) {
+    menuItems.push_back({MenuAction::LIGHT_CONTROLS, StrId::STR_FRONTLIGHT_CONTROLS});
+  }
   if (hasTouch) {
     menuItems.push_back({MenuAction::DISABLE_TOUCHSCREEN, StrId::STR_DISABLE_TOUCHSCREEN});
   }
@@ -79,6 +82,13 @@ void XtcReaderMenuActivity::onExit() {
   Activity::onExit();
 }
 
+void XtcReaderMenuActivity::onFrontlightPanelClosed() {
+  // The panel clears the touchscreen override when it closes, which this menu holds for as long as it is open.
+  // Restored only where the panel opens from the keys (the Light Controls row); other boards keep what they did.
+  if (frontlightPanelFromKeys()) mappedInput.setReaderTouchscreenOverride(true);
+  requestUpdate();
+}
+
 void XtcReaderMenuActivity::finishCancelled() {
   ActivityResult result;
   result.isCancelled = true;
@@ -87,6 +97,14 @@ void XtcReaderMenuActivity::finishCancelled() {
 }
 
 void XtcReaderMenuActivity::selectCurrent() {
+  if (items[selectedIndex].action == MenuAction::LIGHT_CONTROLS) {
+#if FREEINK_CAP_FRONTLIGHT
+    // The panel opens over this menu, saves its own changes on the way out and leaves the menu as it was.
+    // It opens dark: nothing here switches the light on.
+    activityManager.pushFrontlightPanel(*this);
+#endif
+    return;
+  }
   if (items[selectedIndex].action == MenuAction::DISABLE_TOUCHSCREEN) {
     SETTINGS.disableReaderTouchscreen = SETTINGS.disableReaderTouchscreen ? 0 : 1;
     SETTINGS.saveToFile();
