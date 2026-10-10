@@ -50,6 +50,7 @@
 
 ### Fixed
 
+- Silkscreen: on battery, a file download from the web file manager or over WebDAV, a WebDAV upload, and a reading-stats or clippings sync to a CrossPoint Sync server stop when the battery reaches its cutoff, and the reader then sleeps, instead of running to the end of the transfer.
 - Silkscreen: with the shared SDK, saved settings files replace the old copy only once fully written, and the SD card's cached sectors are written back before sleep and before USB Drive takes over the card, on every device.
 - Silkscreen: short key taps are no longer missed while the reader is idle.
 - Silkscreen: sleep puts the touchscreen controller into its low-power mode, frees the shared sensor bus and switches the front light off before the board's pins are parked, and a power button still held 5 s into sleep no longer keeps the board awake.

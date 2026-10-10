@@ -1,6 +1,7 @@
 #include "StatsUploadClient.h"
 
 #include <ArduinoJson.h>
+#include <HalPowerManager.h>
 #include <I18n.h>
 #include <KOReaderCredentialStore.h>
 #include <Logging.h>
@@ -18,6 +19,15 @@ namespace {
 // Only definitive answers update the persisted capability; transient failures keep it.
 void recordMissingApi(const int status) {
   if (status == 404 || status == 405) KOREADER_STORE.setServerSupport(SyncServerSupport::UNSUPPORTED);
+}
+
+// BAT-01. A bulk sync is one request per clipping, per day of stats and per book, and each step blocks the
+// loop until its requests end, so loop()'s low-battery cutoff cannot run in between: every request asks the
+// latch first (it is false on a board without a cutoff). The next loop pass sleeps.
+bool stoppedAtCutoff() {
+  if (!powerManager.lowBatteryCutoffTripped()) return false;
+  LOG_ERR("StatsSync", "Stopped at the low-battery cutoff");
+  return true;
 }
 }  // namespace
 
@@ -52,6 +62,7 @@ StatsUploadClient::Result StatsUploadClient::put(const char* endpoint, const cha
     LOG_ERR("StatsSync", "Cannot allocate HTTP client");
     return Result::LowMemory;
   }
+  if (stoppedAtCutoff()) return Result::Network;
   auto& http = impl->http;
   // Retain a successful connection while headroom permits. If TLS is holding
   // needed heap, release it before applying the normal handshake floors.
@@ -119,6 +130,7 @@ StatsUploadClient::Result StatsUploadClient::probe(const bool trustHtml) {
     LOG_ERR("StatsSync", "Cannot allocate HTTP client");
     return Result::LowMemory;
   }
+  if (stoppedAtCutoff()) return Result::Network;
   auto& http = impl->http;
   if (ESP.getFreeHeap() < 35000 || ESP.getMaxAllocHeap() < 20000) {
     LOG_ERR("StatsSync", "Insufficient memory for capability probe");

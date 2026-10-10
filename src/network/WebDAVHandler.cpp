@@ -3,6 +3,7 @@
 #include <Arduino.h>
 #include <Epub.h>
 #include <FsHelpers.h>
+#include <HalPowerManager.h>
 #include <HalStorage.h>
 #include <Logging.h>
 #include <SdCardFontSystem.h>
@@ -13,6 +14,7 @@
 #include <new>
 
 #include "CrossPointSettings.h"
+#include "CutoffAbortPrint.h"
 #include "activities/boot_sleep/ImageFolderIndex.h"
 #include "util/BookCacheUtils.h"
 
@@ -127,6 +129,14 @@ void WebDAVHandler::raw(WebServer& server, const String& uri, HTTPRaw& raw) {
 
   } else if (raw.status == RAW_WRITE) {
     if (_putFile && _putOk) {
+      // The upload holds loop(), whose low-battery cutoff cannot run meanwhile (never trips on boards without
+      // one). Dropping the connection makes WebServer's next read fail and raise RAW_ABORTED, which removes the
+      // temp file; the next loop pass sleeps.
+      if (powerManager.lowBatteryCutoffTripped()) {
+        server.client().stop();
+        _putOk = false;
+        return;
+      }
       size_t written = _putFile.write(raw.buf, raw.currentSize);
       if (written != raw.currentSize) {
         _putOk = false;
@@ -378,7 +388,10 @@ void WebDAVHandler::handleGet(WebServer& s) {
   // HalFile is a Print, not a Stream: client.write(file) converts it to bool
   // and sends 0x01. The helper handles partial writes and watchdog yielding.
   NetworkClient client = s.client();
-  if (!Storage.readFileToStream(path.c_str(), client)) {
+  // The stream holds loop() until the file ends, so the low-battery cutoff cannot run meanwhile: this Print
+  // ends it on the cutoff (never on boards without one), and the next loop pass sleeps.
+  CutoffAbortPrint out(client);
+  if (!Storage.readFileToStream(path.c_str(), out)) {
     LOG_ERR("DAV", "GET %s: failed to stream file", path.c_str());
     client.stop();  // Headers are already sent; terminate the incomplete body.
   }

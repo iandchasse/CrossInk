@@ -23,6 +23,7 @@
 
 #include "AppVersion.h"
 #include "CrossPointSettings.h"
+#include "CutoffAbortPrint.h"
 #include "DeviceCapabilities.h"
 #include "FontInstaller.h"
 #include "OpdsServerStore.h"
@@ -965,6 +966,9 @@ void CrossPointWebServer::handleDownload() const {
   server->send(200, contentType.c_str(), "");
 
   NetworkClient client = server->client();
+  // The stream holds loop() until the file ends, so the low-battery cutoff cannot run meanwhile: this Print
+  // ends it on the cutoff (never on boards without one), and the next loop pass sleeps.
+  CutoffAbortPrint out(client);
   const size_t chunkSize = 4096;
   uint8_t buffer[chunkSize];
 
@@ -975,7 +979,7 @@ void CrossPointWebServer::handleDownload() const {
     size_t bytesRead = static_cast<size_t>(result);
     size_t totalWritten = 0;
     while (totalWritten < bytesRead) {
-      size_t wrote = client.write(buffer + totalWritten, bytesRead - totalWritten);
+      size_t wrote = out.write(buffer + totalWritten, bytesRead - totalWritten);
       if (wrote == 0) {
         downloadOk = false;
         break;
