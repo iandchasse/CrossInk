@@ -236,9 +236,8 @@ uint8_t defaultEnumRawValue(const SettingInfo& info, const uint8_t fieldDefault)
 
 bool isSleepScreenSetting(const SettingInfo& info) { return info.key && strcmp(info.key, "sleepScreen") == 0; }
 
-// Home/Reader (36) is upstream's value and upstream's validator leaves it out, so a slot set to it is reset to
-// Ignore at the next start. Silkscreen keeps it, as it offers the shortcut with its touch tail fitted or not;
-// every other board keeps upstream's behaviour. The profile flag is valid this early, before the touch probe.
+// Upstream's list, which keeps Home/Reader, Back Home and Select Chapter on every board, so a slot holding one
+// survives a restart, plus Silkscreen's Light Controls: accepted everywhere, offered only where keys reach it.
 bool isValidQuickActionSlot(const uint8_t action) {
   return action < CrossPointSettings::QUICK_ACTION_SLOT_ACTION_COUNT ||
          action == CrossPointSettings::TOGGLE_HOME_BUTTON_IN_READER ||
