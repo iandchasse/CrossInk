@@ -16,6 +16,7 @@
 #include "activities/settings/QuickActionsActivity.h"
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
+#include "components/UiAppHelpers.h"
 
 namespace fui = freeink::ui;
 
@@ -198,7 +199,8 @@ void ControlsOptionsActivity::moveSelection(bool forward) {
 }
 
 bool ControlsOptionsActivity::currentSettingUsesOptionMenu(const SettingInfo& setting) const {
-  return setting.type == SettingType::ENUM && setting.valuePtr != nullptr && settingEnumOptionCount(setting) > 2;
+  return setting.type == SettingType::ENUM && setting.valuePtr != nullptr &&
+         (settingEnumOptionCount(setting) > 2 || setting.valuePtr == &CrossPointSettings::menuNavigation);
 }
 
 void ControlsOptionsActivity::openEnumOptionPicker(const SettingInfo& setting) {
@@ -235,6 +237,9 @@ void ControlsOptionsActivity::openEnumOptionPicker(const SettingInfo& setting) {
         }
       },
       note);
+  if (setting.valuePtr == &CrossPointSettings::menuNavigation) {
+    menuNavigationNote.apply(optionPopup);
+  }
   requestUpdate();
 }
 
@@ -381,10 +386,11 @@ void ControlsOptionsActivity::onRowEvent(const fui::ActionEvent& event, void* us
 void ControlsOptionsActivity::buildOptionsScreen(UiApp::ScreenType& screen) {
   const auto& metrics = UITheme::getInstance().getMetrics();
   const Rect safe = UITheme::getInstance().getScreenSafeArea(renderer, deviceHasFrontButtons(gpio), false);
-  screen.setContentMargin(fui::Insets{
-      static_cast<int16_t>(safe.y + metrics.topPadding + TouchHeaderBackButton::height(metrics, mappedInput)),
-      static_cast<int16_t>(renderer.getScreenWidth() - safe.x - safe.width),
-      static_cast<int16_t>(renderer.getScreenHeight() - safe.y - safe.height), static_cast<int16_t>(safe.x)});
+  setUiContentMargin(screen, renderer,
+                     fui::Insets{static_cast<int16_t>(TouchHeaderBackButton::contentTop(renderer, mappedInput, safe.y)),
+                                 static_cast<int16_t>(renderer.getScreenWidth() - safe.x - safe.width),
+                                 static_cast<int16_t>(renderer.getScreenHeight() - safe.y - safe.height),
+                                 static_cast<int16_t>(safe.x)});
   screen.spacer(static_cast<int16_t>(metrics.verticalSpacing));
 
   const StrId submenuTitleId = activeSubmenuTitleId();
@@ -411,7 +417,7 @@ void ControlsOptionsActivity::buildOptionsScreen(UiApp::ScreenType& screen) {
     if (settingShowsNavigationCaret(setting)) {
       values[i] = ">";
     } else if (setting.type == SettingType::TOGGLE && setting.valuePtr != nullptr) {
-      values[i] = SETTINGS.*(setting.valuePtr) ? tr(STR_STATE_ON) : tr(STR_STATE_OFF);
+      values[i] = SETTINGS.*(setting.valuePtr) ? tr(STR_ON) : tr(STR_OFF);
     } else if (setting.type == SettingType::ENUM && setting.valuePtr != nullptr) {
       const uint8_t displayValue = enumDisplayIndexForRawValue(setting, SETTINGS.*(setting.valuePtr));
       values[i] = sideButtonOptionLabel(setting, displayValue < settingEnumOptionCount(setting) ? displayValue : 0);
@@ -478,7 +484,7 @@ void ControlsOptionsActivity::render(RenderLock&&) {
   }
 
   uiReady = false;
-  app.render();
+  renderUiApp(app, uiTarget);
   uiReady = true;
 
   const bool currentIsAction = selectedIndex >= 0 && selectedIndex < settingsCount &&

@@ -184,7 +184,10 @@ void CoverGridHomeUi::drawCurrent(UiScreen& screen, fui::Rect rect, const int co
   card.coverPainter = [](fui::DrawTarget& target, fui::Rect cover, const fui::BookCardProps&, void* user) {
     return static_cast<CoverGridHomeUi*>(user)->paintFramedCover(target, cover, 0);
   };
-  fui::bookCard(screen.frame(), rect, card);
+  {
+    FilenameUiFontScope fonts(target, renderer);
+    fui::bookCard(screen.frame(), rect, card);
+  }
 
   if (selected == 0 && boardHasFrontButtons()) {
     const int16_t barHeight = card.coverSize.height;

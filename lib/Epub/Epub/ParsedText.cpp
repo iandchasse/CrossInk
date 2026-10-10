@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "InlineImageToken.h"
+#include "WordSpacing.h"
 #include "hyphenation/Hyphenator.h"
 
 constexpr int MAX_COST = std::numeric_limits<int>::max();
@@ -267,13 +268,13 @@ void stripSoftHyphensInPlace(std::string& word) {
 // Uses advance width (sum of glyph advances + kerning) rather than bounding box width so that italic glyph overhangs
 // don't inflate inter-word spacing.
 uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const std::string& word,
-                          const EpdFontFamily::Style style, const bool appendHyphen = false) {
+                          const EpdFontFamily::Style style, const bool appendHyphen, const int8_t characterSpacing) {
   if (word.size() == 1 && word[0] == ' ' && !appendHyphen) {
     return renderer.getSpaceWidth(fontId, style);
   }
   const bool hasSoftHyphen = containsSoftHyphen(word);
   if (!hasSoftHyphen && !appendHyphen) {
-    return renderer.getTextAdvanceX(fontId, word.c_str(), style);
+    return renderer.getTextAdvanceX(fontId, word.c_str(), style, 0, characterSpacing);
   }
 
   std::string sanitized = word;
@@ -283,7 +284,7 @@ uint16_t measureWordWidth(const GfxRenderer& renderer, const int fontId, const s
   if (appendHyphen) {
     sanitized.push_back('-');
   }
-  return renderer.getTextAdvanceX(fontId, sanitized.c_str(), style);
+  return renderer.getTextAdvanceX(fontId, sanitized.c_str(), style, 0, characterSpacing);
 }
 
 bool isWordCharacter(uint32_t cp);
@@ -351,7 +352,8 @@ FocusTokenMetadata computeFocusMetadata(const std::string_view segment, const Ep
 }
 
 int measureFocusRunOffset(const GfxRenderer& renderer, const int fontId, const std::string& word,
-                          const EpdFontFamily::Style style, const uint8_t boundary, const bool rtl) {
+                          const EpdFontFamily::Style style, const uint8_t boundary, const bool rtl,
+                          const int8_t characterSpacing) {
   if (boundary == 0 || boundary >= word.size()) {
     return 0;
   }
@@ -367,25 +369,26 @@ int measureFocusRunOffset(const GfxRenderer& renderer, const int fontId, const s
     // The suffix starts in a separate drawText() call. Keep the final bold
     // glyph's advance and cross-run kerning in one fixed-point rounding step,
     // matching drawText() and preventing one-pixel collisions at the split.
-    return renderer.getTextAdvanceX(fontId, prefixBuf, boldStyle, firstSuffixCp);
+    return renderer.getTextAdvanceX(fontId, prefixBuf, boldStyle, firstSuffixCp, characterSpacing);
   }
 
-  const int suffixWidth = renderer.getTextAdvanceX(fontId, word.c_str() + boundary, style);
-  const int kern = renderer.getKerning(fontId, lastCodepointBeforeByteOffset(word, boundary), firstSuffixCp, boldStyle);
+  const int suffixWidth = renderer.getTextAdvanceX(fontId, word.c_str() + boundary, style, 0, characterSpacing);
+  const int kern = renderer.getKerning(fontId, lastCodepointBeforeByteOffset(word, boundary), firstSuffixCp, boldStyle,
+                                       characterSpacing);
   return suffixWidth + kern;
 }
 
 uint16_t measureTokenWidth(const GfxRenderer& renderer, const int fontId, const std::string& word,
-                           const EpdFontFamily::Style style, const uint8_t focusBoundary,
-                           const bool appendHyphen = false) {
+                           const EpdFontFamily::Style style, const uint8_t focusBoundary, const bool appendHyphen,
+                           const int8_t characterSpacing) {
   uint16_t imageId, imageWidth, imageHeight;
   if (parseInlineImageToken(word.c_str(), imageId, imageWidth, imageHeight)) return imageWidth;
   if (focusBoundary == 0 || focusBoundary >= word.size() || appendHyphen || containsSoftHyphen(word)) {
-    return measureWordWidth(renderer, fontId, word, style, appendHyphen);
+    return measureWordWidth(renderer, fontId, word, style, appendHyphen, characterSpacing);
   }
 
-  const int suffixX = measureFocusRunOffset(renderer, fontId, word, style, focusBoundary, false);
-  const int suffixWidth = renderer.getTextAdvanceX(fontId, word.c_str() + focusBoundary, style);
+  const int suffixX = measureFocusRunOffset(renderer, fontId, word, style, focusBoundary, false, characterSpacing);
+  const int suffixWidth = renderer.getTextAdvanceX(fontId, word.c_str() + focusBoundary, style, 0, characterSpacing);
   return static_cast<uint16_t>(std::max(0, suffixX + suffixWidth));
 }
 
@@ -400,16 +403,7 @@ size_t guideDotGapSlots(const std::string& rightWord) {
   return 1 + (isClosingPunctuationForJustify(firstCodepoint(rightWord)) ? 0 : 1);
 }
 
-int wordSpacingExtraFromGap(const int gap, const uint8_t wordSpacing) {
-  if (gap <= 0) {
-    return 0;
-  }
-  // Add a fixed pixel amount per level instead of scaling from the font's
-  // natural space width, so narrow-space fonts still visibly widen.
-  constexpr int WORD_SPACING_LEVEL_PX = 10;
-  const int level = std::min<uint8_t>(wordSpacing, 4);
-  return level * WORD_SPACING_LEVEL_PX;
-}
+int wordSpacingExtraFromGap(const int gap, const uint8_t wordSpacing) { return WordSpacing::extra(gap, wordSpacing); }
 
 int guideDotWordSpacingExtra(const GfxRenderer& renderer, const int fontId, const std::string& leftWord,
                              const std::string& rightWord, const EpdFontFamily::Style leftStyle,
@@ -421,7 +415,8 @@ int guideDotWordSpacingExtra(const GfxRenderer& renderer, const int fontId, cons
 
 int naturalGapBeforeToken(const GfxRenderer& renderer, const int fontId, const std::string& leftWord,
                           const std::string& rightWord, const EpdFontFamily::Style leftStyle, const bool continues,
-                          const bool noSpaceBefore, const bool guideDotBefore, const uint8_t wordSpacing) {
+                          const bool noSpaceBefore, const bool guideDotBefore, const uint8_t wordSpacing,
+                          const int8_t characterSpacing) {
   uint16_t imageId, imageWidth, imageHeight;
   const bool imageEdge = parseInlineImageToken(leftWord.c_str(), imageId, imageWidth, imageHeight) ||
                          parseInlineImageToken(rightWord.c_str(), imageId, imageWidth, imageHeight);
@@ -430,11 +425,14 @@ int naturalGapBeforeToken(const GfxRenderer& renderer, const int fontId, const s
     return guideDotNaturalGap(renderer, fontId, leftWord, rightWord, leftStyle) + extraGap;
   }
   if (noSpaceBefore) {
-    return 0;
+    return imageEdge ? 0
+                     : renderer.getKerning(fontId, lastCodepoint(leftWord), firstCodepoint(rightWord), leftStyle,
+                                           characterSpacing) -
+                           renderer.getKerning(fontId, lastCodepoint(leftWord), firstCodepoint(rightWord), leftStyle);
   }
   if (continues) {
     if (imageEdge) return 0;
-    return renderer.getKerning(fontId, lastCodepoint(leftWord), firstCodepoint(rightWord), leftStyle);
+    return renderer.getKerning(fontId, lastCodepoint(leftWord), firstCodepoint(rightWord), leftStyle, characterSpacing);
   }
   if (imageEdge) {
     const int gap = renderer.getSpaceWidth(fontId, leftStyle);
@@ -522,6 +520,7 @@ void ParsedText::reserveTokenCapacity(const size_t additionalTokens) {
   // words and rubyTexts are deques: their chunked growth avoids the large
   // contiguous reallocations this method is intended to prevent.
   wordStyles.reserve(newCapacity);
+  if (!wordFontSizes.empty()) wordFontSizes.reserve(newCapacity);
   wordContinues.reserve(newCapacity);
   wordNoSpaceBefore.reserve(newCapacity);
   wordFocusBoundary.reserve(newCapacity);
@@ -619,10 +618,16 @@ void ParsedText::eraseInlinePaddingPrefix(const size_t count) {
   }
 }
 
+void ParsedText::setInitialLetter(const char* prefix) {
+  const size_t length = std::min<size_t>(strlen(prefix), sizeof(initialLetter) - 1);
+  memcpy(initialLetter, prefix, length);
+  initialLetter[length] = '\0';
+}
+
 void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle, const bool underline,
                          const bool attachToPrevious, const bool backgroundBlack, const uint8_t linkId,
                          const uint32_t visibleTextOffset, const uint32_t referenceTextOffset,
-                         const int16_t leadingPadding) {
+                         const int16_t leadingPadding, const bool noSpaceBefore, const uint8_t pointSize) {
   if (word.empty()) return;
 
   // The device fonts carry no combining-mark positioning, so EPUB text stored in NFD
@@ -649,6 +654,11 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
     const size_t tokenIndex = words.size();
     words.push_back(std::move(token));
     wordStyles.push_back(tokenStyle);
+    if (pointSize && wordFontSizes.empty()) {
+      wordFontSizes.reserve(wordStyles.capacity());
+      wordFontSizes.resize(tokenIndex, 0);
+    }
+    if (pointSize || !wordFontSizes.empty()) wordFontSizes.push_back(pointSize);
     wordContinues.push_back(continues);
     wordNoSpaceBefore.push_back(noSpaceBefore);
     wordFocusBoundary.push_back(focusBoundary);
@@ -669,7 +679,7 @@ void ParsedText::addWord(std::string word, const EpdFontFamily::Style fontStyle,
   };
 
   bool effectiveAttachToPrevious = attachToPrevious;
-  bool effectiveNoSpaceBefore = false;
+  bool effectiveNoSpaceBefore = noSpaceBefore;
   uint16_t imageId, imageWidth, imageHeight;
   if (attachToPrevious && !words.empty() &&
       parseInlineImageToken(words.back().c_str(), imageId, imageWidth, imageHeight)) {
@@ -822,6 +832,7 @@ void ParsedText::addInlineImage(const uint16_t id, const uint16_t width, const u
   reserveTokenCapacity(1);
   words.push_back(makeInlineImageToken(id, width, height));
   wordStyles.push_back(EpdFontFamily::REGULAR);
+  if (!wordFontSizes.empty()) wordFontSizes.push_back(0);
   // Image edges are legal wrap points even with no source whitespace.
   wordContinues.push_back(false);
   wordNoSpaceBefore.push_back(attachToPrevious);
@@ -886,8 +897,8 @@ int ParsedText::resolveFirstLineIndent(const bool isFirstLine, const GfxRenderer
 // Consumes data to minimize memory usage
 bool ParsedText::layoutAndExtractLines(
     const GfxRenderer& renderer, const int fontId, const uint16_t viewportWidth,
-    const std::function<void(std::shared_ptr<TextBlock>, uint32_t, uint32_t)>& processLine,
-    const bool includeLastLine) {
+    const std::function<void(std::shared_ptr<TextBlock>, uint32_t, uint32_t)>& processLine, const bool includeLastLine,
+    const size_t maxLines) {
   if (words.empty()) {
     return true;
   }
@@ -962,7 +973,7 @@ bool ParsedText::layoutAndExtractLines(
   if (!breaksOk || lineBreakIndices.empty()) {
     return false;
   }
-  const size_t lineCount = includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1;
+  const size_t lineCount = std::min(maxLines, includeLastLine ? lineBreakIndices.size() : lineBreakIndices.size() - 1);
 
   for (size_t i = 0; i < lineCount; ++i) {
     if (!extractLine(layoutArena, i, pageWidth, wordWidths, wordContinues, wordNoSpaceBefore, naturalGaps, gapSlots,
@@ -976,6 +987,7 @@ bool ParsedText::layoutAndExtractLines(
     const size_t consumed = lineBreakIndices[lineCount - 1];
     words.erase(words.begin(), words.begin() + consumed);
     wordStyles.erase(wordStyles.begin(), wordStyles.begin() + consumed);
+    if (!wordFontSizes.empty()) wordFontSizes.erase(wordFontSizes.begin(), wordFontSizes.begin() + consumed);
     wordContinues.erase(wordContinues.begin(), wordContinues.begin() + consumed);
     wordNoSpaceBefore.erase(wordNoSpaceBefore.begin(), wordNoSpaceBefore.begin() + consumed);
     wordFocusBoundary.erase(wordFocusBoundary.begin(), wordFocusBoundary.begin() + consumed);
@@ -994,7 +1006,7 @@ bool ParsedText::layoutAndExtractLines(
   if (lineCount > 0) {
     // A partial flush leaves the remaining words in this same logical
     // paragraph. Mark them so the next pass starts at the normal left edge.
-    isContinuation_ = !includeLastLine;
+    isContinuation_ = !includeLastLine || !words.empty();
   }
   return true;
 }
@@ -1026,10 +1038,12 @@ int ParsedText::calculateRubyExtraStartOffset(const size_t wordIdx, const size_t
   int groupActualWidth = 0;
   for (size_t k = 0; k < groupWordCount; ++k) {
     const size_t index = wordIdx + k;
-    groupActualWidth += measureTokenWidth(renderer, fontId, words[index], wordStyles[index], wordFocusBoundary[index]) +
+    groupActualWidth += measureTokenWidth(renderer, fontId, words[index], wordStyles[index], wordFocusBoundary[index],
+                                          false, characterSpacing) +
                         inlinePaddingBefore(index);
   }
-  const int rubyWidth = renderer.getTextAdvanceX(fontId, rubyTexts[wordIdx].c_str(), EpdFontFamily::SUP);
+  const int rubyWidth =
+      renderer.getTextAdvanceX(fontId, rubyTexts[wordIdx].c_str(), EpdFontFamily::SUP, 0, characterSpacing);
   return rubyWidth > groupActualWidth ? (rubyWidth - groupActualWidth) / 2 : 0;
 }
 
@@ -1048,11 +1062,17 @@ int ParsedText::calculateRubyExtraEndOffset(const size_t lineStartIdx, const siz
 
   int groupActualWidth = 0;
   for (size_t index = leaderIdx; index < lineBreakIdx; ++index) {
-    groupActualWidth += measureTokenWidth(renderer, fontId, words[index], wordStyles[index], wordFocusBoundary[index]) +
+    groupActualWidth += measureTokenWidth(renderer, fontId, words[index], wordStyles[index], wordFocusBoundary[index],
+                                          false, characterSpacing) +
                         inlinePaddingBefore(index);
   }
-  const int rubyWidth = renderer.getTextAdvanceX(fontId, rubyTexts[leaderIdx].c_str(), EpdFontFamily::SUP);
+  const int rubyWidth =
+      renderer.getTextAdvanceX(fontId, rubyTexts[leaderIdx].c_str(), EpdFontFamily::SUP, 0, characterSpacing);
   return rubyWidth > groupActualWidth ? (rubyWidth - groupActualWidth) / 2 : 0;
+}
+
+int ParsedText::wordFontId(const GfxRenderer& renderer, const int base, const size_t index) const {
+  return wordFontSizes.empty() ? base : renderer.getFontIdForSize(base, wordFontSizes[index]);
 }
 
 bool ParsedText::calculateWordWidths(ArenaVector<uint16_t>& wordWidths, const GfxRenderer& renderer, const int fontId) {
@@ -1061,8 +1081,9 @@ bool ParsedText::calculateWordWidths(ArenaVector<uint16_t>& wordWidths, const Gf
   }
 
   for (size_t i = 0; i < words.size(); ++i) {
-    const int width =
-        measureTokenWidth(renderer, fontId, words[i], wordStyles[i], wordFocusBoundary[i]) + inlinePaddingBefore(i);
+    const int width = measureTokenWidth(renderer, wordFontId(renderer, fontId, i), words[i], wordStyles[i],
+                                        wordFocusBoundary[i], false, characterSpacing) +
+                      inlinePaddingBefore(i);
     if (!wordWidths.push_back(static_cast<uint16_t>(std::min(width, static_cast<int>(UINT16_MAX))))) {
       return false;
     }
@@ -1090,7 +1111,7 @@ bool ParsedText::calculateWordWidths(ArenaVector<uint16_t>& wordWidths, const Gf
           g.baseWidth += wordWidths[i + g.count];
           g.count++;
         }
-        g.rubyWidth = renderer.getTextAdvanceX(fontId, rubyTexts[i].c_str(), EpdFontFamily::SUP);
+        g.rubyWidth = renderer.getTextAdvanceX(fontId, rubyTexts[i].c_str(), EpdFontFamily::SUP, 0, characterSpacing);
         g.leftOverlap = std::max(0, (g.rubyWidth - g.baseWidth) / 2);
         g.rightOverlap = std::max(0, (g.rubyWidth - g.baseWidth) / 2);
         groups.push_back(g);
@@ -1187,9 +1208,9 @@ bool ParsedText::calculateGapMetrics(ArenaVector<int16_t>& naturalGaps, ArenaVec
     const bool continues = wordContinues[i];
     const bool noSpaceBefore = wordNoSpaceBefore[i];
     const bool guideDotBefore = wordGuideDotBefore[i];
-    naturalGaps[i] =
-        static_cast<int16_t>(naturalGapBeforeToken(renderer, fontId, words[i - 1], words[i], wordStyles[i - 1],
-                                                   continues, noSpaceBefore, guideDotBefore, wordSpacing));
+    naturalGaps[i] = static_cast<int16_t>(naturalGapBeforeToken(renderer, fontId, words[i - 1], words[i],
+                                                                wordStyles[i - 1], continues, noSpaceBefore,
+                                                                guideDotBefore, wordSpacing, characterSpacing));
     gapSlots[i] = static_cast<uint8_t>(std::min<size_t>(
         UINT8_MAX, gapSlotsBeforeToken(words[i - 1], words[i], continues, noSpaceBefore, guideDotBefore)));
   }
@@ -1216,7 +1237,8 @@ bool ParsedText::computeLineBreaks(Arena& scratchArena, const GfxRenderer& rende
     // First word needs to fit in reduced width if there's an indent
     const int effectiveWidth = i == 0 ? pageWidth - firstLineIndent : pageWidth;
     while (wordWidths[i] > effectiveWidth) {
-      if (!hyphenateWordAtIndex(i, effectiveWidth, renderer, fontId, wordWidths, /*allowFallbackBreaks=*/true)) {
+      if (!hyphenateWordAtIndex(i, effectiveWidth, renderer, wordFontId(renderer, fontId, i), wordWidths,
+                                /*allowFallbackBreaks=*/true)) {
         break;
       }
     }
@@ -1356,7 +1378,8 @@ bool ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& renderer, const 
       if (!isFirstWord) {
         spacing = naturalGapBeforeToken(renderer, fontId, words[currentIndex - 1], words[currentIndex],
                                         wordStyles[currentIndex - 1], continuesVec[currentIndex],
-                                        noSpaceBeforeVec[currentIndex], wordGuideDotBefore[currentIndex], wordSpacing);
+                                        noSpaceBeforeVec[currentIndex], wordGuideDotBefore[currentIndex], wordSpacing,
+                                        characterSpacing);
       }
       const int candidateWidth = spacing + wordWidths[currentIndex];
 
@@ -1372,7 +1395,8 @@ bool ParsedText::computeHyphenatedLineBreaks(const GfxRenderer& renderer, const 
       const bool allowFallbackBreaks = isFirstWord;  // Only for first word on line
 
       if (availableWidth > 0 &&
-          hyphenateWordAtIndex(currentIndex, availableWidth, renderer, fontId, wordWidths, allowFallbackBreaks)) {
+          hyphenateWordAtIndex(currentIndex, availableWidth, renderer, wordFontId(renderer, fontId, currentIndex),
+                               wordWidths, allowFallbackBreaks)) {
         // Prefix now fits; append it to this line and move to next line
         lineWidth += spacing + wordWidths[currentIndex];
         ++currentIndex;
@@ -1453,7 +1477,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     const FocusTokenMetadata prefixFocus = computeFocusMetadata(prefix, style, focusReadingEnabled);
     const int prefixWidth =
         leadingPadding + measureTokenWidth(renderer, fontId, prefix, prefixFocus.style, prefixFocus.boundary,
-                                           /*appendHyphen=*/false);
+                                           /*appendHyphen=*/false, characterSpacing);
     if (prefixWidth > availableWidth || prefixWidth <= chosenWidth) {
       continue;  // Skip if too wide or not an improvement
     }
@@ -1501,6 +1525,7 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
     wordReferenceOffsets.insert(wordReferenceOffsets.begin() + wordIndex + 1, remainderReferenceOffset);
   }
   wordStyles.insert(wordStyles.begin() + wordIndex + 1, remainderFocus.style);
+  if (!wordFontSizes.empty()) wordFontSizes.insert(wordFontSizes.begin() + wordIndex + 1, wordFontSizes[wordIndex]);
   wordBackgroundBlack.insert(wordBackgroundBlack.begin() + wordIndex + 1, wordBackgroundBlack[wordIndex]);
   // The hyphen remainder starts fresh on the next line and does not inherit a virtual guide dot.
   wordFocusBoundary.insert(wordFocusBoundary.begin() + wordIndex + 1, remainderFocus.boundary);
@@ -1538,8 +1563,8 @@ bool ParsedText::hyphenateWordAtIndex(const size_t wordIndex, const int availabl
 
   // Update cached widths to reflect the new prefix/remainder pairing.
   wordWidths[wordIndex] = static_cast<uint16_t>(chosenWidth);
-  const uint16_t remainderWidth =
-      measureTokenWidth(renderer, fontId, remainder, remainderFocus.style, remainderFocus.boundary);
+  const uint16_t remainderWidth = measureTokenWidth(renderer, fontId, remainder, remainderFocus.style,
+                                                    remainderFocus.boundary, false, characterSpacing);
   if (!wordWidths.insert(wordIndex + 1, remainderWidth)) {
     LOG_ERR("PTX", "OOM inserting hyphenated word width");
     return false;
@@ -1585,8 +1610,8 @@ bool ParsedText::splitTokenAtCodepointBoundary(const size_t wordIndex, const int
     const size_t candidateOffset = static_cast<size_t>(next - wordStart);
     prefix.assign(word.data(), candidateOffset);
     const FocusTokenMetadata prefixFocus = computeFocusMetadata(prefix, style, focusReadingEnabled);
-    const int prefixWidth =
-        leadingPadding + measureTokenWidth(renderer, fontId, prefix, prefixFocus.style, prefixFocus.boundary);
+    const int prefixWidth = leadingPadding + measureTokenWidth(renderer, fontId, prefix, prefixFocus.style,
+                                                               prefixFocus.boundary, false, characterSpacing);
     if (prefixWidth > availableWidth) {
       // Prefix widths grow with the prefix, so every longer candidate is also
       // too wide. Stop here instead of measuring the rest of a huge token.
@@ -1625,6 +1650,7 @@ bool ParsedText::splitTokenAtCodepointBoundary(const size_t wordIndex, const int
     wordReferenceOffsets.insert(wordReferenceOffsets.begin() + wordIndex + 1, remainderReferenceOffset);
   }
   wordStyles.insert(wordStyles.begin() + wordIndex + 1, remainderFocus.style);
+  if (!wordFontSizes.empty()) wordFontSizes.insert(wordFontSizes.begin() + wordIndex + 1, wordFontSizes[wordIndex]);
   wordBackgroundBlack.insert(wordBackgroundBlack.begin() + wordIndex + 1, wordBackgroundBlack[wordIndex]);
   wordFocusBoundary.insert(wordFocusBoundary.begin() + wordIndex + 1, remainderFocus.boundary);
   wordGuideDotBefore.insert(wordGuideDotBefore.begin() + wordIndex + 1, false);
@@ -1633,10 +1659,10 @@ bool ParsedText::splitTokenAtCodepointBoundary(const size_t wordIndex, const int
   wordNoSpaceBefore.insert(wordNoSpaceBefore.begin() + wordIndex + 1, true);
 
   wordWidths[wordIndex] = static_cast<uint16_t>(chosenWidth);
-  const uint16_t remainderWidth =
-      remainder.size() >= PATHOLOGICAL_TOKEN_MIN_BYTES
-          ? std::numeric_limits<uint16_t>::max()
-          : measureTokenWidth(renderer, fontId, remainder, remainderFocus.style, remainderFocus.boundary);
+  const uint16_t remainderWidth = remainder.size() >= PATHOLOGICAL_TOKEN_MIN_BYTES
+                                      ? std::numeric_limits<uint16_t>::max()
+                                      : measureTokenWidth(renderer, fontId, remainder, remainderFocus.style,
+                                                          remainderFocus.boundary, false, characterSpacing);
   if (!wordWidths.insert(wordIndex + 1, remainderWidth)) {
     LOG_ERR("PTX", "OOM inserting split token width");
     return false;
@@ -1814,10 +1840,11 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
         reorderedGapCount += gapSlotsBeforeToken(
             reorderedWordsScratch[wordIdx - 1], reorderedWordsScratch[wordIdx], reorderedContinuesScratch[wordIdx],
             reorderedNoSpaceBeforeScratch[wordIdx], reorderedGuideDotBeforeScratch[wordIdx]);
-        reorderedNaturalGaps += naturalGapBeforeToken(
-            renderer, fontId, reorderedWordsScratch[wordIdx - 1], reorderedWordsScratch[wordIdx],
-            reorderedStylesScratch[wordIdx - 1], reorderedContinuesScratch[wordIdx],
-            reorderedNoSpaceBeforeScratch[wordIdx], reorderedGuideDotBeforeScratch[wordIdx], wordSpacing);
+        reorderedNaturalGaps +=
+            naturalGapBeforeToken(renderer, fontId, reorderedWordsScratch[wordIdx - 1], reorderedWordsScratch[wordIdx],
+                                  reorderedStylesScratch[wordIdx - 1], reorderedContinuesScratch[wordIdx],
+                                  reorderedNoSpaceBeforeScratch[wordIdx], reorderedGuideDotBeforeScratch[wordIdx],
+                                  wordSpacing, characterSpacing);
       }
     }
 
@@ -1861,7 +1888,7 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
         const bool nextGuideDot = reorderedGuideDotBeforeScratch[wordIdx + 1];
         int gap = naturalGapBeforeToken(renderer, fontId, reorderedWordsScratch[wordIdx],
                                         reorderedWordsScratch[wordIdx + 1], reorderedStylesScratch[wordIdx],
-                                        nextContinues, nextNoSpace, nextGuideDot, wordSpacing);
+                                        nextContinues, nextNoSpace, nextGuideDot, wordSpacing, characterSpacing);
         gap += reorderedJustifyExtra *
                static_cast<int>(gapSlotsBeforeToken(reorderedWordsScratch[wordIdx], reorderedWordsScratch[wordIdx + 1],
                                                     nextContinues, nextNoSpace, nextGuideDot));
@@ -1950,6 +1977,8 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
     }
   }
 
+  std::vector<uint8_t> outFontSizes;
+  if (!wordFontSizes.empty()) outFontSizes.reserve(lineWordCount);
   std::vector<std::string> outWords;
   std::vector<int16_t> outXPos;
   std::vector<EpdFontFamily::Style> outStyles;
@@ -1982,12 +2011,16 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
       lineImagesScratch.push_back({imageId, lineXPos[i], imageHeight});
       continue;
     }
+    const size_t sourceIndex = lastBreakAt + (willReorder ? visualOrderScratch[i] : i);
+    const int tokenFontId = wordFontId(renderer, fontId, sourceIndex);
+    if (!wordFontSizes.empty()) outFontSizes.push_back(wordFontSizes[sourceIndex]);
     const uint8_t boundary = lineFocusBoundary[i];
     const bool wordIsRtl = BidiUtils::detectParagraphLevel(lineWords[i].c_str(), blockStyle.isRtl ? 1 : 0) ==
                            static_cast<int>(BidiUtils::BidiBaseDir::RTL);
     const uint16_t runOffset =
-        boundary > 0 ? static_cast<uint16_t>(std::max(0, measureFocusRunOffset(renderer, fontId, lineWords[i],
-                                                                               lineWordStyles[i], boundary, wordIsRtl)))
+        boundary > 0 ? static_cast<uint16_t>(
+                           std::max(0, measureFocusRunOffset(renderer, tokenFontId, lineWords[i], lineWordStyles[i],
+                                                             boundary, wordIsRtl, characterSpacing)))
                      : 0;
 
     outWords.push_back(std::move(lineWords[i]));
@@ -2023,9 +2056,10 @@ bool ParsedText::extractLine(Arena& scratchArena, const size_t breakIndex, const
     }
   }
 
-  auto block =
-      std::make_shared<TextBlock>(outWords, outXPos, outStyles, outBoundaries, outRunOffsets, outGuideDotXOffset,
-                                  outBackgroundBlack, outHasSpaceBefore, blockStyle, std::move(outRubyTexts));
+  auto block = std::make_shared<TextBlock>(outWords, outXPos, outStyles, outBoundaries, outRunOffsets,
+                                           outGuideDotXOffset, outBackgroundBlack, outHasSpaceBefore, blockStyle,
+                                           std::move(outRubyTexts), outFontSizes, initialLetter, characterSpacing);
+  initialLetter[0] = '\0';
   if (!block->valid()) {
     LOG_ERR("PTX", "Dropping line: TextBlock arena allocation failed");
     return false;

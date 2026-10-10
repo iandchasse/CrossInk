@@ -14,6 +14,7 @@
 
 #include "BookReadingStats.h"
 #include "BookmarkStore.h"
+#include "DailyReadingStats.h"
 #include "EndOfBookOptions.h"
 #include "EpubLinkReturnState.h"
 #include "EpubReaderMenuModel.h"
@@ -37,6 +38,10 @@ struct ToastRect {
 };
 
 class EpubReaderActivity final : public Activity {
+#ifdef SIMULATOR
+  friend struct EpubReaderCompletionSmokeTest;
+  friend struct ScreenCalibrationSmokeTest;
+#endif
  public:
   bool usesFullScreenReaderVerticalSwipes() const override { return true; }
 
@@ -45,6 +50,7 @@ class EpubReaderActivity final : public Activity {
     uint8_t readerFontPointSize = 14;
     uint8_t lineHeightPercent = 100;
     uint8_t wordSpacing = 0;
+    uint8_t characterSpacing = 5;
     uint8_t orientation = 0;
     uint8_t screenMarginVertical = 5;
     uint8_t screenMarginHorizontal = 5;
@@ -54,6 +60,7 @@ class EpubReaderActivity final : public Activity {
     uint8_t hyphenationEnabled = 0;
     uint8_t textAntiAliasing = 1;
     uint8_t imageRendering = 0;
+    uint8_t imageGrayscale = 1;
     uint8_t extraParagraphSpacing = 1;
     uint8_t forceParagraphIndents = 0;
     uint8_t focusReadingEnabled = 0;
@@ -130,6 +137,10 @@ class EpubReaderActivity final : public Activity {
   int cachedChapterPageNumber = 0;
   int cachedChapterTotalPageCount = 0;
   std::optional<uint32_t> cachedVisibleTextOffset;
+  // Consecutive status-bar edits retain one content anchor until navigation.
+  std::optional<uint32_t> statusBarRelayoutOffset;
+  int statusBarRelayoutSpine = -1;
+  int statusBarRelayoutPage = -1;
   struct ChapterGroupEstimateCache {
     int currentSpineIndex = -1;
     int firstSpineIndex = -1;
@@ -158,6 +169,8 @@ class EpubReaderActivity final : public Activity {
   unsigned long pageTurnDuration = 0UL;
   ManualPageTurnQueue pendingManualPageTurns;
   QueuedTurnRenderingState queuedTurnRendering;
+  bool hyphenationPackChecked = false;
+  bool checkHyphenationPack();
   unsigned long pageShownAtMs = 0UL;
   unsigned long lastRenderCompleteMs = 0UL;
   int idlePrewarmSpine = -1;
@@ -167,6 +180,8 @@ class EpubReaderActivity final : public Activity {
   uint32_t sessionPaceSampleSeconds = 0;
   uint16_t sessionPaceSampleCount = 0;
   uint32_t sessionReadingSeconds = 0;
+  DailyReadingStats::Session dailyReadingSession;
+  void startDailyReadingInterval();
   uint16_t lastAutoPageTurnIntervalSeconds = 0;
   bool bookHasCustomReaderSettings = false;
   bool bookHasAutoPageTurnInterval = false;
@@ -184,6 +199,12 @@ class EpubReaderActivity final : public Activity {
   ReadingStatsDateTime sessionStartLocalDateTime;
   bool hasSessionStartLocalDateTime = false;
   void syncStatsTrackingState();
+  void commitReadingStatsSession();
+  void finalizeReadingStatsOnExit();
+  uint32_t globalStatsResetRevisionAtPanelOpen = 0;
+  uint32_t ttfRenderGenerationAtPanelOpen = 0;
+  bool pendingTtfRenderRelayout = false;
+  void relayoutAfterTtfRenderChange();
   // Signals that the next render should reposition within the newly loaded section
   // based on a cross-book percentage jump.
   bool pendingPercentJump = false;
@@ -286,6 +307,13 @@ class EpubReaderActivity final : public Activity {
   // Input should win the next RenderLock race. Keep the incremental parser alive,
   // but do not start another background chunk until the requested render begins.
   std::atomic<bool> backgroundBuildYieldForInput{false};
+  // A loan destroys page pixels. The loop normally recomposes under RenderLock;
+  // failed storage recovery leaves this set until render() supplies a safe base.
+  std::atomic<bool> pageBufferStale{false};
+  void invalidatePageBufferAfterBuild(uint32_t loansBefore);
+  bool backgroundBuildCanUsePageBuffer() const;
+  bool renderQuickActionsPopup();
+  void restoreStalePageBufferForInputLock();
   // Full-section next-chapter prefetch is speculative. A forward page turn may
   // stop it, but the visible build at the chapter boundary remains full-section.
   std::atomic<bool> silentPrefetchBuildActive{false};
@@ -418,7 +446,7 @@ class EpubReaderActivity final : public Activity {
   void jumpToPercent(float percent);
   void jumpToStablePage(uint32_t page);
   void reindexCurrentSection();
-  void prepareCurrentSectionForRelayout();
+  void prepareCurrentSectionForRelayout(bool preserveStatusBarAnchor = false);
   void executeReaderQuickAction(CrossPointSettings::LONG_PRESS_MENU_ACTION action,
                                 bool dictionaryLookupFramebufferContainsPage = true,
                                 QuickLockTrigger quickLockTrigger = QuickLockTrigger::LongMenu);
@@ -447,6 +475,7 @@ class EpubReaderActivity final : public Activity {
   // Opens the reader menu for the current position (short-press Confirm)
   void openReaderMenu();
   void applyOrientation(uint8_t orientation);
+  bool handleEndOfBookPageTurn(bool isForwardTurn);
   void requestManualPageTurn(bool isForwardTurn, const char* source);
   bool drainPendingManualPageTurn();
   void clearPendingManualPageTurns(bool requestRecoveryRedraw = true);
@@ -455,6 +484,8 @@ class EpubReaderActivity final : public Activity {
   bool isAtBookStart() const;
   void pageTurn(bool isForwardTurn, const char* source = "unknown");
   float getCurrentBookProgressPercent() const;
+  // Caller holds RenderLock. Matches the status bar's chapter-group title.
+  std::string currentChapterTitle() const;
   void initializeCompletionPromptTrigger();
   bool isAtOrPastCompletionTrigger() const;
   bool shouldQueueCompletionPromptOnChapterExit() const;
@@ -510,7 +541,7 @@ class EpubReaderActivity final : public Activity {
   bool backgroundSectionBuildHasHeap();
   void idlePrewarmNextPage();
   bool skipLoopDelay() override {
-    return sectionBuildWantsTick() && !backgroundBuildPausedForLowMemory &&
+    return backgroundBuildCanUsePageBuffer() && sectionBuildWantsTick() && !backgroundBuildPausedForLowMemory &&
            !backgroundBuildYieldForInput.load(std::memory_order_relaxed);
   }
   bool isReaderActivity() const override { return true; }
@@ -552,7 +583,12 @@ class EpubReaderActivity final : public Activity {
   // Returns false if the page cannot be loaded (missing cache / file error).
   static bool drawCurrentPageToBuffer(const std::string& filePath, GfxRenderer& renderer);
   static BookReaderSettingsData readBookReaderSettings(const Epub& epub);
+  enum class BookSettingsReadStatus : uint8_t { Missing, Loaded, Invalid };
+  // Read only this cache's settings record; no EPUB parsing, migration or history scan.
+  static BookReaderSettingsData readBookReaderSettingsForSupport(const std::string& cachePath,
+                                                                 BookSettingsReadStatus& status);
   static uint8_t loadBookRenderMode(const std::string& filePath);
+  static uint8_t loadBookRenderMode(const Epub& epub);
   static bool saveBookRenderMode(const std::string& filePath, uint8_t renderMode);
   static bool resetBookReaderSettings(const std::string& filePath);
   ScreenshotInfo getScreenshotInfo() const override;

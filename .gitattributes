@@ -4,3 +4,6 @@ scripts/silkscreen/*.sh text eol=lf
 # scripts/patch_sdfat.py applies these with `git apply` to SdFat's registry
 # sources, which are LF: keep them LF where core.autocrlf is set.
 scripts/sdfat_patches/*.patch text eol=lf
+
+# Preserve the original dictionary sources, including upstream whitespace.
+assets/hyphenation/patterns/*.tex -text -whitespace

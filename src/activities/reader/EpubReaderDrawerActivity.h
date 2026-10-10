@@ -5,6 +5,7 @@
 #include <FontCacheManager.h>
 #include <FreeInkApp.h>
 #include <FreeInkUIGfxRenderer.h>
+#include <I18n.h>
 
 #include <array>
 #include <atomic>
@@ -15,7 +16,6 @@
 #include <vector>
 
 #include "EpubReaderMenuModel.h"
-#include "ReaderOptionsActivity.h"
 #include "TouchReaderPreviewModel.h"
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
@@ -25,6 +25,11 @@
 
 class EpubReaderDrawerActivity final : public Activity {
  public:
+  using SaveSettingsCallback = void (*)(void* ctx);
+  using SaveGlobalSettingsCallback = void (*)(void* ctx);
+  using GlobalSettingsEditCallback = void (*)(void* ctx);
+  using DictionaryFontChangedCallback = void (*)(void* ctx, const char* familyName, uint8_t pointSize);
+
   explicit EpubReaderDrawerActivity(
       GfxRenderer& renderer, MappedInputManager& mappedInput, std::shared_ptr<Epub> epub,
       const EpubReaderPreviewModel* previewModel, float bookProgressPercent, uint32_t chapterPage,
@@ -32,21 +37,22 @@ class EpubReaderDrawerActivity final : public Activity {
       bool hasBookmarks, bool hasClippings, bool isCurrentPageBookmarked, bool isBookCompleted,
       bool showReadingPaceReset, bool globalStatsEnabled, bool bookStatsEnabled, uint32_t stableCurrentPage,
       uint32_t stablePageCount, uint16_t autoPageTurnIntervalSeconds, bool automaticPageTurnActive,
-      ReaderOptionsActivity::SaveSettingsCallback saveReaderSettingsCallback = nullptr,
-      void* saveReaderSettingsContext = nullptr,
-      ReaderOptionsActivity::SaveGlobalSettingsCallback saveGlobalSettingsCallback = nullptr,
-      void* saveGlobalSettingsContext = nullptr,
-      ReaderOptionsActivity::GlobalSettingsEditCallback beginGlobalSettingsEditCallback = nullptr,
+      SaveSettingsCallback saveReaderSettingsCallback = nullptr, void* saveReaderSettingsContext = nullptr,
+      SaveGlobalSettingsCallback saveGlobalSettingsCallback = nullptr, void* saveGlobalSettingsContext = nullptr,
+      GlobalSettingsEditCallback beginGlobalSettingsEditCallback = nullptr,
       void* beginGlobalSettingsEditContext = nullptr,
-      ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr,
-      void* endGlobalSettingsEditContext = nullptr, const char* dictionaryFontFamilyName = nullptr,
-      uint8_t dictionaryFontPointSize = 0, bool hasDictionaryFontOverride = false,
-      ReaderOptionsActivity::DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr,
+      GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr, void* endGlobalSettingsEditContext = nullptr,
+      const char* dictionaryFontFamilyName = nullptr, uint8_t dictionaryFontPointSize = 0,
+      bool hasDictionaryFontOverride = false, DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr,
       void* dictionaryFontChangedContext = nullptr,
       ReaderDrawerState initialState = initialReaderDrawerState(CROSSINK_APP_CAP_TOUCH),
       std::unique_ptr<EpubReaderPreviewModel> ownedPreviewModel = nullptr);
 
+  // Button menu only: shown under the book title. Set before the activity starts.
+  void setChapterTitle(std::string title) { chapterTitle = std::move(title); }
+
 #ifdef SIMULATOR
+  freeink::ui::Rect simulatorHandleRect() const { return drawerHandleRect; }
   const ReaderDrawerState& simulatorState() const { return state; }
   bool simulatorFocusedRowVisible() const {
     return buttonFocusActive && state.selectedIndex >= activeTopIndex() &&
@@ -118,6 +124,7 @@ class EpubReaderDrawerActivity final : public Activity {
   const uint32_t chapterPageCount = 0;
   const bool chapterPageCountEstimated = false;
   const uint32_t stablePageSeed = 0;
+  std::string chapterTitle;
   // Touch uses the Percent keypad directly. Button devices start on the slider
   // and can open this keypad by holding Confirm, as in the old selector.
   char entryText[8] = {0};
@@ -179,18 +186,18 @@ class EpubReaderDrawerActivity final : public Activity {
   // above: keeps the render task's stack frame small.
   std::array<freeink::ui::KeyGridKey, 12> keypadKeys{};
 
-  ReaderOptionsActivity::SaveSettingsCallback saveReaderSettingsCallback = nullptr;
+  SaveSettingsCallback saveReaderSettingsCallback = nullptr;
   void* saveReaderSettingsContext = nullptr;
-  ReaderOptionsActivity::SaveGlobalSettingsCallback saveGlobalSettingsCallback = nullptr;
+  SaveGlobalSettingsCallback saveGlobalSettingsCallback = nullptr;
   void* saveGlobalSettingsContext = nullptr;
-  ReaderOptionsActivity::GlobalSettingsEditCallback beginGlobalSettingsEditCallback = nullptr;
+  GlobalSettingsEditCallback beginGlobalSettingsEditCallback = nullptr;
   void* beginGlobalSettingsEditContext = nullptr;
-  ReaderOptionsActivity::GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr;
+  GlobalSettingsEditCallback endGlobalSettingsEditCallback = nullptr;
   void* endGlobalSettingsEditContext = nullptr;
   char dictionaryFontFamilyName[64] = {};
   uint8_t dictionaryFontPointSize = 0;
   bool hasDictionaryFontOverride = false;
-  ReaderOptionsActivity::DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr;
+  DictionaryFontChangedCallback dictionaryFontChangedCallback = nullptr;
   void* dictionaryFontChangedContext = nullptr;
   ButtonNavigator buttonNavigator;
   freeink::ui::GfxRendererTarget uiTarget;
@@ -226,12 +233,14 @@ class EpubReaderDrawerActivity final : public Activity {
   // landscape screen, which is only 480 px high; every other menu draws it on every pane.
   bool showsBookBand() const;
   bool showsSamplePreview() const;
+  bool samplePreviewBesideControls() const;
   void renderPreviewUnavailable();
   void renderSamplePreviewText(const ReaderSettingsDraft& settings, int fontId);
   void buildTabBar(UiApp::ScreenType& screen, freeink::ui::Rect rect, bool drawBottomRule);
   void buildPaneHeader(UiApp::ScreenType& screen);
   void buildRootRows(UiApp::ScreenType& screen);
   void buildSimplePane(UiApp::ScreenType& screen);
+  void buildCharacterSpacingPane(UiApp::ScreenType& screen);
   void buildSpacingPane(UiApp::ScreenType& screen);
   void buildMarginsPane(UiApp::ScreenType& screen);
   void buildPercentPane(UiApp::ScreenType& screen);

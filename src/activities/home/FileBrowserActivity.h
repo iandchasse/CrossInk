@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include "FinishedBookCache.h"
 #include "RecentBooksStore.h"
 #include "activities/Activity.h"
 #include "util/ButtonNavigator.h"
@@ -39,6 +40,7 @@ class FileBrowserActivity final : public Activity {
   void pinBootFavorite(const std::string& fullPath);
   void unpinBootFavorite();
   bool isPinnedBootFavorite(const std::string& fullPath) const;
+  PendingOverlayResume syncReturnResume() const;
   void showFileActionMenu(const std::string& entry, bool ignoreInitialConfirmRelease = false);
   void startRenameFile(const std::string& fullPath, const std::string& entry);
   void renameFile(const std::string& oldPath, const std::string& oldEntry, const std::string& newStem,
@@ -85,6 +87,12 @@ class FileBrowserActivity final : public Activity {
   // renderer supplies a local row number and this records its absolute base.
   size_t actionWindowFirst = 0;
   freeink::ui::ListNav listNav;
+  // Finished state of drawn books, owned by the render task. Actions that may
+  // change a book's status run on the main loop and only raise the stale flag.
+  FinishedBookCache finishedCache;
+  std::atomic<bool> finishedRowsStale{false};
+  void markFinishedRowsStale() { finishedRowsStale.store(true, std::memory_order_release); }
+  bool isFinishedBook(const std::string& entry, const std::string& fullPath);
 
   static void listScreen(UiApp::ScreenType& screen, void* user);
   static void onRowEvent(const freeink::ui::ActionEvent& event, void* user);
@@ -107,8 +115,17 @@ class FileBrowserActivity final : public Activity {
   size_t findEntry(const std::string& name);
 
  public:
+#ifdef SIMULATOR
+  freeink::ui::Rect simulatorSafeRect() const { return app.device().safeRect(); }
+  const std::string& simulatorFolderPath() const { return basepath; }
+  size_t simulatorSelectedIndex() const { return selectorIndex; }
+  int simulatorTopIndex() const { return topIndex; }
+  void simulatorOpenContextMenu() { showFileActionMenu(entryNameAt(selectorIndex)); }
+#endif
   explicit FileBrowserActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, std::string initialPath = "/",
                                Mode mode = Mode::Books);
+  bool handleFrontlightPanelResult(const FrontlightPanelResult& result) override;
+  void onFrontlightPanelClosed() override;
   void onEnter() override;
   void onExit() override;
   void loop() override;

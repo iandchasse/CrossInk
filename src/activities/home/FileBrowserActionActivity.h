@@ -31,7 +31,9 @@ enum class FileBrowserAction : int {
   Rename = 18,
   ReadingStats = 19,
   ToggleBookStatsTracking = 20,
-  LightControls = 21,
+  UploadFolderProgress = 21,
+  SyncProgress = 22,
+  LightControls = 23,  // Silkscreen: after upstream's 22; a menu value, never saved
 };
 
 class FileBrowserActionActivity final : public Activity {

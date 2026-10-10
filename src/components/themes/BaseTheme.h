@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "components/OptionLabels.h"
+#include "fontIds.h"
 #include "util/ReaderStatusBarConfig.h"
 
 class GfxRenderer;
@@ -47,6 +49,8 @@ struct ReaderStatusBarContent {
   bool darkMode = false;
   int edgePadding = 0;
   int previewOriginY = -1;
+  // Optional borrowed bounds, used only during this draw call.
+  const Rect* horizontalBounds = nullptr;
 };
 
 enum class ThemeTabBarAppearance : uint8_t {
@@ -170,7 +174,8 @@ enum UIIcon {
   Opds,
   Wifi,
   Hotspot,
-  Chart
+  Chart,
+  BookCheck
 };
 
 // Default theme implementation (Classic Theme)
@@ -265,10 +270,10 @@ class BaseTheme {
   void drawProgressBar(const GfxRenderer& renderer, Rect rect, size_t current, size_t total) const;
   // showPercentage draws the label beside the glyph (batteryLabel()): the
   // percentage, or the no-battery message in its place.
-  void drawBatteryLeft(const GfxRenderer& renderer, Rect rect, bool showPercentage = true,
-                       bool foregroundBlack = true) const;  // Left aligned (reader mode)
-  void drawBatteryRight(const GfxRenderer& renderer, Rect rect, bool showPercentage = true,
-                        bool foregroundBlack = true) const;  // Right aligned (UI headers)
+  void drawBatteryLeft(const GfxRenderer& renderer, Rect rect, bool showPercentage = true, bool foregroundBlack = true,
+                       int fontId = SMALL_FONT_ID) const;  // Left aligned (reader mode)
+  void drawBatteryRight(const GfxRenderer& renderer, Rect rect, bool showPercentage = true, bool foregroundBlack = true,
+                        int fontId = SMALL_FONT_ID) const;  // Right aligned (UI headers)
   virtual void fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t percentage,
                                bool foregroundBlack = true) const;
   // Button hint labels use three states: non-empty labels draw an active hint,
@@ -289,7 +294,7 @@ class BaseTheme {
                         const std::function<bool(int index)>& isHeader = nullptr, int rowHeightScale = 1,
                         bool showSelection = true) const;
   virtual void drawHeader(const GfxRenderer& renderer, Rect rect, const char* title, const char* subtitle = nullptr,
-                          bool readerContext = false, bool showStatus = true) const;
+                          bool readerContext = false, bool showStatus = true, bool filenameTitle = false) const;
   virtual void drawSubHeader(const GfxRenderer& renderer, Rect rect, const char* label,
                              const char* rightLabel = nullptr) const;
   virtual void drawTabBar(const GfxRenderer& renderer, Rect rect, const std::vector<TabInfo>& tabs,
@@ -312,18 +317,18 @@ class BaseTheme {
   // most maxLines inside a box no wider than the screen less two popup margins.
   // Caller must own RenderLock.
   Rect drawWrappedPopup(const GfxRenderer& renderer, const char* message, int maxLines) const;
-  virtual void drawOptionPopup(const GfxRenderer& renderer, const char* title, const std::vector<std::string>& options,
-                               int selectedIndex, bool showConfirmationFooter = false,
-                               const char* cancelLabel = nullptr, const char* saveLabel = nullptr,
-                               bool saveFocused = false, int primaryOptionIndex = -1, const char* noteLabel = nullptr,
-                               const char* noteBody = nullptr, const std::vector<bool>& disabledOptions = {},
-                               int firstOptionIndex = -1) const;
+  virtual void drawOptionPopup(const GfxRenderer& renderer, const char* title, OptionLabels options, int selectedIndex,
+                               bool showConfirmationFooter = false, const char* cancelLabel = nullptr,
+                               const char* saveLabel = nullptr, bool saveFocused = false, int primaryOptionIndex = -1,
+                               const char* noteLabel = nullptr, const char* noteBody = nullptr,
+                               int firstOptionIndex = -1, const char* secondNoteLabel = nullptr,
+                               const char* secondNoteBody = nullptr) const;
   virtual void fillPopupProgress(const GfxRenderer& renderer, const Rect& layout, const int progress) const;
   // title is borrowed and must stay alive for the call; pass nullptr or "" for none.
   virtual void drawReaderStatusBar(const GfxRenderer& renderer, ReaderStatusBarPosition position,
                                    const ReaderStatusBarContent& content,
                                    const ReaderStatusBarConfig* overrideConfig = nullptr) const;
-  void drawDisplayStatusBar(const GfxRenderer& renderer, int topY) const;
+  void drawDisplayStatusBar(const GfxRenderer& renderer, int topY, const Rect* horizontalBounds = nullptr) const;
   virtual void drawHelpText(const GfxRenderer& renderer, Rect rect, const char* label) const;
   virtual void drawTextField(const GfxRenderer& renderer, Rect rect, const int textWidth, bool cursorMode = false,
                              int contentStartX = 0, int contentWidth = 0) const;

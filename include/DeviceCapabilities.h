@@ -74,6 +74,14 @@ inline bool shouldDrawKeyHints(const HalGPIO& gpio) {
 // nothing on a touch-only board.
 inline bool frontlightPanelFromKeys() { return Frontlight.present() && boardHasFrontButtons(); }
 
+// Upstream's form: the front keys are fitted, from the image capability so a failed
+// touch probe on another device cannot advertise front buttons (a button-only image
+// targets X3/X4/X4 Classic). A touch image has them only on a board that keeps its
+// keys beside the panel (Silkscreen), from the profile flag, which no probe changes.
+// The same answer as deviceHasFrontButtons(gpio) on every board but a touch-only one
+// whose touch probe failed.
+inline bool deviceHasFrontButtons() { return !CROSSINK_APP_CAP_TOUCH || boardKeepsKeysBesideTouch(); }
+
 inline bool deviceHasEdgeSideButtons(const HalGPIO& gpio) {
 #ifdef SIMULATOR
   return gpio.deviceIsX3();

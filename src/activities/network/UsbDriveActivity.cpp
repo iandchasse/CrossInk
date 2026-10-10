@@ -11,6 +11,7 @@
 #endif
 
 #include "CrossPointSettings.h"
+#include "FilenameFontSystem.h"
 #include "MappedInputManager.h"
 #include "SilentRestart.h"
 #include "components/CompactHeader.h"
@@ -37,6 +38,10 @@ void UsbDriveActivity::onEnter() {
   // Paint the instruction screen before detaching the filesystem and exposing
   // its block device to the host. The two operations must never overlap.
   requestUpdateAndWait();
+  {
+    RenderLock lock(*this);
+    filenameFontSystem.release(renderer);
+  }
 #ifndef SIMULATOR
   // The host can replace fonts without going through firmware file APIs.
   sdFontSystem.markRegistryDirty();

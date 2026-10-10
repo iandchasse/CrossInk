@@ -4,7 +4,11 @@
 
 #include "BookStatsView.h"
 #include "DeviceCapabilities.h"
+#include "EpubReaderMenuModel.h"
+#include "KOReaderCredentialStore.h"
 #include "MappedInputManager.h"
+#include "activities/network/StatsUploadActivity.h"
+#include "activities/util/ConfirmationActivity.h"
 #include "components/TouchHeaderBackButton.h"
 #include "components/UITheme.h"
 #include "util/InputReleaseGuard.h"
@@ -24,7 +28,7 @@ void drawPageIndicators(const GfxRenderer& renderer, const int currentPage, cons
   const auto& metrics = UITheme::getInstance().getMetrics();
   const int totalDotWidth = totalPages * kDotSize + (totalPages - 1) * kDotSpacing;
   const int dotsStartX = (renderer.getScreenWidth() - totalDotWidth) / 2;
-  const int dotY = renderer.getScreenHeight() - metrics.buttonHintsHeight - metrics.verticalSpacing - 4;
+  const int dotY = renderer.getScreenHeight() - UITheme::getButtonHintsReserve(renderer) - metrics.verticalSpacing - 4;
   for (int pageIndex = 0; pageIndex < totalPages; ++pageIndex) {
     const int dotX = dotsStartX + pageIndex * (kDotSize + kDotSpacing);
     if (pageIndex == currentPage) {
@@ -73,6 +77,20 @@ void BookStatsActivity::refreshAllDevicesStats() {
   if (showAllDevicesStats) {
     allDevicesStats = GlobalReadingStats::loadAggregated(globalStats);
   }
+}
+
+void BookStatsActivity::loadDailySummary() {
+  dailySummary = {};
+  if (!halClock.isAvailable()) {
+    return;
+  }
+  ReadingStatsDateTime now;
+  if (!getCurrentLocalDailyReadingDateTime(now)) {
+    LOG_DBG("BookStats", "No local date for daily reading time");
+    return;
+  }
+
+  dailySummary = DailyReadingStats::summarize(readingStatsDayIndex(now.date));
 }
 
 void BookStatsActivity::saveStats() {
@@ -280,6 +298,7 @@ void BookStatsActivity::onEnter() {
   ignoreInitialConfirmRelease = mappedInput.isPressed(MappedInputManager::Button::Confirm);
   ignoreInitialPowerRelease = mappedInput.isPressed(MappedInputManager::Button::Power);
   if (bookCachePath.empty()) page = Page::ThisDevice;
+  loadDailySummary();
   previousOrientation = renderer.getOrientation();
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
   requestUpdate();
@@ -346,6 +365,40 @@ bool BookStatsActivity::selectEditFieldFromTouchTarget(const int touchTarget) {
   return true;
 }
 
+bool BookStatsActivity::canSyncAllBooks() const { return KOREADER_STORE.hasCredentials(); }
+
+void BookStatsActivity::startSyncAllBooks() {
+  // Ask here so Cancel returns to these stats instead of an already-closed reader.
+  auto confirm = makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_SYNC_ALL_BOOKS),
+                                                         tr(STR_SYNC_ALL_CONFIRM), true);
+  if (!confirm) {
+    LOG_ERR("BookStats", "Cannot allocate Sync All Books confirmation");
+    return;
+  }
+  startActivityForResult(std::move(confirm), [this](const ActivityResult& result) {
+    if (result.isCancelled) {
+      requestUpdate();
+      return;
+    }
+    auto sync = makeUniqueNoThrow<StatsUploadActivity>(renderer, mappedInput, std::string{},
+                                                       StatsUploadActivity::Scope::Library, true);
+    if (!sync) {
+      LOG_ERR("BookStats", "Cannot allocate Sync All Books activity");
+      requestUpdate();
+      return;
+    }
+    // Only a reader underneath is a screen to come back to; Home is the default anyway.
+    if (activityManager.isReaderActivity())
+      sync->setReturnToBook(activityManager.getCurrentBookPath(),
+                            static_cast<uint8_t>(EpubReaderMenuAction::READING_STATS));
+    saveStats();
+    // Close normally first: the parent (often the reader) imports these stats
+    // edits in its result handler before Sync All replaces the stack.
+    activityManager.replaceAfterReturn(std::move(sync));
+    finish();
+  });
+}
+
 void BookStatsActivity::loop() {
   if (InputReleaseGuard::consumeInitialRelease(mappedInput, MappedInputManager::Button::Back,
                                                ignoreInitialBackRelease) ||
@@ -364,6 +417,14 @@ void BookStatsActivity::loop() {
     }
     return;
   }
+  int syncTarget = -1;
+  const bool syncPage = usesNoRtcSingleScreenLayout() || page == Page::ThisDevice;
+  if (syncPage && canSyncAllBooks() && mappedInput.wasItemTapped(syncTarget) &&
+      syncTarget == BookStatsTouchTarget::SyncAll) {
+    startSyncAllBooks();
+    return;
+  }
+
   if (usesNoRtcSingleScreenLayout()) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
       mappedInput.suppressNextBackRelease();
@@ -372,6 +433,10 @@ void BookStatsActivity::loop() {
     }
     if (mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
       mappedInput.suppressNextConfirmRelease();
+      if (canSyncAllBooks()) {
+        startSyncAllBooks();
+        return;
+      }
       exitStatsActivity();
       return;
     }
@@ -452,6 +517,10 @@ void BookStatsActivity::loop() {
       beginDateEditing();
       return;
     }
+    if (page == Page::ThisDevice && canSyncAllBooks()) {
+      startSyncAllBooks();
+      return;
+    }
     exitStatsActivity();
     return;
   }
@@ -499,7 +568,7 @@ void BookStatsActivity::render(RenderLock&&) {
   if (usesNoRtcSingleScreenLayout()) {
     renderNoRtcCombinedStatsPage(renderer, &mappedInput, bookTitle, stats, progressPercent, hasEstimatedTimeLeft,
                                  estimatedTimeLeftSeconds, globalStats,
-                                 showAllDevicesStats ? &allDevicesStats : nullptr, true);
+                                 showAllDevicesStats ? &allDevicesStats : nullptr, true, canSyncAllBooks());
     renderer.displayBuffer();
     return;
   }
@@ -511,7 +580,7 @@ void BookStatsActivity::render(RenderLock&&) {
       break;
     case Page::ThisDevice:
       renderGlobalStatsPage(renderer, &mappedInput, tr(STR_STATS_THIS_DEVICE_SCREEN), globalStats, true,
-                            showAllDevicesStats);
+                            showAllDevicesStats, &dailySummary, canSyncAllBooks());
       break;
     case Page::AllDevices:
       renderGlobalStatsPage(renderer, &mappedInput, tr(STR_STATS_ALL_DEVICES_SCREEN), allDevicesStats, true, false);
