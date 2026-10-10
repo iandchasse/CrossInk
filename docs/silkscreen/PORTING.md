@@ -23,7 +23,7 @@ The hardware is described in `de-link_pcb/docs/HARDWARE.md` ([iandchasse/silkscr
 
 - CrossInk `development` at `9dd334d3` (2026-09-29), as cloned; merged up to `3efe61b6` (2026-10-02, v1.6.1 and what followed) in `a9f9ef64`, up to `6fbc97d1` (2026-10-04) in `6e182dfe`, and up to `67100e66` (2026-10-08) in `019aa229`.
 - freeink-sdk at the shared Silkscreen SDK head, `36c8d4b` ([The shared SDK](#the-shared-sdk)).
-- The last CrossPoint `silkscreen` commit ported is `e4127054` (2026-10-10), the clipping sync's cutoff poll, ported as the same rule for this repo's own stats and clippings uploads in `aa3f8544`. CrossPoint's `silkscreen` head `c1da4f54` has been read through: what follows `8cb94736` is ported or recorded below as not applicable.
+- The last CrossPoint `silkscreen` commit ported is `e4127054` (2026-10-10), the clipping sync's cutoff poll, ported as the same rule for this repo's own stats and clippings uploads in `aa3f8544`. CrossPoint's `silkscreen` head `fbe70ac6` has been read through: what follows `8cb94736` is ported or recorded below as not applicable.
 
 ## Status
 
@@ -87,6 +87,8 @@ CrossPoint commits after the last review (`b605f87d`) were taken as follows:
 - `e4127054`, the clipping sync stopping at the low-battery cutoff: this repo's sync clients have the same gap and the same fix, `aa3f8544` (`StatsUploadClient::put()` and `probe()` ask the latch before each request);
 
 - `c1da4f54` (CrossPoint's own docs: the record of that sync): nothing to port.
+
+- `a89e0faa`, CrossPoint's merge of upstream `aa76a31b` (KOSync percentage progress #3219, multi-word dictionary lookup through the clipping selection #3932, a non-CJK GUI fallback font #3484), and `28eb0c59` / `fbe70ac6` (its docs: the "match upstream" decision rule in UPSTREAM-SYNC.md and the record of that merge): nothing to port. This repo's upstream is `crossink/development`, which is where those features reach it; the decision rule changes no code here.
 
 **Battery use.** The image has carried every drain rule since S6, but none has been measured. Run C2 and C6 of the [bring-up checklist](#bring-up-checklist-real-board) before relying on it.
 
@@ -460,7 +462,7 @@ review and records) is `crosspoint-reader/docs/silkscreen/UPSTREAM-SYNC.md`; a C
 
 ```bash
 git fetch crosspoint
-git log --oneline c1da4f54..crosspoint/silkscreen -- . ':!src/activities/testsuite' ':!scripts/check_test_firmware.sh'
+git log --oneline fbe70ac6..crosspoint/silkscreen -- . ':!src/activities/testsuite' ':!scripts/check_test_firmware.sh'
 ```
 
 Port new drain fixes and board behaviour, update [POWER.md §3](POWER.md#3-firmware-rules-and-where-they-live)'s anchors, and move the "last CrossPoint commit ported" at the top of this file. CrossPoint's own uncommitted work is not ported until it lands as a commit.
