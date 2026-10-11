@@ -33,6 +33,7 @@
 #include "AppVersion.h"
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DeviceCapabilities.h"
 #include "ImageFolderIndex.h"
 #include "RecentBooksStore.h"
 #include "SleepCoverAssets.h"
@@ -962,7 +963,7 @@ void SleepActivity::renderLastScreenSleepScreen() const {
   }
   // Only the moon differs from the displayed frame, so a differential FAST
   // update avoids the flashing clean pass on an inverted night-mode page.
-  if (gpio.deviceIsX3()) {
+  if (deviceHasX3Panel()) {
     renderer.displayGrayscaleBase(HalDisplay::FAST_REFRESH);
   } else {
     renderer.displayBuffer(HalDisplay::FAST_REFRESH);

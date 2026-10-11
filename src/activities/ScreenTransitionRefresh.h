@@ -1,9 +1,10 @@
 #pragma once
 
 #include <HalDisplay.h>
-#include <HalGPIO.h>
 
 #include <cstdint>
+
+#include "DeviceCapabilities.h"
 
 // Network workflows replace large parts of the screen as their state changes.
 // X4-class panels use a single-pass clean refresh for those transitions;
@@ -15,7 +16,7 @@ class ScreenTransitionRefresh {
     const bool screenChanged = !hasRendered_ || screenState != lastScreenState_;
     lastScreenState_ = screenState;
     hasRendered_ = true;
-    return screenChanged && !gpio.deviceIsX3() ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
+    return screenChanged && !deviceHasX3Panel() ? HalDisplay::HALF_REFRESH : HalDisplay::FAST_REFRESH;
   }
 
  private:

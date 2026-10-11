@@ -2,6 +2,7 @@
 
 #include <BoardConfig.h>
 #include <CrossInkHalFrontlight.h>
+#include <HalDisplay.h>
 #include <HalGPIO.h>
 
 #include <cstdint>
@@ -81,6 +82,21 @@ inline bool frontlightPanelFromKeys() { return Frontlight.present() && boardHasF
 // The same answer as deviceHasFrontButtons(gpio) on every board but a touch-only one
 // whose touch probe failed.
 inline bool deviceHasFrontButtons() { return !CROSSINK_APP_CAP_TOUCH || boardKeepsKeysBesideTouch(); }
+
+// The glass is the Xteink X3's 792x528 panel (UC8253 or UC8279d), asked by what depends on it: its
+// refresh handling (a HALF refresh resyncs the controller, the gray base is the OEM differential
+// waveform, a splashless wake rebases the controller RAM) and the layouts tuned for its 528-pixel
+// width. A panel test, not a board test: gpio.deviceIsX3() stays "the X3 board" (gauge, USB poll,
+// edge keys, the default device name). The two agree on every board but the Silkscreen 3.68"
+// variant, which carries this panel on an S3 that is never detected as an X3. The simulator's
+// HAL has no panel query and no such variant, so it answers with its simulated board.
+inline bool deviceHasX3Panel() {
+#ifdef SIMULATOR
+  return gpio.deviceIsX3();
+#else
+  return display.isX3Panel();
+#endif
+}
 
 inline bool deviceHasEdgeSideButtons(const HalGPIO& gpio) {
 #ifdef SIMULATOR

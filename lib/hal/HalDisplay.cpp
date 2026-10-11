@@ -33,7 +33,8 @@ HalDisplay::~HalDisplay() {}
 void HalDisplay::begin(bool seamless) {
   HalSpiBus::Lock spiLock;
 
-  // Set X3-specific panel mode before initializing.
+  // Set X3-specific panel mode before initializing. This is the X3 board's call: the Silkscreen
+  // 3.68" variant's facade is in X3 mode from construction and has no X3 board to detect.
   if (gpio.deviceIsX3()) {
     einkDisplay.setDisplayX3();
   }
@@ -82,7 +83,7 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   HalSpiBus::Lock spiLock;
 
-  if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
+  if (isX3Panel() && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
   }
 
@@ -104,7 +105,7 @@ bool HalDisplay::restoreVisibleFrame() {
 }
 
 void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
-  if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
+  if (isX3Panel() && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
   }
 
@@ -123,14 +124,14 @@ bool HalDisplay::supportsAsyncGrayscaleBase() const { return grayscaleCapabiliti
 
 bool HalDisplay::displayGrayscaleBase(GrayscaleMode mode, RefreshMode fallback, bool turnOffScreen) {
   HalSpiBus::Lock spiLock;
-  if (gpio.deviceIsX3() && fallback == HALF_REFRESH) einkDisplay.requestResync(1);
+  if (isX3Panel() && fallback == HALF_REFRESH) einkDisplay.requestResync(1);
   return einkDisplay.displayGrayscaleBase(mode, convertRefreshMode(fallback), turnOffScreen);
 }
 
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
   HalSpiBus::Lock spiLock;
 
-  if (gpio.deviceIsX3() && mode == RefreshMode::HALF_REFRESH) {
+  if (isX3Panel() && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
   }
 
@@ -193,7 +194,7 @@ void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) 
   // the prior home/reader frame ghosts through the soft aa_pre_bw_mid
   // waveform. Forcing a resync makes displayGrayscaleBase clear first,
   // matching displayBuffer(HALF)/displayBuffer(FULL).
-  if (gpio.deviceIsX3() && fallback != RefreshMode::FAST_REFRESH) {
+  if (isX3Panel() && fallback != RefreshMode::FAST_REFRESH) {
     einkDisplay.requestResync(1);
   }
 

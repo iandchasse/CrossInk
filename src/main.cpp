@@ -1863,7 +1863,7 @@ void setup() {
       APP_STATE.showBootScreen = true;
       APP_STATE.saveToFile();
       if (shouldRestoreSleepFrame && loadSleepFrameBuffer()) {
-        if (gpio.deviceIsX3()) {
+        if (deviceHasX3Panel()) {
           // begin() clears the X3 controller RAM. Restore the saved frame as
           // the baseline for the first reader paint without refreshing the panel.
           renderer.cleanupGrayscaleWithFrameBuffer();
@@ -1977,7 +1977,7 @@ void setup() {
     // openEpubPath + lastSleepFromReader from a prior session.
     // X4's HALF refresh is the same single-pass clean transition already used
     // by network screens. Keep X3's existing full refresh behavior unchanged.
-    const auto homeRefreshMode = gpio.deviceIsX3() ? HalDisplay::FULL_REFRESH : HalDisplay::HALF_REFRESH;
+    const auto homeRefreshMode = deviceHasX3Panel() ? HalDisplay::FULL_REFRESH : HalDisplay::HALF_REFRESH;
     activityManager.goHome(HomeMenuItem::NONE, homeRefreshMode);
   } else if (APP_STATE.openEpubPath.empty() || !APP_STATE.lastSleepFromReader ||
              mappedInputManager.isPressed(MappedInputManager::Button::Back) || APP_STATE.readerActivityLoadCount > 0) {
