@@ -1835,7 +1835,16 @@ void setup() {
                                                : BootResume::Splash;
   bool isUc8279X3 = false;
 #ifndef SIMULATOR
+#if FREEINK_SILKSCREEN_368
+  // The variant's controller is a probe verdict, not a board value (ACTIVE.board stays
+  // Silkscreen), and the probe normally has not run yet on this path: setupDisplayAndFonts()
+  // resolves it below. Resolving it here makes that call a no-op. A deep-sleep wake takes the
+  // verdict from RTC memory without touching the bus.
+  resolvePanelController();
+  isUc8279X3 = display.isX3Panel() && BoardConfig::ACTIVE.displayController == BoardConfig::DisplayController::UC8279;
+#else
   isUc8279X3 = gpio.deviceIsX3() && BoardConfig::ACTIVE.board == BoardConfig::Board::XteinkX3Uc8279;
+#endif
 #endif
   const bool hasValidSleepFrame = resume == BootResume::SplashlessWake && isUc8279X3 && preflightSleepFrameBuffer();
   const bool shouldRestoreSleepFrame =
