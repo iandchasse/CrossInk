@@ -430,7 +430,7 @@ const std::vector<SettingInfo>& getBaseSettingsList() {
       }
     }
 
-    if (!gpio.deviceIsX3()) {
+    if (!deviceHasX3Panel()) {
       auto sleepScreenIt =
           std::find_if(v.begin(), v.end(), [](const SettingInfo& s) { return s.nameId == StrId::STR_SLEEP_SCREEN; });
       if (sleepScreenIt != v.end()) {

@@ -199,7 +199,7 @@ int progressLabelBottomY(const GfxRenderer& renderer, const Rect& coverRect, con
 
 void drawStatsOverlay(const GfxRenderer& renderer, const GlobalReadingStats& globalStats, const Rect& coverRect,
                       const float progressPercent, const bool inverted) {
-  if (!gpio.deviceIsX3()) {
+  if (!deviceHasX3Panel()) {
     return;
   }
 
