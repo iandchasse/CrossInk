@@ -31,6 +31,11 @@
 #define CROSSINK_BOARD_NAME "delink"
 #elif FREEINK_DEVICE_PAPERS3
 #define CROSSINK_BOARD_NAME "papers3"
+#elif FREEINK_SILKSCREEN_368
+// The Silkscreen 3.68" panel variant is a board class of its own: OTA and the SD update refuse an
+// image built for the 4.26" panel, and the other way round. Its battery-log image keeps this tag,
+// as on the 4.26" board, so the two swap over SD.
+#define CROSSINK_BOARD_NAME "silkscreen-368"
 #elif FREEINK_DEVICE_SILKSCREEN
 #define CROSSINK_BOARD_NAME "silkscreen"
 #else
