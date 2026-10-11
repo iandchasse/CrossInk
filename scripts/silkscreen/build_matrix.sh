@@ -3,14 +3,17 @@
 # multi-repo procedure is crosspoint-reader/docs/silkscreen/UPSTREAM-SYNC.md).
 #
 # Usage: scripts/silkscreen/build_matrix.sh [--full] [--label NAME] [env ...]
-#   no envs : silkscreen silkscreen-batlog x4-pro x4-classic c3check
+#   no envs : silkscreen silkscreen-batlog silkscreen-368 silkscreen-368-batlog x4-pro x4-classic c3check
 #   --full  : adds silkscreen-debug, x4-pro-debug and stickycheck
 # Prints one line per env (exit code, flash/RAM bytes, warning counts, log path) and exits
 # non-zero if any env or check failed. Logs go to .cache/silkscreen-builds/ (gitignored).
 #
 # What builds on the Windows bench host, and how:
 #   silkscreen*  : the real platformio.ini (these envs pin pioarduino 55.03.311 per env;
-#       silkscreen-batlog is the release image plus the battery log, -DSILKSCREEN_BATLOG=1).
+#       silkscreen-batlog is the release image plus the battery log, -DSILKSCREEN_BATLOG=1; the
+#       silkscreen-368* envs are the 3.68" X3-panel variant's, docs/silkscreen/PORTING.md). Each
+#       silkscreen-368* image goes through scripts/silkscreen/check_no_touch.sh before the proxy
+#       envs start: it reads .pio/build/<env>, which they delete.
 #   x4-pro*, x4-classic* : CrossInk's real envs through a proxy config whose only change is
 #       [base]'s platform, 55.03.37 -> the installed 55.03.311. 55.03.37 needs the Arduino 3.3.7
 #       framework package; installing it would replace the framework copy CrossPoint builds with.
@@ -51,8 +54,9 @@ while [ $# -gt 0 ]; do
   shift
 done
 if [ ${#envs[@]} -eq 0 ]; then
-  envs=(silkscreen silkscreen-batlog x4-pro x4-classic c3check)
-  [ $full = 1 ] && envs=(silkscreen silkscreen-batlog silkscreen-debug x4-pro x4-pro-debug x4-classic c3check stickycheck)
+  envs=(silkscreen silkscreen-batlog silkscreen-368 silkscreen-368-batlog x4-pro x4-classic c3check)
+  [ $full = 1 ] && envs=(silkscreen silkscreen-batlog silkscreen-debug silkscreen-368 silkscreen-368-batlog \
+    x4-pro x4-pro-debug x4-classic c3check stickycheck)
 fi
 
 real=()
@@ -139,6 +143,17 @@ for env in "${real[@]}"; do
   log="$LOGS/$label-$env.log"
   pio run -e "$env" > "$log" 2>&1
   report "$env" $? "$log"
+done
+# The 3.68" variant has no touch: its image must carry no touch driver and none of the other panel
+# families' code, and its own board tag.
+for env in "${real[@]}"; do
+  case "$env" in
+    silkscreen-368*)
+      log="$LOGS/$label-notouch-$env.log"
+      bash scripts/silkscreen/check_no_touch.sh "$env" > "$log" 2>&1
+      rc=$?; echo "no-touch audit ($env) exit=$rc: $(tail -1 "$log")"; [ $rc -ne 0 ] && failed=1
+      ;;
+  esac
 done
 if [ ${#proxy[@]} -gt 0 ]; then
   echo "proxy envs next: they wipe .pio/build (all envs) when they start"
