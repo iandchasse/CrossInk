@@ -713,6 +713,10 @@ void CrossPointWebServer::handleStatus() const {
   doc["uptime"] = millis() / 1000;
 #if FREEINK_DEVICE_X4 || FREEINK_DEVICE_X3
   doc["device"] = gpio.deviceIsX3() ? "X3" : "X4";
+#elif FREEINK_SILKSCREEN_368
+  // The 3.68" variant's panel is the X3's (528x792): the files page's "Auto" image target keys on
+  // "X3" or "X4", and would otherwise take the 4.26" board's 480x800 for it.
+  doc["device"] = deviceHasX3Panel() ? "X3" : BoardConfig::ACTIVE.name;
 #else
 #ifdef SIMULATOR
   doc["device"] = "Simulator";
