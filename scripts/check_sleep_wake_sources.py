@@ -14,10 +14,11 @@ only thing allowed to end it. This guard keeps it that way:
 The one RTC power-domain call allowed is upstream's, in the SDK's
 PowerManager::armWakeOnPins(): esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH,
 ESP_PD_OPTION_ON) keeps the RTC pull it sets on each wake pad powered. It is
-allowed only behind the InputPins::powerExternalPull exemption (a statement
-naming it ahead of the call, in the same function), which keeps a power pin the
-board biases itself, Silkscreen's IO18, out of both the pull and the override
-(POWER.md ZD-01 and its pin table).
+allowed only behind the InputPins::powerExternalPull exemption (in the same
+function, a statement naming it and after it a line that returns on the wake
+mask, `... gpioMask ... return;`, both ahead of the call), which keeps a power
+pin the board biases itself, Silkscreen's IO18, out of both the pull and the
+override (POWER.md ZD-01 and its pin table).
 
 Documented exception: CrossInk's own sleep sequence for every other board, in
 lib/hal/HalPowerManager.cpp, calls esp_deep_sleep_start(), the SDK's
@@ -62,6 +63,7 @@ PD_CONFIG = re.compile(r"\besp_sleep_pd_config\s*\(")
 PD_ALLOWED_ARGS = re.compile(r"esp_sleep_pd_config\s*\(\s*ESP_PD_DOMAIN_RTC_PERIPH\s*,\s*ESP_PD_OPTION_ON\s*\)")
 WAKE_FN_START = re.compile(r"^void\s+PowerManager::armWakeOnPins\b")
 PD_EXEMPTION = re.compile(r"\bpowerExternalPull\b")
+PD_EARLY_RETURN = re.compile(r"\bgpioMask\b.*\breturn\s*;")
 DIRECTIVE = re.compile(r"^\s*#\s*(if|ifdef|ifndef|elif|else|endif)\b(.*)$")
 
 
@@ -104,6 +106,7 @@ def check(project_dir):
             lines = source.read().splitlines()
         states = branch_states(lines) if rel == EXCEPTION_FILE else None
         in_wake_fn = False
+        named = False
         exempt = False
         pd_calls = 0
         for number, line in enumerate(lines, 1):
@@ -116,6 +119,8 @@ def check(project_dir):
                 continue
             where = f"{rel}:{number}: {line.strip()}"
             if in_wake_fn and PD_EXEMPTION.search(line):
+                named = True
+            if in_wake_fn and named and PD_EARLY_RETURN.search(line):
                 exempt = True
             if PD_CONFIG.search(line):
                 if rel != SDK_POWER_MANAGER:
@@ -125,7 +130,9 @@ def check(project_dir):
                     if not in_wake_fn:
                         problems.append(f"esp_sleep_pd_config outside PowerManager::armWakeOnPins(): {where}")
                     elif not exempt:
-                        problems.append(f"esp_sleep_pd_config ahead of the powerExternalPull exemption: {where}")
+                        problems.append(
+                            f"esp_sleep_pd_config ahead of the powerExternalPull exemption and its early return: {where}"
+                        )
                     elif not PD_ALLOWED_ARGS.search(line):
                         problems.append(f"esp_sleep_pd_config other than ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON: {where}")
             if FORBIDDEN.search(line):
