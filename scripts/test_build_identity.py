@@ -27,7 +27,9 @@ class BuildIdentityTest(unittest.TestCase):
         globals_ = function.__globals__
         previous = globals_["get_git_short_sha"]
         self.addCleanup(globals_.__setitem__, "get_git_short_sha", previous)
-        for name in ("default", "sticky", "x4-pro", "x4-classic", "debug", "sticky-debug", "x4-pro-debug", "test", "gh_release_rc", "x4-pro-simulator"):
+        for name in ("default", "sticky", "x4-pro", "x4-classic", "silkscreen", "silkscreen-batlog", "silkscreen-368",
+                     "silkscreen-368-batlog", "debug", "sticky-debug", "x4-pro-debug", "test", "gh_release_rc",
+                     "x4-pro-simulator"):
             captures = []
             for sha in ("abc1234", "def5678"):
                 globals_["get_git_short_sha"] = lambda _: sha
@@ -45,6 +47,20 @@ class BuildIdentityTest(unittest.TestCase):
                 captures.append((env.defines, scoped))
             self.assertEqual(captures[0][0], captures[1][0])
             self.assertNotEqual(captures[0][1], captures[1][1])
+
+    def test_silkscreen_368_versions_keep_the_battery_log_analyzers_endings(self):
+        # The analyzer reads a version ending "-silkscreen-batlog" as CrossInk's (its early-wake limit
+        # is 500 ms, not CrossPoint's 300), so the 3.68" variant's log build must still end that way.
+        function = MODULE["get_hardware_version"]
+        globals_ = function.__globals__
+        previous = globals_["get_crossink_version"]
+        self.addCleanup(globals_.__setitem__, "get_crossink_version", previous)
+        globals_["get_crossink_version"] = lambda _: "1.6.1"
+        with patch.dict(os.environ, {"CROSSINK_RELEASE_VERSION": "", "CROSSINK_RC_HASH": ""}):
+            self.assertEqual(function(str(ROOT), "silkscreen-368"), "1.6.1-silkscreen-368")
+            self.assertEqual(function(str(ROOT), "silkscreen-368-batlog"), "1.6.1-368-silkscreen-batlog")
+            self.assertTrue(function(str(ROOT), "silkscreen-batlog").endswith("-silkscreen-batlog"))
+            self.assertTrue(function(str(ROOT), "silkscreen-368-batlog").endswith("-silkscreen-batlog"))
 
     def test_support_provenance_excludes_custom_version_and_invalid_sdk_values(self):
         function = MODULE["inject_version"]

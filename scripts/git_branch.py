@@ -162,6 +162,10 @@ def get_hardware_version(project_dir, pioenv):
         'x4-classic': '-x4-classic',
         'silkscreen': '-silkscreen',
         'silkscreen-batlog': '-silkscreen-batlog',
+        'silkscreen-368': '-silkscreen-368',
+        # The battery-log analyzer reads a version ending "-silkscreen-batlog" as CrossInk's (its
+        # early-wake limit is 500 ms); "-368-batlog" would read as CrossPoint's.
+        'silkscreen-368-batlog': '-368-silkscreen-batlog',
     }[pioenv]
     return f'{base_version}{device_suffix}'
 
@@ -190,7 +194,8 @@ def inject_version(env):
         ('CROSSINK_GIT_DIRTY', f'\\"{get_git_dirty(project_dir)}\\"'),
     ]
 
-    if pioenv in {'default', 'sticky', 'x4-pro', 'x4-classic', 'silkscreen', 'silkscreen-batlog'}:
+    if pioenv in {'default', 'sticky', 'x4-pro', 'x4-classic', 'silkscreen', 'silkscreen-batlog', 'silkscreen-368',
+                  'silkscreen-368-batlog'}:
         version_string = get_hardware_version(project_dir, pioenv)
         if os.environ.get('CROSSINK_RC_HASH'):
             print(f'CrossInk RC build version: {version_string}')
