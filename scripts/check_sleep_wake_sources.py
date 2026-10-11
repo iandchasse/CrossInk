@@ -11,6 +11,14 @@ only thing allowed to end it. This guard keeps it that way:
   power-domain override and no ultra-low sleep mode, anywhere in src/, lib/,
   include/ or the SDK's libs/.
 
+The one RTC power-domain call allowed is upstream's, in the SDK's
+PowerManager::armWakeOnPins(): esp_sleep_pd_config(ESP_PD_DOMAIN_RTC_PERIPH,
+ESP_PD_OPTION_ON) keeps the RTC pull it sets on each wake pad powered. It is
+allowed only behind the InputPins::powerExternalPull exemption (a statement
+naming it ahead of the call, in the same function), which keeps a power pin the
+board biases itself, Silkscreen's IO18, out of both the pull and the override
+(POWER.md ZD-01 and its pin table).
+
 Documented exception: CrossInk's own sleep sequence for every other board, in
 lib/hal/HalPowerManager.cpp, calls esp_deep_sleep_start(), the SDK's
 waitForPowerButtonRelease() (ignoring its result), esp_sleep_config_gpio_isolate()
@@ -38,7 +46,7 @@ FORBIDDEN = re.compile(
     r"esp_sleep_enable_timer_wakeup|esp_deep_sleep\(|ESP\.deepSleep|esp_sleep_enable_ulp_wakeup|ulp_run|"
     r"ulp_riscv_run|esp_sleep_enable_touchpad_wakeup|touchSleepWakeUpEnable|esp_sleep_enable_ext0_wakeup|"
     r"esp_sleep_enable_gpio_wakeup|esp_sleep_enable_uart_wakeup|esp_sleep_enable_wifi_wakeup|"
-    r"esp_sleep_enable_bt_wakeup|esp_light_sleep_start|esp_sleep_pd_config|rtc_sleep_enable_ultra_low|"
+    r"esp_sleep_enable_bt_wakeup|esp_light_sleep_start|rtc_sleep_enable_ultra_low|"
     r"ESP_SLEEP_ULTRA_LOW_MODE"
 )
 # Only the SDK's PowerManager.cpp may enter deep sleep or arm a wake source.
@@ -49,6 +57,11 @@ SDK_OWNED = re.compile(
 CROSSINK_TAIL = re.compile(r"\b(waitForPowerButtonRelease|armPowerButtonWakeup|esp_sleep_config_gpio_isolate)\s*\(")
 SDK_SLEEP_ENTRY = re.compile(r"freeink::PowerManager::deepSleepUntilPowerButton\s*\(")
 COMMENT_LINE = re.compile(r"^\s*(//|\*|/\*)")
+# The single RTC power-domain call allowed, and what must stand in front of it (see the module docstring).
+PD_CONFIG = re.compile(r"\besp_sleep_pd_config\s*\(")
+PD_ALLOWED_ARGS = re.compile(r"esp_sleep_pd_config\s*\(\s*ESP_PD_DOMAIN_RTC_PERIPH\s*,\s*ESP_PD_OPTION_ON\s*\)")
+WAKE_FN_START = re.compile(r"^void\s+PowerManager::armWakeOnPins\b")
+PD_EXEMPTION = re.compile(r"\bpowerExternalPull\b")
 DIRECTIVE = re.compile(r"^\s*#\s*(if|ifdef|ifndef|elif|else|endif)\b(.*)$")
 
 
@@ -90,10 +103,31 @@ def check(project_dir):
         with open(path, encoding="utf-8", errors="replace") as source:
             lines = source.read().splitlines()
         states = branch_states(lines) if rel == EXCEPTION_FILE else None
+        in_wake_fn = False
+        exempt = False
+        pd_calls = 0
         for number, line in enumerate(lines, 1):
+            if rel == SDK_POWER_MANAGER:
+                if WAKE_FN_START.match(line):
+                    in_wake_fn = True
+                elif in_wake_fn and line.startswith("}"):
+                    in_wake_fn = False
             if COMMENT_LINE.match(line):
                 continue
             where = f"{rel}:{number}: {line.strip()}"
+            if in_wake_fn and PD_EXEMPTION.search(line):
+                exempt = True
+            if PD_CONFIG.search(line):
+                if rel != SDK_POWER_MANAGER:
+                    problems.append(f"RTC power-domain override (esp_sleep_pd_config) outside {SDK_POWER_MANAGER}: {where}")
+                else:
+                    pd_calls += 1
+                    if not in_wake_fn:
+                        problems.append(f"esp_sleep_pd_config outside PowerManager::armWakeOnPins(): {where}")
+                    elif not exempt:
+                        problems.append(f"esp_sleep_pd_config ahead of the powerExternalPull exemption: {where}")
+                    elif not PD_ALLOWED_ARGS.search(line):
+                        problems.append(f"esp_sleep_pd_config other than ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON: {where}")
             if FORBIDDEN.search(line):
                 problems.append(f"Forbidden sleep or wake API (only the power button may wake the device): {where}")
             in_exception = states is not None and states[number - 1][1]
@@ -103,6 +137,8 @@ def check(project_dir):
                 problems.append(f"CrossInk sleep-tail call outside its non-Silkscreen branch: {where}")
             if states is not None and states[number - 1][0] and SDK_SLEEP_ENTRY.search(line):
                 sdk_path_calls += 1
+        if rel == SDK_POWER_MANAGER and pd_calls > 1:
+            problems.append(f"{rel}: {pd_calls} esp_sleep_pd_config calls, at most one is allowed")
     if sdk_path_calls == 0:
         problems.append(
             f"{EXCEPTION_FILE}: no freeink::PowerManager::deepSleepUntilPowerButton() call in its "
