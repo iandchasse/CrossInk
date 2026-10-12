@@ -7,7 +7,8 @@
 # build proves it by what is linked. This reads the image's symbol table and fails when:
 #   - a touch driver body is linked (the FT5x06 / FT6336U / GT911 / CST816S / GSLX680 / Picco / CHSC6x
 #     begin, poll and sleep code, the FocalTech id check, the hibernate and the multi-touch classifiers),
-#     or InputManager::resetAndHibernateTouch() is not the stub (7 bytes here, 255 with the driver);
+#     or InputManager::resetAndHibernateTouch() is more than the stub (7 bytes where something still calls
+#     it, absent from the image where nothing does, 255 bytes with the driver);
 #   - the SSD1677 or UC8279 X4 driver, or the generic display probe (the two-pass VER / FLG / MTP read
 #     that would take a UC8253 for an UltraChip part), is linked: the variant's panel is the X3's and its
 #     controller is read by the stock X3 protocol only;
@@ -87,8 +88,9 @@ if hits=$(grep -E "$touch_bodies" <<<"$names"); then
 fi
 
 # The entry point whose size tells the two builds apart: the SDK leaves resetAndHibernateTouch() a 7-byte stub
-# when FREEINK_CAP_TOUCH=0, and it is 255 bytes with the driver (the 4.26" board's image). startTouch() is not
-# capped: it is a 15-byte forwarder either way.
+# when FREEINK_CAP_TOUCH=0, and it is 255 bytes with the driver (the 4.26" board's image). Nothing in this app
+# calls it with FREEINK_CAP_TOUCH=0, so the linker usually drops it and the check finds nothing to measure; it
+# bites if a caller or the driver comes back. startTouch() is not capped: it is a 15-byte forwarder either way.
 stub_cap() {  # name max_bytes
   local line size
   line=$(grep -F -- "$1" <<<"$syms" | head -1)
