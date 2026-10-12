@@ -7,7 +7,7 @@
 # build proves it by what is linked. This reads the image's symbol table and fails when:
 #   - a touch driver body is linked (the FT5x06 / FT6336U / GT911 / CST816S / GSLX680 / Picco / CHSC6x
 #     begin, poll and sleep code, the FocalTech id check, the hibernate and the multi-touch classifiers),
-#     or one of InputManager's touch entry points that must be a stub is not;
+#     or InputManager::resetAndHibernateTouch() is not the stub (7 bytes here, 255 with the driver);
 #   - the SSD1677 or UC8279 X4 driver, or the generic display probe (the two-pass VER / FLG / MTP read
 #     that would take a UC8253 for an UltraChip part), is linked: the variant's panel is the X3's and its
 #     controller is read by the stock X3 protocol only;
@@ -15,6 +15,16 @@
 #   - the image's board tag is not the variant's (silkscreen-368, which its battery-log image keeps).
 # The app's own touch code is audited by scripts/check_app_touch_gate.py, which runs after every link of an env
 # with CROSSINK_APP_CAP_TOUCH=0 (this script does not repeat it).
+#
+# What each check rests on, so a red result is read right. The touch-body name patterns match symbols that a
+# no-touch build still compiles (InputManager::beginTouch(), serviceTouch(), prepareTouchForSleep(), the
+# *MultiTouch* classifiers, ...): they are out of the image only because nothing references them and the
+# linker's --gc-sections drops them (and, for beginTouch(), because it is inlined). An -O0 / -Og build, or an
+# app or SDK change that reaches one of them, fails this audit on an image with no touch driver; that is a
+# false alarm to look at, not touch code. The other direction does not occur: with the driver built,
+# beginTouch() is 268 bytes and out of line. The one size cap is resetAndHibernateTouch(), the stub that
+# discriminates. InputManager::startTouch() is 15 bytes in a touch build too (it only calls beginTouch()), so
+# it carries no cap.
 #
 # Usage: scripts/silkscreen/check_no_touch.sh [env]    (default: silkscreen-368; build it first)
 # Exits 0 on a pass, 1 when a check fails (each is listed), 2 when the image or nm cannot be read.
@@ -76,7 +86,9 @@ if hits=$(grep -E "$touch_bodies" <<<"$names"); then
   echo "$hits" | head -20
 fi
 
-# Entry points the SDK leaves as stubs when FREEINK_CAP_TOUCH=0 (about 15 and 7 bytes); a body is hundreds.
+# The entry point whose size tells the two builds apart: the SDK leaves resetAndHibernateTouch() a 7-byte stub
+# when FREEINK_CAP_TOUCH=0, and it is 255 bytes with the driver (the 4.26" board's image). startTouch() is not
+# capped: it is a 15-byte forwarder either way.
 stub_cap() {  # name max_bytes
   local line size
   line=$(grep -F -- "$1" <<<"$syms" | head -1)
@@ -86,7 +98,6 @@ stub_cap() {  # name max_bytes
     fail "$1 is $size bytes in ${env} (a stub is at most $2): the touch code is built"
   fi
 }
-stub_cap 'InputManager::startTouch()' 64
 stub_cap 'InputManager::resetAndHibernateTouch()' 32
 
 # The other panel families: the variant links the X3 pair and nothing of the SSD1677, the UC8279 X4
