@@ -1836,10 +1836,10 @@ void setup() {
   bool isUc8279X3 = false;
 #ifndef SIMULATOR
 #if FREEINK_SILKSCREEN_368
-  // The variant's controller is a probe verdict, not a board value (ACTIVE.board stays
-  // Silkscreen), and the probe normally has not run yet on this path: setupDisplayAndFonts()
-  // resolves it below. Resolving it here makes that call a no-op. A deep-sleep wake takes the
-  // verdict from RTC memory without touching the bus.
+  // The variant's controller is the UC8279d, fixed in its profile (ACTIVE.board stays
+  // Silkscreen): nothing is probed or kept, and this only logs it as forced by the build.
+  // setupDisplayAndFonts() below would make the same idempotent call, so no bus is touched
+  // here at a cold boot or at a deep-sleep wake.
   resolvePanelController();
   isUc8279X3 = display.isX3Panel() && BoardConfig::ACTIVE.displayController == BoardConfig::DisplayController::UC8279;
 #else
