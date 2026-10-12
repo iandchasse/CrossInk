@@ -186,7 +186,7 @@ Port CrossPoint `4505ceec` when CrossInk takes them ([PORTING.md, Upstream merge
 
 **When it runs:**
 
-- as a `pre:` extra script of `[env:silkscreen]` and `[env:silkscreen-debug]` (`[silkscreen] extra_scripts`), so a violation stops the build;
+- as a `pre:` extra script of every Silkscreen env (`[silkscreen] extra_scripts`: `silkscreen`, `silkscreen-debug`, `silkscreen-batlog`, `silkscreen-368` and `silkscreen-368-batlog`), so a violation stops the build;
 - standalone: `python scripts/check_sleep_wake_sources.py` exits with 1 on a violation.
 
 It scans `src/`, `lib/`, `include/` and `freeink-sdk/libs/`, skipping comment lines and `test/` folders.
@@ -259,7 +259,7 @@ The board-level procedure is CrossPoint's: its POWER.md section 4 and the test f
 
 **Sleep-current test (MEAS-01) on the CrossInk image**
 
-1. Use the release env, `silkscreen`, for every current and timing. `silkscreen-debug` adds a 250 ms USB-serial wait (`CROSSPOINT_WAIT_FOR_USB_SERIAL`) to every boot, ghost wakes and re-sleeps included.
+1. Use the release env, `silkscreen` (`silkscreen-368` on a 3.68" unit, [PORTING.md](PORTING.md#the-368-variant)), for every current and timing. `silkscreen-debug` adds a 250 ms USB-serial wait (`CROSSPOINT_WAIT_FOR_USB_SERIAL`) to every boot, ghost wakes and re-sleeps included.
 
    **Log lines.** Lines marked *(debug)* below are `LOG_DBG`, so only `silkscreen-debug` (`LOG_LEVEL=2`) prints them; the release env (`LOG_LEVEL=1`) prints errors and info only. Check those lines on the debug env, apart from the current and timing runs.
 2. Put the cell, or a 3.8 V source, on J5 through a µA meter or a PPK2-class logger.
@@ -274,6 +274,7 @@ The board-level procedure is CrossPoint's: its POWER.md section 4 and the test f
 
 - ≈58-73 µA without touch;
 - ≈113-130 µA with an FT6336U hibernated: the log shows `Touch controller asleep` *(debug)*;
+- the 3.68" variant has no touch: the first figure, adjusted by that panel's own deep-sleep draw, which is not in hand (row 17; the J2 flex A/B finds it);
 - above ≈150 µA, work through CrossPoint's A/B list and "what a high reading points at" (its POWER.md section 4).
 
 **Repeat after each CrossInk sleep path.** All should agree within ≈2 µA, and with CrossPoint's figure on the same board:

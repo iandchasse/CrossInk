@@ -8,6 +8,7 @@
 >   - the popup, the light panel's notes and the power-button fault are there;
 >   - the panel controller is logged (`HalDisplay::logController()`);
 >   - CrossInk has no counterpart of CrossPoint's `x4ClassPanel` overlay term.
+> - **The 3.68" variant is built here too, and this copy predates it.** It still lists the 3.68" env and its board tag as future work (tier 1, the module table and "Future work"). CrossInk has both now: [PORTING.md, The 3.68" variant](PORTING.md#the-368-variant). CrossPoint's later version of this page has the variant's own section, and refreshing this copy is [PORTING.md, Upstream merges](PORTING.md#upstream-merges).
 > - **Links:** links to PORTING.md and TEST-SUITE.md sections land on this folder's counterparts, which point on to CrossPoint's.
 
 Silkscreen is a base board meant to be built many ways: with or without a front light, a touch tail, an RTC, some of its keys or a `J6` accessory, cut short, and behind different panels. This file answers the modularity item of the port plan ([PORTING.md, Next](PORTING.md#next)). It covers:
