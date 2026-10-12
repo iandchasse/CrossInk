@@ -10,6 +10,7 @@
 >   - CrossInk has no counterpart of CrossPoint's `x4ClassPanel` overlay term.
 > - **The 3.68" variant is in this copy**, as CrossPoint built and reviewed it (its section, the tier table and Future work). CrossInk's own part of it is [PORTING.md, The 3.68" variant](PORTING.md#the-368-variant): its sites, envs, audits and open items, and where this app differs (no test firmware and no `-gh_release*` envs, no `getController()` on `HalDisplay`, no `absoluteImageGrayscale` site).
 > - **Links:** links to PORTING.md and TEST-SUITE.md sections land on this folder's counterparts, which point on to CrossPoint's.
+> - **What has run on a board is in [PORTING.md](PORTING.md#the-368-variant), not in this copy.** The "Nothing here has run on a board" line below is CrossPoint's status of its first stage (SDK `3ee11bc`). The one bench session so far ran CrossPoint's build of the 3.68" variant, not an image of this repo.
 
 Silkscreen is a base board meant to be built many ways: with or without a front light, a touch tail, an RTC, some of its keys or a `J6` accessory, cut short, and behind different panels. This file answers the modularity item of the port plan ([PORTING.md, Next](PORTING.md#next)). It covers:
 
