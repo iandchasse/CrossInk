@@ -52,7 +52,7 @@ Response:
 | `rssi` | number | Wi-Fi RSSI in dBm; `0` in AP mode |
 | `freeHeap` | number | Free heap in bytes |
 | `uptime` | number | Seconds since boot |
-| `device` | string | `"X3"` or `"X4"` hardware detection |
+| `device` | string | `"X3"` or `"X4"` from hardware detection on the C3 build; the Silkscreen 3.68" variant reports `"X3"` (its panel's refresh family); any other board reports its profile name (`"Simulator"` in the simulator) |
 | `serial` | string | Device serial number from eFuse, or `"Not found"` when unavailable |
 
 ## File Management
