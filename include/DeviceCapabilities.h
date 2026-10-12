@@ -45,9 +45,18 @@ inline bool boardHasFrontButtons() {
 // found on Silkscreen (hold-to-discard, extra key bindings and hints, input leaks, the full-screen
 // reader menu) use this, so every other board's keys behave exactly as they did. False in the
 // simulator, whose boards keep no keys beside touch.
+//
+// The 3.68" variant (FREEINK_SILKSCREEN_368) answers true from the build. It is the same board with
+// the same eight keys and no touch panel at all, so its NO_TOUCH profile cannot set the flag (the SDK
+// asserts it: silkscreen_368::noTouch()), where a 4.26" Silkscreen without its touch tail has the flag
+// set and answers true. What this gates are the key routes the audits added (held keys, hint lines,
+// step keys), and none of them needs a touch panel: with none fitted they are the only routes to
+// those functions, not companions of a touch control. So the variant gets them as that board does.
 inline bool boardKeepsKeysBesideTouch() {
 #ifdef SIMULATOR
   return false;
+#elif FREEINK_SILKSCREEN_368
+  return true;
 #else
   return BoardConfig::ACTIVE.touch.buttonsAlongsideTouch;
 #endif
