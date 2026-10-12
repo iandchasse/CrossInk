@@ -173,7 +173,7 @@ if [ $audited = 1 ]; then
       bash scripts/silkscreen/check_no_touch.sh silkscreen-368 > "$log" 2>&1
     rc=$?
     if [ $rc -eq 1 ] && grep -q "^Touch driver code is linked" "$log" \
-        && grep -q "^The UC8253 X3 driver, the SSD1677 or UC8279 X4 driver, or display-probe code" "$log" \
+        && grep -q "^A UC8253, SSD1677, UC8279 X4 or UC8179 driver, or display-probe code" "$log" \
         && grep -q "^freeink::applyXteinkDisplayController(\.\.\.) is " "$log" \
         && grep -q "^freeink::Uc8279Driver:: has 0 symbols" "$log"; then
       echo "no-touch audit control (4.26\" silkscreen image): fails on the touch names, the other panels' names, the probe's size and the missing UC8279d driver, as it must"

@@ -10,11 +10,12 @@
 #     begin, poll and sleep code, the FocalTech id check, the hibernate and the multi-touch classifiers),
 #     by its demangled name or by its mangled one (a GCC clone, name$isra$0 or name$constprop$0, which
 #     nm -C leaves mangled);
-#   - the UC8253 X3 driver (Uc8253X3Driver and its LUTs), the SSD1677 or UC8279 X4 driver, or any display
-#     probe (the stock X3 VER read, probeX3DisplayController, or the two-pass VER / FLG / MTP read) is
-#     linked: the variant's panel is the X3's UC8279d, fixed in its profile, and nothing identifies it. An
-#     inlined probe has no symbol of its own, so the size of its two entry points, applyXteinkDisplayController()
-#     and detectXteinkDisplayController(), is capped as well;
+#   - any UC8253 driver (freeink::Uc8253*, the X3's or Murphy's, and their tables), the SSD1677 or UC8279 X4
+#     driver, the UC8179 driver, or any display probe (the stock X3 VER read, probeX3DisplayController, or
+#     the two-pass VER / FLG / MTP read) is linked, by demangled or by mangled name: the variant's panel is
+#     the X3's UC8279d, fixed in its profile, and nothing identifies it. An inlined probe has no symbol of
+#     its own, so the size of its two entry points, applyXteinkDisplayController() and
+#     detectXteinkDisplayController(), is capped as well;
 #   - the UC8279d X3 driver (Uc8279Driver) is not linked, so a pass would prove nothing;
 #   - the image's board tag is not the variant's (silkscreen-368, which its battery-log image keeps).
 # The app's own touch code is audited by scripts/check_app_touch_gate.py, which runs after every link of an env
@@ -112,13 +113,21 @@ if hits=$(grep -E "$touch_mangled" <<<"$raw"); then
   echo "$hits" | head -20
 fi
 
-# The other panels' code and every probe: the variant links the X3's UC8279d driver and nothing of the
-# UC8253 X3 driver, the SSD1677, the UC8279 X4 driver, the stock X3 VER read (probeX3DisplayController) or
-# the generic two-pass probe. Its controller is fixed in its profile and nothing identifies it at a boot
-# or a wake.
-other_panels='freeink::(Ssd1677Driver|ssd1677[A-Za-z]*|Uc8253X3Driver|uc8253X3[A-Za-z]*|Uc8279X4Driver|uc8279X4[A-Za-z]*|Uc8179Driver|uc8179[A-Za-z]*)|probeX3DisplayController|runDisplayProbePass|probeDisplayController|matchUc81xx|verIsFloating|epdCmdRead|epdReadByte'
+# The other panels' code and every probe: the variant links the X3's UC8279d driver and nothing of any
+# UC8253 driver, the SSD1677, the UC8279 X4 driver, the UC8179 driver, the stock X3 VER read
+# (probeX3DisplayController) or the generic two-pass probe. Its controller is fixed in its profile and
+# nothing identifies it at a boot or a wake. The drivers are matched by their prefix (freeink::Uc8253*,
+# freeink::uc8253*, ...), so a renamed or a new UC8253 driver (Uc8253MurphyDriver is one) is not missed.
+panel_names='[Ss]sd1677|[Uu]c8253|[Uu]c8279X4|[Uu]c8179'
+other_panels="freeink::[A-Za-z0-9_:]*(${panel_names})|probeX3DisplayController|runDisplayProbePass|probeDisplayController|matchUc81xx|verIsFloating|epdCmdRead|epdReadByte"
 if hits=$(grep -E "$other_panels" <<<"$names"); then
-  fail "The UC8253 X3 driver, the SSD1677 or UC8279 X4 driver, or display-probe code (the stock X3 read, the two-pass read) is linked into ${env}:"
+  fail "A UC8253, SSD1677, UC8279 X4 or UC8179 driver, or display-probe code (the stock X3 read, the two-pass read) is linked into ${env}:"
+  echo "$hits" | head -20
+fi
+# Clones of those drivers' functions stay mangled: _ZN7freeink14Uc8253X3Driver5beginE..$isra$0.
+other_mangled="7freeink.*[0-9](${panel_names})"
+if hits=$(grep -E "$other_mangled" <<<"$raw"); then
+  fail "A UC8253, SSD1677, UC8279 X4 or UC8179 driver is linked into ${env} (mangled names, clones included):"
   echo "$hits" | head -20
 fi
 
