@@ -31,18 +31,21 @@
 #   - A pattern that matches nothing passes. If the SDK renames a driver function, this audit goes quiet on the
 #     image that links it. build_matrix.sh therefore runs this script on the 4.26" board's silkscreen image
 #     (ELF= and BIN=) after the 3.68" ones, and that run must fail on the touch names, on the other panels'
-#     names and on the missing UC8279d driver: the control.
-#   - There is no size cap. CrossPoint's copy caps InputManager::resetAndHibernateTouch() at 32 bytes, a 7-byte
-#     stub in its image (its HalGPIO still calls it). Nothing calls it here with FREEINK_CAP_TOUCH=0, so
-#     --gc-sections drops it: it is not in this image at all (255 bytes in the 4.26" board's), and a cap on a
-#     symbol that is absent measures nothing. InputManager::startTouch() is 15 bytes in a touch build too (it
+#     names, on the probe's size and on the missing UC8279d driver: the control.
+#   - There is no cap on the touch stub. CrossPoint's copy caps InputManager::resetAndHibernateTouch() at 32
+#     bytes, but the function is absent from its 3.68" images too: HalGPIO::resetTouchForSleep() returns before
+#     the call when FREEINK_CAP_TOUCH=0 (HalGPIO.cpp:257 here), so --gc-sections drops it. That cap passes on an
+#     absent symbol and fires only on an image that links the function (255 bytes in the 4.26" board's, which
+#     CrossPoint's control shows live); here a cap on a symbol that is absent from every image it audits
+#     measures nothing, so this script has none. InputManager::startTouch() is 15 bytes in a touch build too (it
 #     only calls beginTouch()), so it carries no cap either.
 #
 # Usage: scripts/silkscreen/check_no_touch.sh [env]    (default: silkscreen-368; build it first)
 # Exits 0 on a pass, 1 when a check fails (each is listed), 2 when the image or nm cannot be read.
 # The nm binary comes from $NM, else from PlatformIO's Xtensa toolchain. ELF=<file> and BIN=<file> name
 # another image than .pio/build/<env>/firmware.{elf,bin}: the control is this script on the 4.26" board's
-# silkscreen image, which must fail on the touch driver, the SSD1677 driver and the missing UC8279d driver.
+# silkscreen image, which must fail on the touch driver, the SSD1677 driver, the probe's size and the missing
+# UC8279d driver.
 # A 3.68" image built before the UC8279d-only change links the UC8253 driver and the stock probe, and must
 # fail on those two.
 set -u
