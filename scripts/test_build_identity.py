@@ -1,6 +1,7 @@
 """Check that volatile build identity reaches only BuildInfo.cpp."""
 from pathlib import Path
 import runpy
+import configparser
 import unittest
 import os
 from unittest.mock import patch
@@ -61,6 +62,22 @@ class BuildIdentityTest(unittest.TestCase):
             self.assertEqual(function(str(ROOT), "silkscreen-368-batlog"), "1.6.1-368-silkscreen-batlog")
             self.assertTrue(function(str(ROOT), "silkscreen-batlog").endswith("-silkscreen-batlog"))
             self.assertTrue(function(str(ROOT), "silkscreen-368-batlog").endswith("-silkscreen-batlog"))
+
+    def test_no_firmware_device_type_continues_another_past_a_hyphen(self):
+        # OtaUpdater.cpp accepts firmware-<type>.bin and firmware-<type>-<anything>.bin (a release asset is
+        # firmware-<type>-v<version>.bin). A device type that continues another one past a hyphen would be
+        # offered to that board: firmware-silkscreen-368.bin matches the 4.26" board's type "silkscreen".
+        parser = configparser.RawConfigParser(strict=False, interpolation=None)
+        parser.read(ROOT / "platformio.ini", encoding="utf-8")
+        types = sorted({parser.get(section, "custom_firmware_device_type").strip()
+                        for section in parser.sections()
+                        if parser.has_option(section, "custom_firmware_device_type")})
+        self.assertIn("silkscreen", types)  # the parse found the envs' types
+        for first in types:
+            for second in types:
+                if first != second:
+                    self.assertFalse(second.startswith(first + "-"),
+                                     f"{second!r} continues {first!r}: its asset would match {first!r}'s")
 
     def test_support_provenance_excludes_custom_version_and_invalid_sdk_values(self):
         function = MODULE["inject_version"]
