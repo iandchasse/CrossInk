@@ -1,14 +1,15 @@
 #!/usr/bin/env bash
-# No-touch audit of a built Silkscreen 3.68" image (docs/silkscreen/PORTING.md, "Not a merge: the 3.68" variant").
-# CrossPoint's scripts/silkscreen/check_no_touch.sh, less its test-firmware checks: CrossInk has no test firmware.
+# No-touch audit of a built Silkscreen 3.68" image (docs/silkscreen/PORTING.md, "The 3.68" variant").
+# CrossPoint's scripts/silkscreen/check_no_touch.sh, less its test-firmware checks (CrossInk has no test
+# firmware) and its size cap (below).
 #
 # The variant has no touch at all: no tail on J4, FREEINK_CAP_TOUCH=0, the board's profile with NO_TOUCH.
 # Nothing may then probe 0x38, 0x5D or 0x14, reset TP_RST or send a hibernate at a sleep entry, and the
 # build proves it by what is linked. This reads the image's symbol table and fails when:
 #   - a touch driver body is linked (the FT5x06 / FT6336U / GT911 / CST816S / GSLX680 / Picco / CHSC6x
 #     begin, poll and sleep code, the FocalTech id check, the hibernate and the multi-touch classifiers),
-#     or InputManager::resetAndHibernateTouch() is more than the stub (7 bytes where something still calls
-#     it, absent from the image where nothing does, 255 bytes with the driver);
+#     by its demangled name or by its mangled one (a GCC clone, name$isra$0 or name$constprop$0, which
+#     nm -C leaves mangled);
 #   - the SSD1677 or UC8279 X4 driver, or the generic display probe (the two-pass VER / FLG / MTP read
 #     that would take a UC8253 for an UltraChip part), is linked: the variant's panel is the X3's and its
 #     controller is read by the stock X3 protocol only;
@@ -17,21 +18,27 @@
 # The app's own touch code is audited by scripts/check_app_touch_gate.py, which runs after every link of an env
 # with CROSSINK_APP_CAP_TOUCH=0 (this script does not repeat it).
 #
-# What each check rests on, so a red result is read right. The touch-body name patterns match symbols that a
-# no-touch build still compiles (InputManager::beginTouch(), serviceTouch(), prepareTouchForSleep(), the
-# *MultiTouch* classifiers, ...): they are out of the image only because nothing references them and the
-# linker's --gc-sections drops them (and, for beginTouch(), because it is inlined). An -O0 / -Og build, or an
-# app or SDK change that reaches one of them, fails this audit on an image with no touch driver; that is a
-# false alarm to look at, not touch code. The other direction does not occur: with the driver built,
-# beginTouch() is 268 bytes and out of line. The one size cap is resetAndHibernateTouch(), the stub that
-# discriminates. InputManager::startTouch() is 15 bytes in a touch build too (it only calls beginTouch()), so
-# it carries no cap.
+# What each check rests on, so a red or a green result is read right.
+#   - The touch-body patterns are names. Some of them are symbols that a no-touch build still compiles
+#     (InputManager::beginTouch(), serviceTouch(), prepareTouchForSleep(), the *MultiTouch* classifiers, ...):
+#     they are out of the image only because nothing references them, the linker's --gc-sections drops them and,
+#     for beginTouch(), the compiler inlines it. An -O0 / -Og build, or an app or SDK change that reaches one of
+#     them, fails this audit on an image with no touch driver; that is a false alarm to look at, not touch code.
+#     The other direction does not occur: with the driver built, beginTouch() is 268 bytes and out of line.
+#   - A pattern that matches nothing passes. If the SDK renames a driver function, this audit goes quiet on the
+#     image that links it. build_matrix.sh therefore runs this script on the 4.26" board's silkscreen image
+#     (ELF= and BIN=) after the 3.68" ones, and that run must fail on the touch and SSD1677 names: the control.
+#   - There is no size cap. CrossPoint's copy caps InputManager::resetAndHibernateTouch() at 32 bytes, a 7-byte
+#     stub in its image (its HalGPIO still calls it). Nothing calls it here with FREEINK_CAP_TOUCH=0, so
+#     --gc-sections drops it: it is not in this image at all (255 bytes in the 4.26" board's), and a cap on a
+#     symbol that is absent measures nothing. InputManager::startTouch() is 15 bytes in a touch build too (it
+#     only calls beginTouch()), so it carries no cap either.
 #
 # Usage: scripts/silkscreen/check_no_touch.sh [env]    (default: silkscreen-368; build it first)
 # Exits 0 on a pass, 1 when a check fails (each is listed), 2 when the image or nm cannot be read.
 # The nm binary comes from $NM, else from PlatformIO's Xtensa toolchain. ELF=<file> and BIN=<file> name
-# another image than .pio/build/<env>/firmware.{elf,bin}: the negative control is this script on the 4.26"
-# board's silkscreen image, which must fail on the touch driver and the SSD1677 driver.
+# another image than .pio/build/<env>/firmware.{elf,bin}: the control is this script on the 4.26" board's
+# silkscreen image, which must fail on the touch driver and the SSD1677 driver.
 set -u
 cd "$(dirname "$0")/../.." || exit 2
 
@@ -71,6 +78,11 @@ if ! grep -q 'board_tag::boardName' <<<"$syms"; then
   exit 2
 fi
 names=$(awk '{ $1 = ""; $2 = ""; $3 = ""; sub(/^ +/, ""); print }' <<<"$syms")
+# The same symbols as the linker wrote them, for the clones nm -C cannot demangle.
+if ! raw=$("$nm_bin" --defined-only "$elf" | awk '{ print $NF }'); then
+  echo "nm failed on $elf"
+  exit 2
+fi
 
 status=0
 fail() {
@@ -80,27 +92,20 @@ fail() {
 
 # Touch driver bodies: every InputManager touch function the 4.26" board's image has and a no-touch one
 # does not (the controllers' begin and poll, the sleep and hibernate code, the id check, the gesture
-# classifiers), and the helpers they use.
-touch_bodies='InputManager::(begin(Cst816s|Ft5x06|Ft6336u|Gt911|PiccoTouch|TouchController|Touch)|poll(Cst816s|Ft5x06|Ft6336u|Gslx680|Gt911|PiccoTouch)|serviceTouch|updateTouchFromIrq|focaltechHibernate|gt911(ClearStatus|ReadReg|Sleep)|ft5x06(ReadReg|WriteReg)|prepareTouchForSleep|pulseTouchReset|holdTouchIntForSleep|decodeChsc6xFrame|readChsc6xPoint|touchDiagnostics|[A-Za-z]*MultiTouch[A-Za-z]*)[(]|(^|[^A-Za-z0-9_])(focalTechIdentified|cachedGt911Asleep|cachedTouchProbe|driveGt911IntLow|cstTouchInterrupt)[(]'
+# classifiers), and the helpers they use. The member names, then the free functions, as alternations.
+touch_members='begin(Cst816s|Ft5x06|Ft6336u|Gt911|PiccoTouch|TouchController|Touch)|poll(Cst816s|Ft5x06|Ft6336u|Gslx680|Gt911|PiccoTouch)|serviceTouch|updateTouchFromIrq|focaltechHibernate|gt911(ClearStatus|ReadReg|Sleep)|ft5x06(ReadReg|WriteReg)|prepareTouchForSleep|pulseTouchReset|holdTouchIntForSleep|decodeChsc6xFrame|readChsc6xPoint|touchDiagnostics|[A-Za-z]*MultiTouch[A-Za-z]*'
+touch_free='focalTechIdentified|cachedGt911Asleep|cachedTouchProbe|driveGt911IntLow|cstTouchInterrupt'
+touch_bodies="InputManager::(${touch_members})[(]|(^|[^A-Za-z0-9_])(${touch_free})[(]"
 if hits=$(grep -E "$touch_bodies" <<<"$names"); then
   fail "Touch driver code is linked into ${env}:"
   echo "$hits" | head -20
 fi
-
-# The entry point whose size tells the two builds apart: the SDK leaves resetAndHibernateTouch() a 7-byte stub
-# when FREEINK_CAP_TOUCH=0, and it is 255 bytes with the driver (the 4.26" board's image). Nothing in this app
-# calls it with FREEINK_CAP_TOUCH=0, so the linker usually drops it and the check finds nothing to measure; it
-# bites if a caller or the driver comes back. startTouch() is not capped: it is a 15-byte forwarder either way.
-stub_cap() {  # name max_bytes
-  local line size
-  line=$(grep -F -- "$1" <<<"$syms" | head -1)
-  [ -z "$line" ] && return 0
-  size=$((16#$(awk '{print $2}' <<<"$line")))
-  if [ "$size" -gt "$2" ]; then
-    fail "$1 is $size bytes in ${env} (a stub is at most $2): the touch code is built"
-  fi
-}
-stub_cap 'InputManager::resetAndHibernateTouch()' 32
+# A clone keeps the length-prefixed identifier of its original: ..InputManager10beginGt911Ev..$isra$0.
+touch_mangled="InputManager[0-9]+(${touch_members})|[0-9]+(${touch_free})"
+if hits=$(grep -E "$touch_mangled" <<<"$raw"); then
+  fail "Touch driver code is linked into ${env} (mangled names, clones included):"
+  echo "$hits" | head -20
+fi
 
 # The other panel families: the variant links the X3 pair and nothing of the SSD1677, the UC8279 X4
 # driver or the generic probe (its own stock X3 probe, probeX3DisplayController, stays).
