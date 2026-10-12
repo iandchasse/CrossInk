@@ -25,7 +25,7 @@ The hardware is described in `de-link_pcb/docs/HARDWARE.md` ([iandchasse/silkscr
 
 - CrossInk `development` at `9dd334d3` (2026-09-29), as cloned; merged up to `3efe61b6` (2026-10-02, v1.6.1 and what followed) in `a9f9ef64`, up to `6fbc97d1` (2026-10-04) in `6e182dfe`, and up to `67100e66` (2026-10-08) in `019aa229`.
 - freeink-sdk at the shared Silkscreen SDK head, `48be3d0` ([The shared SDK](#the-shared-sdk)): `0b60346` and the 3.68" variant's 23 commits.
-- The last CrossPoint `silkscreen` commit ported is `e4127054` (2026-10-10), the clipping sync's cutoff poll, ported as the same rule for this repo's own stats and clippings uploads in `aa3f8544`. CrossPoint's `silkscreen` head `b82e4236` (2026-10-11, the 3.68" variant) has been read through: what follows `8cb94736` is ported or recorded below as not applicable.
+- The last CrossPoint `silkscreen` commit ported is `e4127054` (2026-10-10), the clipping sync's cutoff poll, ported as the same rule for this repo's own stats and clippings uploads in `aa3f8544`. CrossPoint's `silkscreen` head `1c9c97b4` (2026-10-11, the 3.68" variant and its fix pass) has been read through: what follows `8cb94736` is ported or recorded below as not applicable.
 
 ## Status
 
@@ -98,6 +98,7 @@ CrossPoint commits after the last review (`b605f87d`) were taken as follows:
 - CrossPoint's docs commit for that sync (`f61a7a97`): this repo's sync row below, with the refreshed copies of REQUIREMENTS.md, MODULARITY.md and POWER.md's section 2 (a changed default clock, an RTC retry cost and the IO18 row).
 
 - `9385762a`, `cc870a2c`, `21de646d`, `4b79eb03`, `4d9bb804`, `e50dc524` and `b82e4236`, CrossPoint's 3.68" variant (its app half, the tags, the envs, the no-touch audit, the matrix and status script, the docs, and a fix to the status script's lens): ported as [The 3.68" variant](#the-368-variant), with this repo's commits in the Status table. `b3b2192f`, its test firmware, has no counterpart: CrossInk has none. The SDK half came through the gitlink moves `8a294117` and `354c6813`. CrossPoint's copies of the docs were not refreshed here ([Refreshing the copied docs](#upstream-merges));
+- `9804cc72` to `6a89325a` and `68214bac` to `1c9c97b4`, the fix pass of CrossPoint's review of that stage: its test-firmware commits (`9804cc72`, `61996802`, `cd79108e`, `5cafcbfc`, `3fd1f982`) have no counterpart; `351a70b5`, the files page's "X3" status string, is `e70e5e28` here; `53c7013c`, the audit's `startTouch()` cap that could never fire, is `077cc241`; `45ff81d1` is CrossPoint's status script; `6d15e5f7` ships the MSVC shim that runs the SDK's host tests (`crosspoint-reader/scripts/silkscreen/msvc/`), which this repo does not copy; and the docs commits are CrossPoint's own pages, whose corrections (the X3 drivers' awake costs, the bench list's order and its first-power gate, the cut board's light) are in this repo's drain statement and bring-up lines.
 
 **Battery use.** The image has carried every drain rule since S6, but none has been measured. Run C2 and C6 of the [bring-up checklist](#bring-up-checklist-real-board) before relying on it.
 
@@ -507,7 +508,7 @@ review and records) is `crosspoint-reader/docs/silkscreen/UPSTREAM-SYNC.md`; a C
 
 ```bash
 git fetch crosspoint
-git log --oneline b82e4236..crosspoint/silkscreen -- . ':!src/activities/testsuite' ':!scripts/check_test_firmware.sh'
+git log --oneline 1c9c97b4..crosspoint/silkscreen -- . ':!src/activities/testsuite' ':!scripts/check_test_firmware.sh'
 ```
 
 Port new drain fixes and board behaviour, update [POWER.md §3](POWER.md#3-firmware-rules-and-where-they-live)'s anchors, and move the "last CrossPoint commit ported" at the top of this file. CrossPoint's own uncommitted work is not ported until it lands as a commit.
