@@ -7,7 +7,7 @@ Silkscreen has no hardware off (§3.5). 3V3 is live whenever a cell or USB is pr
 - how to measure, and what the awake tail costs on CrossInk (sections 4 and 5);
 - what only a board revision can fix (section 6), and the open questions (section 7).
 
-**Nothing here has been measured on a board.** The one bench session so far (one 3.68" panel, `SEO368NQW25`, on CrossPoint's build) took no current, and no image of this repo has been flashed.
+**As of 2026-09-30 nothing here had been measured on a board.** The owner's unit has since run CrossPoint's battery-log firmware (its first CSV, 2026-10-10, holds 27 rows over 5.7 days from one build, `1.6.5-batlog`); that is a log of battery readings, not a meter reading, and the figures below are as written. No image of this repo has run on a board.
 
 **Sections copied from CrossPoint.** Sections 1, 2, 6 and 7 come unchanged from CrossPoint's `docs/silkscreen/POWER.md` at crosspoint-reader `811f58aa` (last changed there in `48523e4c`; sections 6 and 7 have not changed since `f61a7a97`). Section 1 includes CrossPoint's own section on the 3.68" variant.
 

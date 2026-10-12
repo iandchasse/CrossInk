@@ -34,6 +34,7 @@ same analyzer (`crosspoint-reader/scripts/silkscreen/battery_log_report.py`). Th
   to what it did before. The one blocker that runs the other way round is the release image's 5% display step
   (`#if FREEINK_DEVICE_SILKSCREEN && !SILKSCREEN_BATLOG`), which this image compiles out. CrossInk's own
   `BatteryDiagnosticLog` stays compiled out and untouched.
+- **What has run.** As of 2026-10-12 the one CSV recorded (2026-10-10, 27 rows over 5.7 days) came from one build, CrossPoint's `1.6.5-batlog`. No CSV from this repo's `-silkscreen-batlog` versions is recorded, and CrossInk's variant images have never been flashed.
 
 ## Where it is hooked
 
