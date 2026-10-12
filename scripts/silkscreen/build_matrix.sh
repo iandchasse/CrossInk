@@ -14,8 +14,9 @@
 #       silkscreen-368* envs are the 3.68" X3-panel variant's, docs/silkscreen/PORTING.md). Each
 #       silkscreen-368* image goes through scripts/silkscreen/check_no_touch.sh before the proxy
 #       envs start: it reads .pio/build/<env>, which they delete. The same audit then runs on the
-#       4.26" silkscreen image, which it must fail on the touch and SSD1677 names: the control that
-#       its name patterns still match a real touch build (skipped when that image is not on disk).
+#       4.26" silkscreen image, which it must fail on the touch names, the SSD1677 and probe names,
+#       the probe's size and the missing UC8279d driver: the control that its patterns still match a
+#       real touch build and a build with other panels' code (skipped when that image is not on disk).
 #   x4-pro*, x4-classic* : CrossInk's real envs through a proxy config whose only change is
 #       [base]'s platform, 55.03.37 -> the installed 55.03.311. 55.03.37 needs the Arduino 3.3.7
 #       framework package; installing it would replace the framework copy CrossPoint builds with.
@@ -161,8 +162,10 @@ for env in "${real[@]}"; do
 done
 # The audit's control. Its patterns are names, and a name that matches nothing passes: if the SDK renames a
 # driver function, a 3.68" image that links the touch driver goes green. The 4.26" board's image has the touch
-# driver and the SSD1677 driver, so the same audit on it must fail on both families of names. Run only after an
-# audit above, and only when that image is on disk (silkscreen builds first in the default list).
+# driver, the SSD1677 and UC8279 X4 drivers and the generic probe, and links no UC8279d X3 driver, so the same
+# audit on it must fail on all of them: the touch names, the other panels' names, the probe's size and the
+# missing UC8279d driver. Run only after an audit above, and only when that image is on disk (silkscreen
+# builds first in the default list).
 if [ $audited = 1 ]; then
   if [ -f .pio/build/silkscreen/firmware.elf ] && [ -f .pio/build/silkscreen/firmware.bin ]; then
     log="$LOGS/$label-notouch-control.log"
@@ -170,11 +173,14 @@ if [ $audited = 1 ]; then
       bash scripts/silkscreen/check_no_touch.sh silkscreen-368 > "$log" 2>&1
     rc=$?
     if [ $rc -eq 1 ] && grep -q "^Touch driver code is linked" "$log" \
-        && grep -q "^SSD1677, UC8279 X4 or generic display-probe code is linked" "$log"; then
-      echo "no-touch audit control (4.26\" silkscreen image): fails on the touch and SSD1677 names, as it must"
+        && grep -q "^The UC8253 X3 driver, the SSD1677 or UC8279 X4 driver, or display-probe code" "$log" \
+        && grep -q "^freeink::applyXteinkDisplayController(\.\.\.) is " "$log" \
+        && grep -q "^freeink::Uc8279Driver:: has 0 symbols" "$log"; then
+      echo "no-touch audit control (4.26\" silkscreen image): fails on the touch names, the other panels' names, the probe's size and the missing UC8279d driver, as it must"
     else
-      echo "no-touch audit control (4.26\" silkscreen image) exit=$rc: did NOT fail on the touch and SSD1677 names," \
-        "so the audit's patterns no longer match a touch build: see $log"
+      echo "no-touch audit control (4.26\" silkscreen image) exit=$rc: did NOT fail on the touch names, the other" \
+        "panels' names, the probe's size and the missing UC8279d driver, so the audit's patterns no longer match" \
+        "a touch build or another panel's code: see $log"
       failed=1
     fi
   else
