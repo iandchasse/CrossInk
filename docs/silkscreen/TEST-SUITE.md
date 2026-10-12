@@ -18,7 +18,7 @@ pio run -e silkscreen-test -t upload
   - Both readers' OTA and SD firmware update refuse an image with another tag (`src/network/FirmwareBoardTag.cpp`), and the test image has neither.
   - So it goes on over USB and comes off over USB. Come back with `pio run -e silkscreen -t upload` in this repo, or the same command in `crosspoint-reader` for CrossPoint's reader.
 - **Switching between the two readers.** They share the `silkscreen` tag, so either reader's SD firmware update accepts the other's image.
-- **Build hooks.** The test image takes its `[silkscreen]` hooks (`frontlight_flags`, `display_flags`, `touch_flags`) from `crosspoint-reader/platformio.local.ini`, not from this repo's. Set them the same in both repos for a board that needs them. For the 3.68" variant they are `[silkscreen368]`'s, which has `display_flags` only (it has no touch tail).
+- **Build hooks.** The test image takes its `[silkscreen]` hooks (`frontlight_flags`, `display_flags`, `touch_flags`) from `crosspoint-reader/platformio.local.ini`, not from this repo's. Set them the same in both repos for a board that needs them. For the 3.68" variant they are `[silkscreen368]`'s `frontlight_flags` and `display_flags` (there is no `touch_flags`: no touch tail).
 
 ## The shared card
 
@@ -53,11 +53,11 @@ The detection is SDK code, so the results hold for CrossInk. What CrossInk shows
 
 ## The 3.68" variant
 
-CrossInk has no test firmware for the 3.68" X3-panel variant either ([PORTING.md, The 3.68" variant](PORTING.md#the-368-variant)). Its bench is CrossPoint's: its `silkscreen-368-test` image, and the section "The 3.68" variant (`silkscreen-368-test`)" of `crosspoint-reader/docs/silkscreen/TEST-SUITE.md`, which lists what each test judges there (T11 and T12 say "no touch in this build"; P1 prints the VER bytes and the driver that ran; T4 has no SSD1677 reference, and T5, T6 and T8 read "not reported" where the X3 drivers report nothing) and a ten-step bench list that starts with reading VER. Both readers' variant images share the board tag `silkscreen-368`, so either's SD firmware update accepts the other's; the test image has `silkscreen-368-test`, which neither accepts, so it goes on and comes off over USB, as the 4.26" one does.
+CrossInk has no test firmware for the 3.68" X3-panel variant either ([PORTING.md, The 3.68" variant](PORTING.md#the-368-variant)). Its bench is CrossPoint's: its `silkscreen-368-test` image, and the section "The 3.68" variant (`silkscreen-368-test`)" of `crosspoint-reader/docs/silkscreen/TEST-SUITE.md`, which lists what each test judges there (T11 and T12 say "no touch in this build"; P1 prints the VER bytes and the driver that ran; T4 has no SSD1677 reference, and T5, T6 and T8 read "not reported" where the X3 drivers report nothing) and a bench list that starts with the power key and a first-power gate and then reads VER. Both readers' variant images share the board tag `silkscreen-368`, so either's SD firmware update accepts the other's; the test image has `silkscreen-368-test`, which neither accepts, so it goes on and comes off over USB, as the 4.26" one does.
 
 Run it in this order:
 
-1. CrossPoint's `silkscreen-368-test` and its bench list, from the VER read to the logic-analyser check that nothing talks to the touch addresses.
+1. CrossPoint's `silkscreen-368-test` and its bench list: the power-key rework and the first-power gate, then the VER read, and on to the logic-analyser check that nothing talks to the touch addresses.
 2. `pio run -e silkscreen-368 -t upload` here, and the C1-C12 steps of [PORTING.md](PORTING.md#bring-up-checklist-real-board) with the differences listed under "On a 3.68" unit".
 3. The battery log's A/B with `silkscreen-368-batlog` ([BATTERY-LOG.md](BATTERY-LOG.md)).
 
