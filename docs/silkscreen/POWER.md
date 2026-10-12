@@ -9,7 +9,7 @@ Silkscreen has no hardware off (§3.5). 3V3 is live whenever a cell or USB is pr
 
 **Nothing here has been measured on a board.**
 
-**Sections copied from CrossPoint.** Sections 1, 2, 6 and 7 come unchanged from CrossPoint's `docs/silkscreen/POWER.md` at crosspoint-reader `f61a7a97` (last changed there in `f61a7a97`).
+**Sections copied from CrossPoint.** Sections 1, 2, 6 and 7 come unchanged from CrossPoint's `docs/silkscreen/POWER.md` at crosspoint-reader `1c9c97b4` (last changed there in `1c9c97b4`; sections 6 and 7 have not changed since `f61a7a97`). Section 1 includes CrossPoint's own section on the 3.68" variant.
 
 - On Silkscreen, CrossInk sleeps through the same freeink-sdk path, so the budget and the pin states apply as they stand.
 - Their "this firmware" notes name SDK code, which CrossInk shares. SDK hashes are commits on the shared `silkscreen` branch.
@@ -61,7 +61,7 @@ X3/X4, Sticky, X4 Pro and X4 Classic keep CrossInk's power behaviour and its own
 | 14 | U10 TPS923610 shutdown (LDO_IN) | 0.13 [DS] | 0.5 [DS, 85 °C] | ADIM LOW for > 2.5 ms (IO42 held LOW) | SNVSCN8A §6.5 |
 | 15 | U12 74LVC1G04 (clone) (3V3) | 0.1 [DS] | 4 [DS Nexperia]; 10 if TI's limit applies | Input at GND (IO40 LOW) | Nexperia Rev 18.1; TI SCES214AF |
 | 16 | U13 DS3231MZ, VBAT-only (3V3) | 2.0 [DS] | 3.0 [DS] | EN32KHZ = 0, I2C idle; conversions already averaged in | Maxim DS3231M Rev 5 p.3 (Note 4) |
-| 17 | GDEQ0426T82 panel in deep sleep (3V3) | 2 [DS] | 6 [DS] | 0x10/0x03 sent, RST HIGH. The custom UC8279D panel (DSLP `0x07`/`0xA5`) has no datasheet figure in hand: measure it (MEAS-01). | GDEQ0426T82 §7.1 |
+| 17 | GDEQ0426T82 panel in deep sleep (3V3) | 2 [DS] | 6 [DS] | 0x10/0x03 sent, RST HIGH. The custom UC8279D panel (DSLP `0x07`/`0xA5`) has no datasheet figure in hand: measure it (MEAS-01). Nor has the 3.68" variant's UC8253 or UC8279d (the X3 drivers' DSLP `0x07`/`0xA5`): its floor is this budget with this row unknown, so the figures of this table are the 4.26" board's. | GDEQ0426T82 §7.1 |
 | 18 | Q7 AO3401A leakage, SD gate off | ~0.01 [est] | 1 [DS, at −30 V] | IO10 HIGH (R77 carries the same current) | AO3401A DS |
 | 19 | Q4 IRLML6346 leakage | ~0.01 [est] | 1 [DS, at 24 V] | EINK_SW at 3V3 | IRLML6346 DS |
 | 20 | ESD/TVS parts (TPD4E1U06 ×5, CR2/CR3 SD05C, D3, CR1, D8) | 0.05 [est] | 2 [DS bounds] | SD05C clones rated 1 µA max at 5 V each | TI SLVSBQ9D; SD05C-01FTG Rev 1.4 |
@@ -80,7 +80,7 @@ X3/X4, Sticky, X4 Pro and X4 Classic keep CrossInk's power behaviour and its own
 | Scenario | Adder µA | Total µA | In this firmware |
 |---|---|---|---|
 | FT6336U tail on J4, hibernated (`0xA5 = 0x03`), TP_RST HIGH | +55 typ [DS, at 2.8 V, no max] | ≈113 (≈2.7 mAh/day) | Every normal sleep entry with the tail fitted. The lowest possible while J4 VDD is unswitched (HW-02). |
-| Tail in Monitor mode | +220 typ [DS] | ≈278 | A tail that missed the cold-boot probe and did not take the one best-effort write, until the next cold boot. The abnormal-reset sleep resets the controller and sends hibernate, and a Silkscreen build with `FREEINK_CAP_TOUCH=0` no longer compiles. |
+| Tail in Monitor mode | +220 typ [DS] | ≈278 | A tail that missed the cold-boot probe and did not take the one best-effort write, until the next cold boot. The abnormal-reset sleep resets the controller and sends hibernate, and a 4.26" Silkscreen build with `FREEINK_CAP_TOUCH=0` no longer compiles (the 3.68" variant has no tail and is built with it). |
 | TP_RST held LOW with the tail fitted | ≈+1100 [est: 3.3 V into the ~3 kΩ RSTN pull-up] plus the reset-state current | ≈1150 (≈28 mAh/day) | This port's profile did this until freeink-sdk `a26e398`, which holds IO11 HIGH. |
 | GPIO47/48 pads unpowered in sleep, so R5 and panel BUSY back-feed VDD_SPI | +100-300 [est]; the R5 path alone ≤ ≈280 | ≈160-360 | Open hardware risk (HW-01). Measure ([section 4](#4-measurement-and-bench-checks)). |
 | Near-empty cell: LDO_IN below ≈3.3-3.35 V, U3 in dropout | IQ 25 → ≈190-225 at 25 °C, ≈260 at 85 °C [DS typ curve] | ≈250-300 | The reason for the 3.4 V cutoff (BAT-01). Unavoidable for a device stored empty. |
@@ -102,6 +102,28 @@ X3/X4, Sticky, X4 Pro and X4 Classic keep CrossInk's power behaviour and its own
   - DS3231M conversions are already in its IBATT.
   - R77 and Q7 leakage are one current.
   - TPS2116 ISTBY,VIN1 does not apply on battery.
+
+### The 3.68" variant (`silkscreen-368`)
+
+The same board and budget with the Xteink X3's panel in place of the GDEQ0426T82, and no touch tail ([MODULARITY.md](MODULARITY.md#the-368-variant-silkscreen-368)). Nothing here has been measured.
+
+- **Row 17 is not in hand.** The UC8253 and the UC8279d have no datasheet figure in the repo. The floor is the budget above less the 4.26" panel's 2-6 µA, plus this panel's own: unknown. P5 records the J2 flex-in/flex-out gap with no reference, and MEAS-01 is the test.
+- **No touch terms.** The +55 µA hibernate, +220 µA Monitor and ≈1.1 mA `TP_RST` rows do not exist: no tail, and no code that could miss a sleep command. `IO11` is still parked HIGH and held (inherited, at no cost), and `IO41` is never configured.
+- **`BUSY_N`.** IO48 has the internal pull-up while awake (the X3 drivers' active-low `BUSY_N`; ≈73 µA only while the controller drives it LOW, in a refresh wait) and is a plain unheld input in sleep, as for the UC8279. Its level in sleep is not in hand, so HW-01's R34 check is the one that matters.
+- **Awake.** Computed from the driver and bus code (SPI at the profile's 10 MHz, 99-byte rows, 528 rows, 52,272 B a plane; the 10-15 µs of per-row call overhead is an estimate), none measured:
+
+  | When | What | Cost |
+  |---|---|---|
+  | A cold boot, or any reset but a deep-sleep wake (and the boot cutoff's and the reset loop's panel sleep) | The X3's stock controller probe: reset 10 + 50 + 50 ms, one `BUSY_N` read, three VER bytes | About 111 ms; 410 ms at most, when `BUSY_N` stays LOW through its 300 ms bound |
+  | A deep-sleep wake with a conclusive verdict (VER `0x66` or `0xFF`) | No probe: the driver's own reset and one `BUSY_N` read | Nothing normally. A `BUSY_N` that stays LOW 300 ms after the reset drops the verdict and restarts, and the next boot probes (about 0.3 s, a restart and about 111 ms more, at every wake if it repeats: bench list step 8). Any other id is not kept and is probed at every wake (about 111 ms each) |
+  | Every `display.begin()`: a cold boot, and each wake that reaches the UI (not a ghost wake) | `Uc8253X3Driver::begin()`: the 80 ms reset, then `initController()`, which writes **both** 52,272 B planes white (the UC8253 has no RAM clear). `Uc8279Driver::begin()`: the 80 ms reset and a register script, no fill | UC8253 about 170-190 ms against the SSD1677's roughly 70-80 ms: **about +95-110 ms per `begin()`**, about 1.3-1.8 µAh at 45-60 mA (inference). UC8279d about equal to the SSD1677 |
+  | A Quick Resume wake (`SplashlessWake` with `/.crosspoint/sleep_frame.bin`) | `cleanupGrayscaleWithFrameBuffer()` rebases the controller RAM that `begin()` cleared: both planes rewritten (UC8253: DTM2, DSP, DTM1, DSP; UC8279d: PTIN, the same two planes, PTOUT). No refresh, no PON, no `BUSY_N` wait | **About 85-110 ms** of SPI-bound CPU, about 1.4-1.8 µAh (inference). It replaces the first reader page's HALF, which `HalDisplay` turns into a full sync (a FULL waveform, a conditioning pass and a settle: seconds of panel drive), with a FAST differential, because only this branch sets `allowFastInitialReaderRefresh`. Net: a Quick Resume wake saves time and energy |
+  | The worst case for one wake, UC8253 | The `begin()` fill and the rebase | About 190-220 ms, about 2.6-3.6 µAh (inference) |
+  | A HALF anywhere on the X3 pair (every N-th page, sleep covers, overlays) | `requestResync(1)`: the HALF becomes a full sync with one conditioning pass | The X3 panel's own cost, as on the C3 X3, switched on for this variant on purpose; not measured |
+
+  The driver-free panel sleep (the reset loop) is about 72 ms idle and 172 ms at most (a 10 + 1 ms reset, a 60 + 1 ms settle and a BUSY_N wait of up to 100 ms); the boot cutoff's is the probe, `begin()` and the deep-sleep command. The 60 ms settle is host-tested only (bench list step 10).
+- **Saved against a board with a tail.** The ≈307 ms touch reset and settle at each cold boot, and the NACKed hibernate write at each sleep entry.
+- **Wake sources, timers, holds, pulls.** None added: `scripts/check_sleep_wake_sources.sh` passes.
 
 ## 2. Pin states in sleep
 
@@ -130,12 +152,12 @@ X3/X4, Sticky, X4 Pro and X4 Classic keep CrossInk's power behaviour and its own
 | IO19 / IO20 | USB D− / D+ | Leave to USB | Repurposing loses the flashing path | USB-Serial-JTAG |
 | IO38 / IO39 | I2C SDA / SCL (R48/R47 2.2k to 3V3) | Released, not held; R47/R48 keep them HIGH | Held or stuck LOW 1500 each; pull-down 70 each | `freeink::i2c::releaseSensorBusForSleep()` (Wire end, lines released, a stuck bus clocked free), SDK `a26e398` |
 | IO40 | COLOR_SEL (R75 100k pull-down) | LOW + hold | HIGH 33 + U12; pull-up 23 + U12 shoot-through (up to several hundred [est]) | `FrontlightManager::prepareForSleep()`, then `parkedPins` LOW held. After a trip on the warm string it stays HIGH while awake until LED_SW is at 15 V (at most 4 s), so C9's charge cannot reach the cool string; `prepareForSleep()` waits for that too, then rests it LOW |
-| IO41 | TP_INT (no board pull) | FT6336U: not held (isolated). GT911 (alternate-jumper builds only): held LOW after its sleep command | FT6336U: a LOW wakes it from hibernate (→ 220); GT911: floating or HIGH for 2-5 ms wakes it (3300) | Awake `INPUT_PULLUP` on the FT path; in sleep unheld for an FT6336U, held LOW for a GT911 (`InputManager::prepareTouchForSleep`). The hold ends at the wake, so a sleep entry before the probe re-sleeps a cached GT911 (ghost wake) or re-holds INT (release wake, `holdTouchIntForSleep()`). |
+| IO41 | TP_INT (no board pull) | FT6336U: not held (isolated). GT911 (alternate-jumper builds only): held LOW after its sleep command | FT6336U: a LOW wakes it from hibernate (→ 220); GT911: floating or HIGH for 2-5 ms wakes it (3300) | Awake `INPUT_PULLUP` on the FT path; in sleep unheld for an FT6336U, held LOW for a GT911 (`InputManager::prepareTouchForSleep`). The hold ends at the wake, so a sleep entry before the probe re-sleeps a cached GT911 (ghost wake) or re-holds INT (release wake, `holdTouchIntForSleep()`). Never configured in the 3.68" variant (no touch in the build). |
 | IO42 | ADIM / enable (U10 600k pull-down) | LOW + hold | HIGH or pull-up: 260-300 IQ, ≈60 mA lit [est]; `gpio_reset_pin` turns the pull-up on | Duty 0 and LEDC detached (`FrontlightManager::prepareForSleep`), then `parkedPins` LOW held |
 | IO43 / IO44 | UART TX / RX (TP2/TP1) | Defaults (not isolated by IDF) | An unpowered adapter left clipped on is back-fed by TX | Default; unplug adapters before measuring |
 | IO45 / IO46 | Spare straps to J6 | Defaults, isolated | IO45 HIGH at reset selects 1.8 V VDD_SPI: boot fails, chip stays awake | Untouched |
 | IO47 | EPD RST (R5 10k to 3V3); pad likely on VDD_SPI | HIGH + hold | LOW 330 and the panel leaves deep sleep; pull-down 60. If the pad is unpowered in sleep, R5 back-feeds VDD_SPI (HW-01) | `holdRailOff` HIGH; `EpdBus::begin` presets HIGH before releasing the hold (SDK `983f2a7`) |
-| IO48 | EPD BUSY (SSD1677 drives it HIGH in deep sleep; a UC8279's BUSY_N level in deep sleep is not in hand); pad likely on VDD_SPI | **Not held**, no pulls | Pull-down held into sleep 73 (SSD1677); a pull-up held against a LOW BUSY_N the same; any drive: contention; unpowered pad back-feeds VDD_SPI (HW-01) | Awake only, by the probed controller: pull-down for an SSD1677, pull-up for a UC8279 (`busyPullUp`). `powerDownRailsForSleep` takes both off and leaves a plain input, never held (SDK `983f2a7`; the pull-up in the display-probe commit) |
+| IO48 | EPD BUSY (SSD1677 drives it HIGH in deep sleep; the BUSY_N level of a UC8279, a UC8253 or a UC8279d in deep sleep is not in hand); pad likely on VDD_SPI | **Not held**, no pulls | Pull-down held into sleep 73 (SSD1677); a pull-up held against a LOW BUSY_N the same; any drive: contention; unpowered pad back-feeds VDD_SPI (HW-01) | Awake only, by the probed controller: pull-down for an SSD1677, pull-up for a UC8279 (`busyPullUp`). `powerDownRailsForSleep` takes both off and leaves a plain input, never held (SDK `983f2a7`; the pull-up in the display-probe commit) |
 | IO26-37 | Flash / octal PSRAM | Never touch | Reconfiguring breaks boot | Untouched |
 
 ## 3. Firmware rules and where they live

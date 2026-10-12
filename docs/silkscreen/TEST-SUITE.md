@@ -51,7 +51,7 @@ CrossPoint's TEST-SUITE.md section "Variant coverage" lists each variant the SDK
 
 The detection is SDK code, so the results hold for CrossInk. What CrossInk shows the user for each is in [PORTING.md](PORTING.md#bring-up-checklist-real-board) (C1, C8).
 
-## The 3.68" variant
+## The 3.68" variant (`silkscreen-368-test`)
 
 CrossInk has no test firmware for the 3.68" X3-panel variant either ([PORTING.md, The 3.68" variant](PORTING.md#the-368-variant)). Its bench is CrossPoint's: its `silkscreen-368-test` image, and the section "The 3.68" variant (`silkscreen-368-test`)" of `crosspoint-reader/docs/silkscreen/TEST-SUITE.md`, which lists what each test judges there (T11 and T12 say "no touch in this build"; P1 prints the VER bytes and the driver that ran; T4 has no SSD1677 reference, and T5, T6 and T8 read "not reported" where the X3 drivers report nothing) and a bench list that starts with the power key and a first-power gate and then reads VER. Both readers' variant images share the board tag `silkscreen-368`, so either's SD firmware update accepts the other's; the test image has `silkscreen-368-test`, which neither accepts, so it goes on and comes off over USB, as the 4.26" one does.
 
