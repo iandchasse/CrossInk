@@ -57,7 +57,7 @@ CrossInk has no test firmware for the 3.68" X3-panel variant either ([PORTING.md
 
 Run it in this order:
 
-1. CrossPoint's `silkscreen-368-test` and its bench list: the power-key rework and the first-power gate, then the VER read, and on to the logic-analyser check that nothing talks to the touch addresses.
+1. CrossPoint's `silkscreen-368-test` and its bench list: the power-key rework and the first-power gate, then the VER read, the 300 ms `BUSY_N` guard at a wake and the logic-analyser check that nothing talks to the touch addresses. Its 60 ms driver-free settle (step 10) needs the scratch `abort();` described under "Checks that need the reader image" below, and neither guard has been measured.
 2. `pio run -e silkscreen-368 -t upload` here, and the C1-C12 steps of [PORTING.md](PORTING.md#bring-up-checklist-real-board) with the differences listed under "On a 3.68" unit".
 3. The battery log's A/B with `silkscreen-368-batlog` ([BATTERY-LOG.md](BATTERY-LOG.md)).
 
@@ -81,5 +81,6 @@ On CrossInk they are steps C1-C12 of [PORTING.md, Bring-up checklist](PORTING.md
 
 - **Wake policy.** The rule is CrossInk's NVS mirror of Short Power Button, not CrossPoint's RTC word ([POWER.md WK-01](POWER.md#3-firmware-rules-and-where-they-live)).
 - **No plugins.** CrossInk has no plugin system, so CrossPoint's plugin and loan-clock checks do not apply.
+- **Reset loop.** No image forces the three panics (CrossPoint's P6 is not built, and CrossInk has no test firmware): patch `abort();` in as the first statement of `loop()` in `src/main.cpp`, in a scratch copy that is never committed, and boot three times; the fourth boot sleeps at once (C3). The 3.68" variant's 60 ms driver-free settle in that path has only a host test behind it.
 - **Reader overlay.** CrossInk has no counterpart of CrossPoint's `xteinkClassPanel()` overlay policy. Check by eye that closing the reader menu leaves the page's gray levels clean on both panels.
 - **Not in CrossPoint.** Quick Lock, the Nearby screens, the radio shortcuts and automatic page turns are CrossInk's, and are checked in C6 and C7.

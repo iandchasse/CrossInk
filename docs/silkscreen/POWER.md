@@ -285,7 +285,7 @@ The board-level procedure is CrossPoint's: its POWER.md section 4 and the test f
 - the ghost-wake and release-wake re-sleeps;
 - the SD-error screen's 60 s and the 180 s wake-no-input timeout;
 - the USB Drive session ended by the cable pull or a limit, then the sleep after its restart;
-- 3 forced panics in a row, with the panel refreshed fast before them. This needs a test build that panics, since CrossInk has no panic trigger. The driver-free panel sleep must bring it to the same floor.
+- 3 forced panics in a row, with the panel refreshed fast before them: the driver-free panel sleep must bring it to the same floor. No image forces a panic (CrossInk has no test firmware, and no shipping image gets a hook): [TEST-SUITE.md's reader-image checks](TEST-SUITE.md#checks-that-need-the-reader-image) give the scratch patch. On a 3.68" unit this is also the only run of the 60 ms driver-free settle on a board (host-tested only so far).
 - With R72 fitted next to R36 (a rework only), the power-button fault sleep, at the floor plus ≈18 µA.
 
 **Bench checks specific to CrossInk.** The pin, back-feed, charger, touch, RTC and key-ladder checks are board checks and stay with CrossPoint's procedure. On the CrossInk image, on battery (a bench supply on J5 where a voltage is named):
