@@ -25,7 +25,7 @@ The hardware is described in `de-link_pcb/docs/HARDWARE.md` ([iandchasse/silkscr
 
 - CrossInk `development` at `9dd334d3` (2026-09-29), as cloned; merged up to `3efe61b6` (2026-10-02, v1.6.1 and what followed) in `a9f9ef64`, up to `6fbc97d1` (2026-10-04) in `6e182dfe`, up to `67100e66` (2026-10-08) in `019aa229`, and up to `f625a008` (2026-10-15) in `224b37c2`.
 - freeink-sdk at the shared Silkscreen SDK head, `6f87cbd` ([The shared SDK](#the-shared-sdk)): `0b60346`, the 3.68" variant's 23 commits (to `48be3d0`), the UC8279d-only stage's nine (`4988be4` to `5fb944d`), two docs commits after them (`2aa010a`, `9c8726a`) and the sync of 2026-10-12: `b460001` (reverts `4988be4`), merge `c25bc51` of Free-Ink `7fcd3b3`, `37302d6`, `336ec77`, `9870b83`, `92738df` and the sync of 2026-10-19: merge `98f42c4` of Free-Ink `25cd36c` (16 commits since `7fcd3b3`) and `6f87cbd` (the OPDS implicit login's cutoff poll, in a client no CrossInk image links).
-- The last CrossPoint `silkscreen` commit ported is `67fd4f45` (2026-10-19), the new transfers' cutoff polls, whose rule this repo applied to its own bulk progress upload in `4779a55a` (before it, `e4127054`, the clipping sync's, was ported as the same rule for the stats and clippings uploads in `aa3f8544`). CrossPoint's `silkscreen` head `c341e5bb` (2026-10-19: its sync of upstream `cac12269`, merge `552f0c3d`, and the fixes and records of that sync; before it the sync of 2026-10-12) has been read through: what follows `8cb94736` is ported or recorded below as not applicable.
+- The last CrossPoint `silkscreen` commit ported is `67fd4f45` (2026-10-19), the new transfers' cutoff polls, whose rule this repo applied to its own bulk progress upload in `4779a55a` (before it, `e4127054`, the clipping sync's, was ported as the same rule for the stats and clippings uploads in `aa3f8544`). CrossPoint's `silkscreen` head `43f154fd` (2026-10-19: its sync of upstream `cac12269`, merge `552f0c3d`, and the fixes and records of that sync; before it the sync of 2026-10-12) has been read through: what follows `8cb94736` is ported or recorded below as not applicable.
 
 ## Status
 
@@ -555,7 +555,7 @@ review and records) is `crosspoint-reader/docs/silkscreen/UPSTREAM-SYNC.md`; a C
 
 ```bash
 git fetch crosspoint
-git log --oneline c341e5bb..crosspoint/silkscreen -- . ':!src/activities/testsuite' ':!scripts/check_test_firmware.sh'
+git log --oneline 43f154fd..crosspoint/silkscreen -- . ':!src/activities/testsuite' ':!scripts/check_test_firmware.sh'
 ```
 
 Port new drain fixes and board behaviour, update [POWER.md §3](POWER.md#3-firmware-rules-and-where-they-live)'s anchors, and move the "last CrossPoint commit ported" at the top of this file. CrossPoint's own uncommitted work is not ported until it lands as a commit.
