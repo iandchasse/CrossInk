@@ -16,6 +16,7 @@
 #include "activities/network/WifiSelectionActivity.h"
 #include "components/TouchHeaderBackButton.h"
 #include "network/HttpDownloader.h"
+#include "network/RadioIdle.h"
 #include "util/StringUtils.h"
 
 // Deployment configuration is deliberately empty until official endpoints have
@@ -173,6 +174,9 @@ void AssetDownloadActivity::verifying() {
   cancelled_ = wasCancelled;
 }
 void AssetDownloadActivity::showError(StrId error, Pending next) {
+  // PowerConfig::radioOffWhenIdle: a popup that can only leave the screen has nothing left to download, so the
+  // radio goes off now instead of when the user closes it. A Retry popup still needs the connection.
+  if (next == Pending::Exit) radioidle::release("ASSET");
   RenderLock lock(*this);
 #ifdef SIMULATOR
   simulatorLastError_ = error;
