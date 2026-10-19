@@ -53,6 +53,9 @@
 #include "util/FullScreenMessageActivity.h"
 #include "util/SwipeAdjustment.h"
 #include "util/TwoFingerSwipe.h"
+#if FREEINK_CAP_POWER_POLICY
+#include "util/RenderWatchdog.h"
+#endif
 
 namespace {
 constexpr uint32_t FILE_TRANSFER_MODE_MASK = 0xFF;
@@ -476,6 +479,10 @@ void ActivityManager::begin(const uint32_t renderTaskStackBytes) {
                           renderTaskCore  // Keep long renders/cover decodes off CPU 0's idle watchdog when available
   );
   assert(renderTaskHandle != nullptr && "Failed to create render task");
+#if FREEINK_CAP_POWER_POLICY
+  // Silkscreen: a render() that never returns keeps the render lock, and with it every sleep path (POWER.md AW-04).
+  renderwatchdog::start();
+#endif
   LOG_DBG("ACT", "Render task started with %lu-byte stack", static_cast<unsigned long>(renderTaskStackBytes));
 }
 
@@ -505,7 +512,14 @@ void ActivityManager::renderTaskLoop() {
 #if defined(CROSSINK_LANGUAGE_BENCHMARK)
       language_benchmark::beginFrame(currentActivity->name.c_str());
 #endif
+#if FREEINK_CAP_POWER_POLICY
+      // The watchdog's clock starts here, with the lock held: time spent waiting for it is not rendering.
+      renderwatchdog::beginRender(currentActivity->name.c_str());
+#endif
       currentActivity->render(std::move(lock));
+#if FREEINK_CAP_POWER_POLICY
+      renderwatchdog::endRender();
+#endif
 #if defined(CROSSINK_LANGUAGE_BENCHMARK)
       language_benchmark::endFrame();
 #endif

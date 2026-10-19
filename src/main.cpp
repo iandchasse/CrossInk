@@ -125,6 +125,9 @@ inline esp_sleep_wakeup_cause_t esp_sleep_get_wakeup_cause() { return ESP_SLEEP_
 #include "util/FrontlightSchedule.h"
 #include "util/ScreenshotUtil.h"
 #include "util/SleepWakePolicy.h"
+#if FREEINK_CAP_POWER_POLICY
+#include "util/RenderWatchdog.h"
+#endif
 #if SILKSCREEN_BATLOG
 #include <BatteryLog.h>
 #include <WiFi.h>
@@ -1455,6 +1458,20 @@ void setupDisplayAndFonts(const bool seamless, const bool loadReaderResources, c
 // Silkscreen). Without it every PowerConfig field is zero, so other boards
 // compile none of them.
 #if FREEINK_CAP_POWER_POLICY
+// The sleep of a boot that must start nothing: the reset loop's below and the
+// render watchdog's. No sleep entry has put the panel or a touch controller on
+// an always-on rail to sleep since the session before ended (a crash, or the
+// watchdog's restart), and a session that ended after a fast refresh leaves the
+// panel's analog block on. Reset each and send its sleep command without its
+// driver. The controller is resolved first so the panel gets its own command;
+// at a boot that is a probe, which is only a reset and a register read.
+static void sleepWithoutDrivers() {
+  resolvePanelController();
+  display.sleepWithoutDriver();
+  gpio.resetTouchForSleep();
+  powerManager.startDeepSleepMinimal(gpio);
+}
+
 // PowerConfig::abnormalResetLimit: after that many panics, watchdog resets,
 // brown-outs or aborted sleep entries in a row, go back to deep sleep at once,
 // before SD, touch, the panel or the radio start and without their drivers (any
@@ -1463,15 +1480,22 @@ void setupDisplayAndFonts(const bool seamless, const bool loadReaderResources, c
 // press's deep-sleep wake starts a new count.
 static void sleepIfResetLoop() {
   if (!HalPowerManager::abnormalResetLimitReached()) return;
-  // No sleep entry has put the panel or a touch controller on an always-on rail
-  // to sleep since the crash, and a crash after a fast refresh leaves the panel's
-  // analog block on. Reset each and send its sleep command without its driver.
-  // The controller is resolved first so the panel gets its own command; after a
-  // crash that is a probe, which is only a reset and a register read.
-  resolvePanelController();
-  display.sleepWithoutDriver();
-  gpio.resetTouchForSleep();
-  powerManager.startDeepSleepMinimal(gpio);
+  sleepWithoutDrivers();
+}
+
+// POWER.md AW-04: the render watchdog restarted the chip because one render()
+// had run for its bound on battery (renderwatchdog::BOUND_MS), which left every
+// sleep path waiting on a lock that task held. The restart took the lock, the
+// SPI bus, the card and the radio with it, and this boot, which has started
+// none of them, sleeps by the reset loop's sequence. It is not an abnormal
+// reset: the count stays at zero and the wake the power key gives is an
+// ordinary boot.
+static void sleepIfRenderWatchdog() {
+  renderwatchdog::Event event;
+  if (!renderwatchdog::takeSleepRequest(event)) return;
+  LOG_ERR("PWR", "Render watchdog: render() of %s had run for %lu s at the restart; sleeping", event.activity,
+          static_cast<unsigned long>(event.stuckMs / 1000U));
+  sleepWithoutDrivers();
 }
 
 // Low-battery cutoff at boot (PowerConfig::lowBatteryCutoffMv): a board below the
@@ -1609,6 +1633,7 @@ void setup() {
 
 #if FREEINK_CAP_POWER_POLICY
   sleepIfResetLoop();
+  sleepIfRenderWatchdog();
 #endif
 #ifdef SIMULATOR
   gpio.begin();
@@ -1688,6 +1713,12 @@ void setup() {
 #endif
 
   LOG_INF("BOOT", "Wake route: %s", wakeupRouteName(wakeupReason));
+#if FREEINK_CAP_POWER_POLICY
+  if (renderwatchdog::Event watchdogEvent; renderwatchdog::takeReport(watchdogEvent)) {
+    LOG_ERR("PWR", "The session before the last sleep ended in the render watchdog: render() of %s had run for %lu s",
+            watchdogEvent.activity, static_cast<unsigned long>(watchdogEvent.stuckMs / 1000U));
+  }
+#endif
   switch (wakeupReason) {
     case HalGPIO::WakeupReason::PowerButton:
       wakePowerReleasePending = true;
@@ -2181,6 +2212,9 @@ void loop() {
   // PowerConfig::abnormalResetLimit: a boot that stays up a minute ends the run
   // of abnormal resets sleepIfResetLoop() counts.
   HalPowerManager::endAbnormalResetRunWhenHealthy();
+  // The render watchdog's task tells from this whether the charge ladder that
+  // mappedInputManager.update() polls above is fresh, when it asks about USB.
+  renderwatchdog::noteLoopPass();
 #endif
 #if SILKSCREEN_BATLOG
   tickBatteryLog();  // before the exclusive-storage branch, so USB Drive time counts
