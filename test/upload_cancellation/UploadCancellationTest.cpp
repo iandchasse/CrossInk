@@ -63,6 +63,11 @@ bool clearBookCachePreservingUserState(const char*, bool sourceChanged) {
   return cacheRefreshSucceeds;
 }
 unsigned long millis() { return 100; }
+// HalPowerManager's low-battery latch, which Silkscreen's checkUploadCancellation() polls (BAT-01).
+struct {
+  bool tripped = false;
+  bool lowBatteryCutoffTripped() { return tripped; }
+} powerManager;
 unsigned long uploadStartTime = 0;
 struct FontInstaller {
   static unsigned validations;
@@ -269,4 +274,11 @@ int main() {
   assert(touched.checkUploadCancellation());
   touched.exitEvent = false;
   assert(touched.checkUploadCancellation() && touched.mappedInput.polls == 1);
+
+  // The low-battery cutoff stops an upload too, without polling the keys and without a leave request: the latch
+  // makes the next loop pass sleep (Silkscreen, BAT-01).
+  powerManager.tripped = true;
+  CrossPointWebServerActivity cutoff;
+  assert(cutoff.checkUploadCancellation() && cutoff.mappedInput.polls == 0 && !cutoff.leaveRequested);
+  powerManager.tripped = false;
 }
