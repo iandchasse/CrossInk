@@ -2,6 +2,7 @@
 
 #include <Epub.h>
 #include <FsHelpers.h>
+#include <HalPowerManager.h>
 #include <I18n.h>
 #include <KOReaderCredentialStore.h>
 #include <Memory.h>
@@ -828,6 +829,10 @@ void StatsUploadActivity::flushProgressBatch() {
     // Positions still queued are sent as they are; a batch the server just
     // turned down was consumed by the request, so those are rebuilt (once per run).
     for (size_t i = 0; i < progressBatchPaths.size(); ++i) {
+      // BAT-01. Each PUT blocks the loop until its request ends (up to eight in a row here), so loop()'s low-battery
+      // cutoff cannot run between them: ask the latch first (it is false on a board without a cutoff). The books
+      // not sent keep their pending bit, and the next loop pass sleeps.
+      if (powerManager.lowBatteryCutoffTripped()) break;
       const std::string& bookPath = progressBatchPaths[i];
       KOReaderProgress progress;
       if (i < progressBatch.size()) {
