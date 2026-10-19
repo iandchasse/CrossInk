@@ -844,6 +844,12 @@ bool KOReaderSyncActivity::uploadExtras() {
   }
   extrasAttempted = true;
   if (!KOREADER_STORE.getSyncStats() && !KOREADER_STORE.getSyncClippings()) return true;
+  if (modemSleepOn) {
+    // The result screen left the station in modem sleep (Apply remote and Skip book come here from it). Like the
+    // progress upload, the extras must not run under it: it can stall a transfer into a timeout.
+    WiFi.setSleep(false);
+    modemSleepOn = false;
+  }
   {
     RenderLock lock(*this);
     state = UPLOADING;
