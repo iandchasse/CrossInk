@@ -60,7 +60,7 @@ CrossInk has no test firmware for the 3.68" X3-panel variant either ([PORTING.md
 Run it in this order:
 
 1. CrossPoint's `silkscreen-368-test` and its bench list: the power-key rework and the first-power gate, then P1 (the controller is fixed in the build), the boost (with three questions about the buzz: does the 4.26" panel do it on this board, does it persist with the front light off, does it last the whole refresh), a wake (nothing is probed or kept, and no `BUSY_N` guard restarts the boot) and then ten cold power-ups and ten wakes, one of each at a low cell voltage (the first session showed a picture after a cold power-up and nothing about a wake; a blank one points first at the missing `BUSY_N` gate after the reset), the panel's deep-sleep current and its PON-idle current with a page on screen, gray (T5's strip routes are the first run of the strip-transaction fix (upstream's) on a board, then the page that froze, reopened in the reader image) and the logic-analyser check that nothing talks to the touch addresses. Its 60 ms driver-free settle (step 10) needs the scratch `abort();` described under "Checks that need the reader image" below, and has not been measured.
-2. `pio run -e silkscreen-368 -t upload` here, and the C1-C12 steps of [PORTING.md](PORTING.md#bring-up-checklist-real-board) with the differences listed under "On a 3.68" unit".
+2. `pio run -e silkscreen-368 -t upload` here, and the C1-C13 steps of [PORTING.md](PORTING.md#bring-up-checklist-real-board) with the differences listed under "On a 3.68" unit".
 3. The battery log's A/B with `silkscreen-368-batlog` ([BATTERY-LOG.md](BATTERY-LOG.md)).
 
 A board result from the test image holds for CrossInk's image, as on the 4.26" board: both readers drive the panel through the same SDK drivers. The CrossInk image's own paths (its boot order, sleep entry, Quick Resume, themes) are the C steps.
@@ -77,12 +77,35 @@ CrossPoint's TEST-SUITE.md lists the paths the test image cannot exercise. They 
 - the battery cutoff with a bench supply;
 - the web server and updates;
 - the reset loop;
+- the render watchdog;
 - the reader overlay.
 
-On CrossInk they are steps C1-C12 of [PORTING.md, Bring-up checklist](PORTING.md#bring-up-checklist-real-board). Where CrossInk differs:
+On CrossInk they are steps C1-C13 of [PORTING.md, Bring-up checklist](PORTING.md#bring-up-checklist-real-board). Where CrossInk differs:
 
 - **Wake policy.** The rule is CrossInk's NVS mirror of Short Power Button, not CrossPoint's RTC word ([POWER.md WK-01](POWER.md#3-firmware-rules-and-where-they-live)).
 - **No plugins.** CrossInk has no plugin system, so CrossPoint's plugin and loan-clock checks do not apply.
 - **Reset loop.** No image forces the three panics (CrossPoint's P6 is not built, and CrossInk has no test firmware): patch `abort();` in as the first statement of `loop()` in `src/main.cpp`, in a scratch copy that is never committed, and boot three times; the fourth boot sleeps at once (C3). The 3.68" variant's 60 ms driver-free settle in that path has only a host test behind it.
+- **Render watchdog (AW-04).** No image forces a hung render and CrossInk has no test firmware, so this is a scratch patch too, never committed. It cuts the bound from 5 min to 30 s and wedges the render task inside the Settings screen's `render()`, holding the render lock, as the 3.68" panel's first freeze did:
+
+  ```diff
+  --- a/src/util/RenderWatchdog.h
+  +++ b/src/util/RenderWatchdog.h
+  -constexpr uint32_t BOUND_MS = 5UL * 60UL * 1000UL;
+  +constexpr uint32_t BOUND_MS = 30UL * 1000UL;
+  -static_assert(BOUND_MS >= 3UL * 90UL * 1000UL, "the bound must clear three 90 s e-ink refresh sequences");
+  --- a/src/activities/ActivityManager.cpp
+  +++ b/src/activities/ActivityManager.cpp
+       renderwatchdog::beginRender(currentActivity->name.c_str());
+  +      if (currentActivity->name == "Settings") for (;;) vTaskDelay(1000);
+  ```
+
+  Build it as `silkscreen` (or `silkscreen-368`), flash it, and unplug USB. On battery, with a UART adapter on TP1/TP2 (the line is `esp_rom_printf`, which has no lock to wait for):
+  1. Open Settings from Home. The page stays on the panel and the keys do nothing: Back is read, and the screen change waits for the render lock for good.
+  2. About 30-35 s after the Settings screen was drawn (the bound plus up to one 5 s tick), the UART prints `[RWD] render() has run for 30xxx ms in Settings on battery (bound 30000 ms): restarting into deep sleep`. The board restarts and sleeps: `Render watchdog: render() of Settings had run for 30 s at the restart; sleeping`. The panel keeps the Settings page.
+  3. The sleep current reads the floor of [POWER.md section 1](POWER.md#1-sleep-current-budget) (MEAS-01), and the front light, if it was on, is dark.
+  4. The power key wakes the board into an ordinary boot, with `The session before the last sleep ended in the render watchdog: render() of Settings had run for 30 s` in the log. Opening Settings again repeats it, and nothing counts as an abnormal reset: after any number of repeats the next press still boots (WK-03's limit of 3 does not apply).
+  5. Plug USB in, open Settings and wait a minute: the board stays frozen and awake, on any supply. Pull the cable out: it restarts and sleeps within about 10 s (the charge ladder takes two readings a second apart to change its answer, then the next 5 s look), or about 25 s if a key was pressed in the frozen screen, which stops the loop task and sends the watchdog to read the pin itself. With the `silkscreen-batlog` build the card's `battery.csv` has an orphan row (`k` = B) for the cycle.
+
+  Remove the patch and flash the unpatched build afterwards; the 30 s bound must never ship.
 - **Reader overlay.** CrossInk has no counterpart of CrossPoint's `xteinkClassPanel()` overlay policy. Check by eye that closing the reader menu leaves the page's gray levels clean on both panels.
 - **Not in CrossPoint.** Quick Lock, the Nearby screens, the radio shortcuts and automatic page turns are CrossInk's, and are checked in C6 and C7.
