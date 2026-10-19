@@ -142,6 +142,12 @@ if [ -f scripts/check_sleep_wake_sources.py ]; then
   python scripts/check_sleep_wake_sources.py > "$LOGS/$label-sleepguard.log" 2>&1
   rc=$?; echo "sleep-wake guard exit=$rc: $(head -1 "$LOGS/$label-sleepguard.log")"; [ $rc -ne 0 ] && failed=1
 fi
+# POWER.md AW-04: the render watchdog's hooks (stamp, task start, heartbeat, early sleep) and a lock-free expiry path,
+# read from the source. No compiler needed; the decision test is the same script without --source-only.
+if [ -f scripts/silkscreen/test_render_watchdog.py ]; then
+  python -I -X utf8 scripts/silkscreen/test_render_watchdog.py --source-only > "$LOGS/$label-renderwd.log" 2>&1
+  rc=$?; echo "render watchdog source guard exit=$rc: $(tail -1 "$LOGS/$label-renderwd.log")"; [ $rc -ne 0 ] && failed=1
+fi
 
 for env in "${real[@]}"; do
   log="$LOGS/$label-$env.log"
