@@ -1162,7 +1162,8 @@ void KOReaderSyncActivity::loop() {
   // so its radio goes off (onExit() still restarts). A book of a bulk sync keeps
   // it: its failure still uploads the book's stats and clippings, and the next
   // book reuses the connection (StatsUploadActivity switches it off when the run
-  // ends). A result that may still upload keeps the station in modem sleep.
+  // ends); one that waits for a key drops to modem sleep below. A result that may
+  // still upload keeps the station in modem sleep.
   if (state == SYNC_FAILED) {
     if (!folderSync) radioidle::release("KOSync");
   } else if (state == SHOWING_RESULT && !modemSleepOn && radioidle::enabled()) {
@@ -1204,6 +1205,13 @@ void KOReaderSyncActivity::loop() {
     if (background) {
       finishFailed();
       return;
+    }
+    // A failed book that waits for Skip or Exit (the review of a kept conflict) sends nothing more, but the next
+    // choice reuses the connection, so it is not released: the station drops to modem sleep while the key is
+    // awaited, as at SHOWING_RESULT. The next book's onWifiSelectionComplete() turns modem sleep off again.
+    if (!modemSleepOn && radioidle::enabled()) {
+      WiFi.setSleep(true);
+      modemSleepOn = true;
     }
     int x = 0, y = 0;
     const bool skipTapped = mappedInput.wasScreenTapped(x, y) &&
