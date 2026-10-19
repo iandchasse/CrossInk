@@ -17,12 +17,12 @@
 #include <cstring>
 
 // What may run once the watchdog has decided (docs/silkscreen/POWER.md, AW-04). The task that is stuck can hold any
-// lock the rest of the firmware uses: the SPI bus and its transaction lock (that was the 3.68" panel's freeze), the
-// I2C bus, the ADC, the storage and log mutexes, the front-light gate. Nothing below the decision may wait on one:
-// no project logger, no Serial, no Arduino pin call (the pin-bus manager takes the SPI lock for an SPI pin), no
-// manager of the SDK, and no esp_restart(), whose shutdown handlers stop Wi-Fi and darken the light through the
-// manager. What it uses: the ROM's printf, the IDF's GPIO register calls (spinlocks), a bounded ADC wait to read
-// the USB pin, and esp_restart_noos(), which needs no scheduler. scripts/silkscreen/test_render_watchdog.py reads
+// lock the rest of the firmware uses: the SPI bus and its transaction lock (the 3.68" panel's first freeze read as
+// that, from the code), the I2C bus, the ADC, the storage and log mutexes, the front-light gate. Nothing below the
+// decision may wait on one: no project logger, no Serial, no Arduino pin call (the pin-bus manager takes the SPI lock
+// for an SPI pin), no manager of the SDK, and no esp_restart(), whose shutdown handlers stop Wi-Fi and darken the light
+// through the manager. What it uses: the ROM's printf, the IDF's GPIO register calls (spinlocks), a bounded ADC wait to
+// read the USB pin, and esp_restart_noos(), which needs no scheduler. scripts/silkscreen/test_render_watchdog.py reads
 // this file for anything else.
 namespace renderwatchdog {
 namespace {
