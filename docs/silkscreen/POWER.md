@@ -307,7 +307,8 @@ The boot after it, in `setup()`, calls `sleepIfRenderWatchdog()` right after `sl
 
 | Step of the sleep | Where it waits | Who can hold it |
 |---|---|---|
-| `sleepPanelWithoutDriver()` and `powerDownRailsForSleep()` drive IO12 and IO13 with `pinMode()` | `__pinMode()` (arduino-esp32 3.3.11, `esp32-hal-gpio.c:122-128`) → `perimanClearPinBus()` → `spiDetachBus_SCK/MOSI` → `spiStopBus()` → `SPI_MUTEX_LOCK()` (`esp32-hal-spi.c:210-239`, `:735-745`), for a pin the SPI driver owns | any task inside the SPI HAL; its CPU-frequency callback holds the same lock for a whole frequency change (`:690-707`) |
+| `sleepPanelWithoutDriver()` and `powerDownRailsForSleep()` drive IO12 and IO13 with `pinMode()` | `__pinMode()` (arduino-esp32 3.3.11, `esp32-hal-gpio.c:122-128`) → `perimanClearPinBus()` → `spiDetachBus_SCK/MOSI` → `spiStopBus()` → `SPI_MUTEX_LOCK()` (`esp32-hal-spi.c:210-239`, `:735-745`), for a pin the SPI driver owns | any task between `SPIClass::beginTransaction()` and `endTransaction()`: `spiTransaction()` takes this lock (`:1277`) and `spiEndTransaction()` gives it back (`:1336-1341`), so a transaction that never ends holds it for good. That is the span the 3.68" freeze stopped in (the class's own `paramLock` too) |
+| `sleepImpl()` drops the clock with `setCpuFrequencyMhz()` | `triggerApbChangeCallback()` runs each SPI bus's `_on_apb_change()`, which takes the same HAL lock before the change (`:690-697`) | the same |
 | `releaseSensorBusForSleep()` | `Wire.end()` takes the bus lock with `portMAX_DELAY` (`Wire.cpp:325-334`) | a task in an I2C transfer |
 | `HalGPIO::resetTouchForSleep()` and `prepareForSleep()` (4.26") | the same I2C lock | the same |
 | `Frontlight.prepareForSleep()` | the manager's gate lock, `portMAX_DELAY` (`FrontlightManager::prepareForSleep()`, `GateGuard`) | the light's monitor, or a brightness change |
