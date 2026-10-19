@@ -2,6 +2,7 @@
 
 #include <ArduinoJson.h>
 #include <BoardConfig.h>
+#include <FontFileTypes.h>
 #ifdef SIMULATOR
 #include <ArduinoJsonStringCompat.h>
 #endif
@@ -41,9 +42,12 @@
 #include "html/SettingsPageHtml.generated.h"
 #include "html/StyleCss.generated.h"
 #include "html/js/jszip_minJs.generated.h"
+#include "sync/BookSyncFile.h"
+#include "sync/SyncPending.h"
 #include "util/BookCacheUtils.h"
 #include "util/BookMoveUtils.h"
 #include "util/FontFamilyLabel.h"
+#include "util/OpdsDownloadFolder.h"
 #include "util/ReaderStatusBarJson.h"
 #include "util/StringUtils.h"
 
@@ -198,12 +202,12 @@ bool isWebSettingAvailable(const SettingInfo& setting) {
   return true;
 }
 
-// Streams a font-catalog JSON response in bounded pieces. This avoids holding
+// Streams catalog JSON responses in bounded pieces. This avoids holding
 // both an ArduinoJson document and its serialized String in the fragmented
 // network heap, and gives WiFi a chance to drain each piece before the next.
-class FontListJsonWriter {
+class WebJsonWriter {
  public:
-  explicit FontListJsonWriter(WebServer& server) : server_(server) {}
+  explicit WebJsonWriter(WebServer& server) : server_(server) {}
 
   void append(const char* text) { append(text, strlen(text)); }
 
@@ -1136,7 +1140,12 @@ void CrossPointWebServer::handleUpload(UploadState& state) const {
         String filePath = state.path;
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += state.fileName;
-        clearBookCachePreservingUserState(filePath.c_str());
+        if (!clearBookCachePreservingUserState(filePath.c_str(), true)) {
+          state.success = false;
+          state.error = "File saved, but could not refresh cached reading/sync data";
+          LOG_ERR("WEB", "%s: %s", state.error.c_str(), filePath.c_str());
+          return;
+        }
         ImageFolderIndex::invalidateForPath(filePath.c_str());
         sdFontSystem.markRegistryDirtyForPath(filePath.c_str());
       }
@@ -1431,6 +1440,11 @@ void CrossPointWebServer::handleMove() const {
 
   if (success) {
     LOG_DBG("WEB", "Moved file: %s -> %s", itemPath.c_str(), newPath.c_str());
+    if (!clearBookCachePreservingUserState(newPath.c_str(), true)) {
+      LOG_ERR("WEB", "File moved but cache refresh failed: %s", newPath.c_str());
+      server->send(500, "text/plain", "File moved, but could not refresh cached reading/sync data");
+      return;
+    }
     ImageFolderIndex::invalidateForPath(itemPath.c_str());
     sdFontSystem.markRegistryDirtyForPath(itemPath.c_str());
     ImageFolderIndex::invalidateForPath(newPath.c_str());
@@ -1512,6 +1526,10 @@ void CrossPointWebServer::handleDelete() const {
       if (f) f.close();
       success = Storage.remove(itemPath.c_str());
       clearBookCache(itemPath.c_str());
+      if (success) {
+        SyncPending::removePath(std::string(itemPath.c_str()));
+        BookSyncFile::onDeleted(std::string(itemPath.c_str()));
+      }
     }
 
     if (!success) {
@@ -1819,6 +1837,19 @@ void CrossPointWebServer::handlePostSettings() {
     return;
   }
 
+  const JsonVariantConst folderValue = doc["opdsDownloadFolder"];
+  if (!folderValue.isUnbound()) {
+    std::string folder;
+    const auto input = folderValue.as<JsonString>();
+    if (!folderValue.is<const char*>() ||
+        !OpdsDownloadFolder::normalize(std::string_view(input.c_str(), input.size()), folder)) {
+      server->send(400, "text/plain", "Invalid download folder (maximum 63 bytes)");
+      return;
+    }
+    doc["opdsDownloadFolder"] = folder == "/" ? "" : folder;
+  }
+  const std::string previousFolder = SETTINGS.opdsDownloadFolder;
+
   sdFontSystem.refreshIfDirty();
   const auto& settings = getSettingsList(&sdFontSystem.registry());
   int applied = 0;
@@ -1897,6 +1928,7 @@ void CrossPointWebServer::handlePostSettings() {
   }
   settingsLock.unlock();  // saveToFile acquires the settings mutex itself.
   if (!SETTINGS.saveToFile()) {
+    if (!folderValue.isUnbound()) strcpy(SETTINGS.opdsDownloadFolder, previousFolder.c_str());
     LOG_ERR("WEB", "Failed to save settings");
     server->send(500, "text/plain", "Failed to save settings");
     sdFontSystem.releaseRegistry();
@@ -1918,29 +1950,30 @@ void CrossPointWebServer::handleGetOpdsServers() const {
   server->send(200, "application/json", "");
   server->sendContent("[");
 
-  char output[512];
-  constexpr size_t outputSize = sizeof(output);
-  JsonDocument doc;
-
+  // Reuse the bounded writer: longer folder paths and escaped URLs must not
+  // truncate an object or produce a leading comma after a skipped server.
+  WebJsonWriter json(*server);
   for (size_t i = 0; i < servers.size(); i++) {
-    doc.clear();
-    doc["index"] = i;
-    doc["name"] = servers[i].name;
-    doc["url"] = servers[i].url;
-    doc["username"] = servers[i].username;
-    doc["filenameFormat"] = opdsFilenameFormatToJson(servers[i].filenameFormat);
-    // Never expose passwords over the API — only indicate whether one is set
-    doc["hasPassword"] = !servers[i].password.empty();
-
-    const size_t written = serializeJson(doc, output, outputSize);
-    if (written >= outputSize) continue;
-
-    if (i > 0) server->sendContent(",");
-    server->sendContent(output);
-    yield();  // Allow WiFi and other tasks to run during a slow send.
+    const auto& entry = servers[i];
+    if (i > 0) json.append(",");
+    json.append("{\"index\":");
+    json.appendUnsigned(i);
+    json.append(",\"name\":");
+    json.appendJsonString(entry.name.c_str());
+    json.append(",\"url\":");
+    json.appendJsonString(entry.url.c_str());
+    json.append(",\"username\":");
+    json.appendJsonString(entry.username.c_str());
+    json.append(",\"filenameFormat\":");
+    json.appendJsonString(opdsFilenameFormatToJson(entry.filenameFormat));
+    json.append(",\"downloadFolder\":");
+    json.appendJsonString(entry.downloadFolder.c_str());
+    json.append(entry.password.empty() ? ",\"hasPassword\":false}" : ",\"hasPassword\":true}");
+    json.flush();
+    yield();
   }
-
-  server->sendContent("]");
+  json.append("]");
+  json.flush();
   server->sendContent("");
 }
 
@@ -1964,6 +1997,12 @@ void CrossPointWebServer::handlePostOpdsServer() {
   opdsServer.username = doc["username"] | std::string("");
   opdsServer.filenameFormat = opdsFilenameFormatFromJson(doc["filenameFormat"] | "");
 
+  if (!applyOpdsDownloadFolder(doc.as<JsonVariantConst>(), opdsServer.downloadFolder)) {
+    server->send(400, "text/plain", "Invalid download folder (maximum 63 bytes)");
+    return;
+  }
+  const bool hasDownloadFolder = !doc.as<JsonVariantConst>()["downloadFolder"].isUnbound();
+
   // The password field is optional in the JSON payload. When absent (vs. present but empty),
   // we preserve the existing password — the web UI omits it when the user hasn't changed it.
   bool hasPasswordField = doc["password"].is<const char*>() || doc["password"].is<std::string>();
@@ -1985,8 +2024,12 @@ void CrossPointWebServer::handlePostOpdsServer() {
     if (existing && !hasFilenameFormatField) {
       opdsServer.filenameFormat = existing->filenameFormat;
     }
+    if (existing && !hasDownloadFolder) opdsServer.downloadFolder = existing->downloadFolder;
     opdsServer.password = password;
-    OPDS_STORE.updateServer(static_cast<size_t>(idx), opdsServer);
+    if (!OPDS_STORE.updateServer(static_cast<size_t>(idx), opdsServer)) {
+      server->send(500, "text/plain", "Could not save OPDS server");
+      return;
+    }
     LOG_DBG("WEB", "Updated OPDS server at index %d", idx);
   } else {
     opdsServer.password = password;
@@ -2277,7 +2320,12 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
             wsLastCompleteSize = 0;
             wsLastCompleteAt = millis();
             LOG_DBG("WS", "Zero-byte upload complete: %s", filePath.c_str());
-            clearBookCachePreservingUserState(filePath.c_str());
+            if (!clearBookCachePreservingUserState(filePath.c_str(), true)) {
+              wsLastCompleteName = "";
+              LOG_ERR("WS", "File saved but cache refresh failed: %s", filePath.c_str());
+              wsServer->sendTXT(num, "ERROR:File saved, but could not refresh cached reading/sync data");
+              return;
+            }
             ImageFolderIndex::invalidateForPath(filePath.c_str());
             sdFontSystem.markRegistryDirtyForPath(filePath.c_str());
             wsServer->sendTXT(num, "DONE");
@@ -2346,7 +2394,12 @@ void CrossPointWebServer::onWebSocketEvent(uint8_t num, WStype_t type, uint8_t* 
         String filePath = wsUploadPath;
         if (!filePath.endsWith("/")) filePath += "/";
         filePath += wsUploadFileName;
-        clearBookCachePreservingUserState(filePath.c_str());
+        if (!clearBookCachePreservingUserState(filePath.c_str(), true)) {
+          wsLastCompleteName = "";
+          LOG_ERR("WS", "File saved but cache refresh failed: %s", filePath.c_str());
+          wsServer->sendTXT(num, "ERROR:File saved, but could not refresh cached reading/sync data");
+          return;
+        }
         ImageFolderIndex::invalidateForPath(filePath.c_str());
         sdFontSystem.markRegistryDirtyForPath(filePath.c_str());
 
@@ -2377,7 +2430,7 @@ void CrossPointWebServer::handleFontList() const {
   // can exhaust the fragmented network heap with larger font collections.
   server->setContentLength(CONTENT_LENGTH_UNKNOWN);
   server->send(200, "application/json", "");
-  FontListJsonWriter json(*server);
+  WebJsonWriter json(*server);
   json.append("{\"families\":[");
 
   bool firstFamily = true;
@@ -2464,7 +2517,7 @@ void CrossPointWebServer::handleFontUploadData() {
       String filename = upload.filename;
       filename.replace(' ', '_');
       // Validate filename: rejects path traversal (../, /, \) and enforces
-      // a .cpfont basename of alphanumeric + hyphen + underscore. Without
+      // a supported font basename with safe path characters. Without
       // this an attacker could supply "../../.crosspoint/settings.json" as
       // a "filename" and have it written outside the fonts directory.
       if (!FontInstaller::isValidCpfontFilename(filename.c_str())) {
@@ -2507,10 +2560,10 @@ void CrossPointWebServer::handleFontUploadData() {
       // split the signature at any byte boundary.
 #if CROSSINK_SCALABLE_FONTS
       const auto& path = fontUpload.filePath;
-      if (path.size() > 4 && strcasecmp(path.c_str() + path.size() - 4, ".ttf") == 0 &&
+      if (fontfiles::isScalable(path.c_str()) &&
           fontUpload.bytesWritten + fontUpload.bufferPos + upload.currentSize > 2 * 1024 * 1024) {
         fontUpload.valid = false;
-        LOG_ERR("WEB", "TTF exceeds 2 MiB limit");
+        LOG_ERR("WEB", "Scalable font exceeds 2 MiB limit");
         break;
       }
 #endif
@@ -2527,7 +2580,10 @@ void CrossPointWebServer::handleFontUploadData() {
         remaining -= chunk;
 
         if (fontUpload.bufferPos >= FontUploadState::BUFFER_SIZE) {
-          fontUpload.file.write(fontUpload.buffer.data(), fontUpload.bufferPos);
+          if (fontUpload.file.write(fontUpload.buffer.data(), fontUpload.bufferPos) != fontUpload.bufferPos) {
+            abortFontUpload();
+            break;
+          }
           fontUpload.bytesWritten += fontUpload.bufferPos;
           fontUpload.bufferPos = 0;
         }
@@ -2542,18 +2598,18 @@ void CrossPointWebServer::handleFontUploadData() {
       }
       // Flush remaining buffer
       if (fontUpload.valid && fontUpload.bufferPos > 0) {
-        fontUpload.file.write(fontUpload.buffer.data(), fontUpload.bufferPos);
+        fontUpload.valid =
+            fontUpload.file.write(fontUpload.buffer.data(), fontUpload.bufferPos) == fontUpload.bufferPos;
         fontUpload.bytesWritten += fontUpload.bufferPos;
         fontUpload.bufferPos = 0;
       }
       if (fontUpload.file.isOpen()) {
-        fontUpload.file.close();
+        fontUpload.valid = fontUpload.file.sync() && fontUpload.valid;
+        fontUpload.valid = fontUpload.file.close() && fontUpload.valid;
       }
 
-      if (fontUpload.valid) fontUpload.valid = FontInstaller::validateCpfontFile(fontUpload.filePath.c_str());
-      if (!fontUpload.valid && !fontUpload.filePath.empty()) {
-        Storage.remove(fontUpload.filePath.c_str());
-      }
+      if (!fontUpload.filePath.empty())
+        fontUpload.valid = FontInstaller::finishUpload(fontUpload.filePath.c_str(), fontUpload.valid);
 
       LOG_DBG("WEB", "Font upload end: valid=%d, %zu bytes", fontUpload.valid, fontUpload.bytesWritten);
       break;

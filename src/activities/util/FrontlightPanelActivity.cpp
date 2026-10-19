@@ -564,9 +564,8 @@ bool FrontlightPanelActivity::showsSyncTile() const {
 int FrontlightPanelActivity::actionBarHeight() const { return showsActionBar() ? ACTION_BAR_HEIGHT : 0; }
 
 Rect FrontlightPanelActivity::homeButtonRect() const {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  return Rect{renderer.getScreenWidth() - HEADER_BUTTON_WIDTH, metrics.topPadding, HEADER_BUTTON_WIDTH,
-              TouchHeaderBackButton::height(metrics, mappedInput)};
+  const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
+  return Rect{header.x + header.width - HEADER_BUTTON_WIDTH, header.y, HEADER_BUTTON_WIDTH, header.height};
 }
 
 int FrontlightPanelActivity::computePanelBottom() {
@@ -789,9 +788,7 @@ void FrontlightPanelActivity::buildPanelScreen(UiApp::ScreenType& screen) {
 }
 
 void FrontlightPanelActivity::drawHeader() {
-  const auto& metrics = UITheme::getInstance().getMetrics();
-  const int headerHeight = TouchHeaderBackButton::height(metrics, mappedInput);
-  const Rect header{0, metrics.topPadding, renderer.getScreenWidth(), headerHeight};
+  const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput);
 
   char date[32] = {};
   const char* title = context.showReaderDetails ? "" : tr(STR_FRONTLIGHT);

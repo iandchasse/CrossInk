@@ -26,6 +26,7 @@
 #include "components/UiAppHelpers.h"
 #include "fontIds.h"
 #include "network/RadioIdle.h"
+#include "util/BookCacheUtils.h"
 
 #if defined(ARDUINO_ARCH_ESP32) && !defined(SIMULATOR)
 #include <esp_system.h>
@@ -519,6 +520,11 @@ bool NearbyBookTransferActivity::finishReceivedFile(const uint64_t expectedBytes
     return false;
   }
   if (replacing) Storage.remove(backupPath_.c_str());
+  if (!clearBookCachePreservingUserState(finalPath_, true)) {
+    LOG_ERR(LOG_TAG, "File received but cache refresh failed: %s", finalPath_.c_str());
+    setError(tr(STR_NEARBY_TRANSFER_WRITE_FAILED));
+    return false;
+  }
   ImageFolderIndex::invalidateForPath(finalPath_.c_str());
   sdFontSystem.markRegistryDirtyForPath(finalPath_.c_str());
   return true;
