@@ -16,6 +16,7 @@
 
 #include "CrossPointSettings.h"
 #include "CrossPointState.h"
+#include "DeviceCapabilities.h"
 #include "Epub/EpubRenderMode.h"
 #include "Epub/Section.h"
 #include "EpubReaderActivity.h"
@@ -53,6 +54,13 @@ constexpr int RESULT_BADGE_PADDING_X = 6;
 // Progress in tenths of a percent, matching the card's "%.1f%%" label so the "Ahead" badge never
 // disagrees with the numbers shown on screen.
 long displayedTenths(const float percentage) { return std::lround(percentage * 1000.0f); }
+
+// These screens draw the button hints on every board that has front keys (BaseTheme::drawButtonHints()), so their
+// content keeps clear of the hint band there. Upstream drops the band on any touch hardware (a6d76ade), which is
+// right only where the keys are not (a touch-only board); a Silkscreen with its touch tail keeps its keys (C1).
+bool reservesHintBand(const MappedInputManager& mappedInput) {
+  return !mappedInput.hasTouchHardware() || deviceHasFrontButtons(gpio);
+}
 
 // Apply/Upload buttons are pinned above the button hints (or the bottom edge on touch devices) so the
 // progress cards can use the space above them. Rendering and hit testing share this layout.
@@ -997,7 +1005,7 @@ void KOReaderSyncActivity::render(RenderLock&&) {
   renderer.clearScreen();
 
   auto metrics = UITheme::getInstance().getMetrics();
-  Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouchHardware(), false);
+  Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, reservesHintBand(mappedInput), false);
 
   const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput, screen);
   const std::string heading = folderSync ? epubPath.substr(epubPath.find_last_of('/') + 1) : tr(STR_SYNC_BOOK);
@@ -1150,12 +1158,14 @@ void KOReaderSyncActivity::render(RenderLock&&) {
 }
 
 void KOReaderSyncActivity::loop() {
-  // PowerConfig::radioOffWhenIdle: a failed sync only waits for a key, so its
-  // radio goes off (onExit() still restarts); a result that may still upload
-  // keeps the station in modem sleep.
+  // PowerConfig::radioOffWhenIdle: a failed single-book sync only waits for a key,
+  // so its radio goes off (onExit() still restarts). A book of a bulk sync keeps
+  // it: its failure still uploads the book's stats and clippings, and the next
+  // book reuses the connection (StatsUploadActivity switches it off when the run
+  // ends). A result that may still upload keeps the station in modem sleep.
   if (state == SYNC_FAILED) {
-    radioidle::release("KOSync");
-  } else if ((state == SHOWING_RESULT || state == NO_REMOTE_PROGRESS) && !modemSleepOn && radioidle::enabled()) {
+    if (!folderSync) radioidle::release("KOSync");
+  } else if (state == SHOWING_RESULT && !modemSleepOn && radioidle::enabled()) {
     WiFi.setSleep(true);
     modemSleepOn = true;
   }
@@ -1165,7 +1175,7 @@ void KOReaderSyncActivity::loop() {
   }
 
   const auto& metrics = UITheme::getInstance().getMetrics();
-  const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, !mappedInput.hasTouchHardware(), false);
+  const Rect screen = UITheme::getInstance().getScreenSafeArea(renderer, reservesHintBand(mappedInput), false);
   const Rect header = TouchHeaderBackButton::headerRect(renderer, mappedInput, screen);
   if (TouchHeaderBackButton::wasTapped(mappedInput, header)) {
     returnToSource();
