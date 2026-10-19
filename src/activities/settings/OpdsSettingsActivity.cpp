@@ -111,8 +111,11 @@ void OpdsSettingsActivity::loop() {
   const int menuItems = getMenuItemCount();
   const auto swipe = mappedInput.wasSwipe();
   if (swipe == MappedInputManager::SwipeDir::Up || swipe == MappedInputManager::SwipeDir::Down) {
+    const int previousTop = topIndex;
     topIndex = scrollListBy(topIndex, swipe == MappedInputManager::SwipeDir::Up ? visibleRows : -visibleRows,
                             visibleRows, menuItems);
+    // Confirm acts on the selection (the last row removes the server), so it must not scroll out of sight (Silkscreen).
+    if (topIndex != previousTop && swipeSelectsFirstRow(mappedInput)) selectedIndex = topIndex;
     requestUpdate();
     return;
   }
