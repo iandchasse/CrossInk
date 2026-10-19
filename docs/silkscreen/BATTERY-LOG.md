@@ -24,7 +24,9 @@ same analyzer (`crosspoint-reader/scripts/silkscreen/battery_log_report.py`). Th
   to the byte. CrossPoint's BATTERY-LOG.md section 1 has both readers' figures. Since then the second key-access audit moved
   the two to 5625565 / 116080 (`batlog`) and 5616853 / 115536 (`silkscreen`), and the 5% battery step (2026-10-05) added
   28 B to `silkscreen` (5616881) and nothing to this image: its footprint over a `silkscreen` built after the step is
-  8684 B of flash and 544 B of RAM (the image is 5630768 B, 922832 B free).
+  8684 B of flash and 544 B of RAM (the image is 5630768 B, 922832 B free). After the 2026-10-19 sync (SDK `6f87cbd`): `silkscreen-batlog` is 5367225 / 122144 against
+  `silkscreen` 5358517 / 121600, a footprint of 8708 B of flash and 544 B of RAM (the image is 5372400 B, 1181200 B free);
+  the record is still 184 B (`.rtc_noinit` 6152 B against 5968 B).
 - **Version and image.** `1.6.1-silkscreen-batlog`: `scripts/git_branch.py` injects `CROSSINK_VERSION` only for the envs it
   lists, so this env is in its set (without that, `BuildInfo` would report `dev`). The image is
   `.pio/build/silkscreen-batlog/firmware.bin`, with `firmware-silkscreen.bin` beside it. `custom_firmware_device_type` stays
