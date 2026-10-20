@@ -142,12 +142,17 @@ if [ -f scripts/check_sleep_wake_sources.py ]; then
   python scripts/check_sleep_wake_sources.py > "$LOGS/$label-sleepguard.log" 2>&1
   rc=$?; echo "sleep-wake guard exit=$rc: $(head -1 "$LOGS/$label-sleepguard.log")"; [ $rc -ne 0 ] && failed=1
 fi
-# POWER.md AW-04: the render watchdog's hooks (stamp, task start, heartbeat, early sleep) and a lock-free expiry path,
-# read from the source. No compiler needed; the decision test is the same script without --source-only.
+# POWER.md AW-04: the render watchdog's hooks (stamp, sleep-entry mark, task start, heartbeat, early sleep, log hold,
+# the re-stamps of the long renders), its pinned bounds and a lock-free expiry path, read from the source. No compiler
+# needed; the decision test is the same script without --source-only. A guard that is not there is a failure: a merge
+# that dropped the file must not turn the matrix green.
 if [ -f scripts/silkscreen/test_render_watchdog.py ]; then
   python -I -X utf8 scripts/silkscreen/test_render_watchdog.py --source-only > "$LOGS/$label-renderwd.log" 2>&1
   rc=$?; echo "render watchdog source guard exit=$rc: $(tail -1 "$LOGS/$label-renderwd.log")"; [ $rc -ne 0 ] && failed=1
+else
+  echo "render watchdog source guard (scripts/silkscreen/test_render_watchdog.py) is MISSING"; failed=1
 fi
+[ -f scripts/silkscreen/check_render_watchdog_elf.py ] || { echo "render watchdog image check (scripts/silkscreen/check_render_watchdog_elf.py) is MISSING"; failed=1; }
 
 for env in "${real[@]}"; do
   log="$LOGS/$label-$env.log"
