@@ -33,11 +33,23 @@ static constexpr uint32_t LOG_RTC_MAGIC = 0xDEADBEEF;
 // Boot code decides whether the RTC ring belongs to a previous panic before
 // allowing any startup log to overwrite it. This costs no second log buffer.
 static std::atomic<bool> logRetentionPaused{true};
+#if FREEINK_CAP_POWER_POLICY
+// Silkscreen's render watchdog (docs/silkscreen/POWER.md, AW-04) restarts a hung session and the boot after its sleep
+// reports it; the ring in RTC memory still holds that session's last lines. While held, nothing is added to the ring
+// and clearLastLogs() leaves it alone, so that the ordinary boot's clear (HalSystem::begin()) and the lines logged
+// since cannot take them before the report has printed them. RAM only: it dies with the next sleep or restart.
+static std::atomic<bool> logRingHeld{false};
+
+void holdLastLogs(const bool held) { logRingHeld = held; }
+#endif
 
 void pauseLogRetention(const bool paused) { logRetentionPaused = paused; }
 
 void addToLogRingBuffer(const char* message) {
   if (logRetentionPaused) return;
+#if FREEINK_CAP_POWER_POLICY
+  if (logRingHeld) return;
+#endif
   // Add the message to the ring buffer, overwriting old messages if necessary.
   // If the magic is wrong or logHead is out of range (RTC_NOINIT_ATTR garbage
   // on cold boot), clear the entire buffer so subsequent reads are safe.
@@ -125,6 +137,9 @@ bool sanitizeLogHead() {
 }
 
 void clearLastLogs() {
+#if FREEINK_CAP_POWER_POLICY
+  if (logRingHeld) return;
+#endif
   for (size_t i = 0; i < MAX_LOG_LINES; i++) {
     logMessages[i][0] = '\0';
   }

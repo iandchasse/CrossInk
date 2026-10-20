@@ -59,6 +59,10 @@ void logPrintf(const char* level, const char* origin, const char* format, ...);
 
 std::string getLastLogs();
 void clearLastLogs();
+// Keeps the retained ring as it is: nothing is added to it and clearLastLogs() does nothing until the hold is released
+// (Silkscreen's render watchdog report, docs/silkscreen/POWER.md AW-04). Release it before clearLastLogs(). Defined
+// only where FREEINK_CAP_POWER_POLICY is set; its one caller is gated the same way.
+void holdLastLogs(bool held);
 // Serial output continues while retained pre-crash logs are protected during startup.
 void pauseLogRetention(bool paused);
 // Validates the RTC log state (magic word + logHead range). Returns true if

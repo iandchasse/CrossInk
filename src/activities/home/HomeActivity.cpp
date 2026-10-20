@@ -42,8 +42,20 @@
 #include "components/themes/lyra/LyraCarouselTheme.h"
 #include "components/themes/minimal/MinimalTheme.h"
 #include "fontIds.h"
+#if FREEINK_CAP_POWER_POLICY
+#include "util/RenderWatchdog.h"
+#endif
 
 namespace {
+// Silkscreen's render watchdog (docs/silkscreen/POWER.md, AW-04): this render() has just made progress (one cover of
+// the Home screen's thumbnails), so its five minutes start over. Does nothing from any task but the render task, and on
+// other boards.
+inline void watchdogProgress() {
+#if FREEINK_CAP_POWER_POLICY
+  renderwatchdog::progress();
+#endif
+}
+
 constexpr uint32_t CAROUSEL_CACHE_MAGIC = 0x43434152;  // "CCAR"
 // Cached frames contain only carousel artwork. Bump this whenever its
 // rendering changes so stale snapshots are rebuilt after OTA.
@@ -598,6 +610,7 @@ bool HomeActivity::loadCoverGridThumbnails() {
   bool pathsChanged = false;
   Rect popupRect;
   for (size_t i = 0; i < recentBooks.size(); ++i) {
+    watchdogProgress();  // one cover at a time
     auto& book = recentBooks[i];
     if (book.coverState == RecentBook::CoverState::Missing || !Storage.exists(book.path.c_str())) continue;
     const int width = coverGridUi->thumbWidthFor(i);
@@ -695,6 +708,7 @@ void HomeActivity::loadRecentCovers(int coverHeight) {
 
   int progress = 0;
   for (size_t bookIdx = 0; bookIdx < recentBooks.size(); ++bookIdx) {
+    watchdogProgress();  // one cover at a time
     RecentBook& book = recentBooks[bookIdx];
     if (!Storage.exists(book.path.c_str())) {
       progress++;

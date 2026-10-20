@@ -24,8 +24,20 @@
 #include "activities/home/FileBrowserActionActivity.h"
 #include "components/UITheme.h"
 #include "fontIds.h"
+#if FREEINK_CAP_POWER_POLICY
+#include "util/RenderWatchdog.h"
+#endif
 
 namespace {
+// Silkscreen's render watchdog (docs/silkscreen/POWER.md, AW-04): this render() has just made progress (twenty more
+// pages of the text index), so its five minutes start over. Does nothing from any task but the render task, and on
+// other boards.
+inline void watchdogProgress() {
+#if FREEINK_CAP_POWER_POLICY
+  renderwatchdog::progress();
+#endif
+}
+
 constexpr size_t CHUNK_SIZE = 8 * 1024;  // 8KB chunk for reading
 constexpr unsigned long LONG_PRESS_MENU_MS = 600;
 // Cache file magic and version
@@ -788,6 +800,7 @@ void TxtReaderActivity::buildPageIndex() {
 
     // Yield to other tasks periodically
     if (pageOffsets.size() % 20 == 0) {
+      watchdogProgress();
       vTaskDelay(1);
     }
   }

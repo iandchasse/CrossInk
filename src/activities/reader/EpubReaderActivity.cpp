@@ -88,8 +88,20 @@
 #include "util/BookMoveUtils.h"
 #include "util/Dictionary.h"
 #include "util/ScreenshotUtil.h"
+#if FREEINK_CAP_POWER_POLICY
+#include "util/RenderWatchdog.h"
+#endif
 
 namespace {
+// Silkscreen's render watchdog (docs/silkscreen/POWER.md, AW-04): this render() has just made progress (one chunk of a
+// section build, the popup of a build that starts), so its five minutes start over. Does nothing from any task but the
+// render task, and on other boards.
+inline void watchdogProgress() {
+#if FREEINK_CAP_POWER_POLICY
+  renderwatchdog::progress();
+#endif
+}
+
 constexpr unsigned long TOUCH_DICTIONARY_LOOKUP_HOLD_MS = 1000;
 // pagesPerRefresh now comes from SETTINGS.getRefreshFrequency()
 constexpr unsigned long longPressMenuMs = 600;
@@ -2801,6 +2813,7 @@ void EpubReaderActivity::openReaderMenu() {
 }
 
 void EpubReaderActivity::showBuildPopup() {
+  watchdogProgress();
   if (!buildPopupPending || !renderer.hasFrameBuffer()) return;
   // drawPopup() already refreshes the panel with a FAST waveform.
   openingFeedback.showIndexing(renderer);
@@ -6572,6 +6585,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
       }
 
       const auto popupFn = [this]() {
+        watchdogProgress();
         if (renderer.hasFrameBuffer()) {
           openingFeedback.showIndexing(renderer);
         }
@@ -6688,6 +6702,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
                   buildFailed = true;
                   break;
                 }
+                watchdogProgress();
               }
               if (!buildFailed && pendingRelayoutReposition && section->isBuilding() && isRelayoutCatchUpComplete()) {
                 LOG_DBG("ERS", "Incremental relayout reached reading position: pages=%u target=%d", section->pageCount,
@@ -7014,6 +7029,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           catchUpFailed = true;
           return;
         }
+        watchdogProgress();
       }
     }
 
@@ -7028,6 +7044,7 @@ void EpubReaderActivity::render(RenderLock&& lock) {
           catchUpFailed = true;
           return;
         }
+        watchdogProgress();
       }
     }
   };
@@ -7252,6 +7269,9 @@ void EpubReaderActivity::silentIndexNextChapterIfNeeded(const uint16_t viewportW
 
   LOG_DBG("ERS", "Silently indexing next chapter: %d (free=%u, maxAlloc=%u)", nextSpineIndex, ESP.getFreeHeap(),
           ESP.getMaxAllocHeap());
+  // The page is on the panel: the render has made its progress. The build below is one call without a callback to
+  // re-stamp from, so its layout has the watchdog's bound from here.
+  watchdogProgress();
   silentPrefetchCancelRequested.store(false, std::memory_order_relaxed);
   silentPrefetchBuildActive.store(true, std::memory_order_release);
   struct ClearSilentPrefetchBuildActive {
