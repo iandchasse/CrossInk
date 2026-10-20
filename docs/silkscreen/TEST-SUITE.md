@@ -85,14 +85,11 @@ On CrossInk they are steps C1-C13 of [PORTING.md, Bring-up checklist](PORTING.md
 - **Wake policy.** The rule is CrossInk's NVS mirror of Short Power Button, not CrossPoint's RTC word ([POWER.md WK-01](POWER.md#3-firmware-rules-and-where-they-live)).
 - **No plugins.** CrossInk has no plugin system, so CrossPoint's plugin and loan-clock checks do not apply.
 - **Reset loop.** No image forces the three panics (CrossPoint's P6 is not built, and CrossInk has no test firmware): patch `abort();` in as the first statement of `loop()` in `src/main.cpp`, in a scratch copy that is never committed, and boot three times; the fourth boot sleeps at once (C3). The 3.68" variant's 60 ms driver-free settle in that path has only a host test behind it.
-- **Render watchdog (AW-04).** No image forces a hung render and CrossInk has no test firmware, so this is a scratch patch too, never committed. It cuts the bound from 5 min to 30 s and wedges the render task inside the Settings screen's `render()`, holding the render lock, as the 3.68" panel's first freeze did:
+- **Render watchdog (AW-04).** No image forces a hung render or a hung sleep entry and CrossInk has no test firmware, so these are scratch patches too, never committed. Both cut the bounds so that a check takes under a minute, and neither is run on USB (the watchdog acts on battery only). In `src/util/RenderWatchdog.h`, set `BOUND_MS` to `30UL * 1000UL` and `SLEEP_ENTRY_BOUND_MS` to `30UL * 1000UL`, and delete the first two `static_assert`s (they pin the real bounds).
+
+  **A hung render.** The patch wedges the render task right before the Settings screen's `render()` is called, holding the render lock, as the 3.68" panel's first freeze did. Settings' own `render()` never runs, so the page that stays on the panel is Home's:
 
   ```diff
-  --- a/src/util/RenderWatchdog.h
-  +++ b/src/util/RenderWatchdog.h
-  -constexpr uint32_t BOUND_MS = 5UL * 60UL * 1000UL;
-  +constexpr uint32_t BOUND_MS = 30UL * 1000UL;
-  -static_assert(BOUND_MS >= 3UL * 90UL * 1000UL, "the bound must clear three 90 s e-ink refresh sequences");
   --- a/src/activities/ActivityManager.cpp
   +++ b/src/activities/ActivityManager.cpp
   +#include <SPI.h>  // with the includes at the top of the file
@@ -107,12 +104,28 @@ On CrossInk they are steps C1-C13 of [PORTING.md, Bring-up checklist](PORTING.md
   The render lock is held by `renderTaskLoop()`; the two `beginTransaction()` calls hold the SPI bus the way the 3.68" panel's freeze did (the second waits for the class's own non-recursive lock while the first holds the HAL's), which is what the sleep path's own steps would wait for (POWER.md section 3.3). A second variant adds the ADC lock before them (`#include <SharedAdc.h>` and `const freeink::adc::Lock adc;`): the key poll then waits for it, the loop stops passing, and the watchdog cannot read the charge pin, so it acts as on battery after 15 s of a stale loop, USB or not (step 5 then differs: see there).
 
   Build it as `silkscreen` (or `silkscreen-368`), flash it, and unplug USB. On battery, with a UART adapter on TP1/TP2 (the line is `esp_rom_printf`, which has no lock to wait for):
-  1. Open Settings from Home. The page stays on the panel and the keys do nothing: Back is read, and the screen change waits for the render lock for good (and the loop task stalls at its next clock change, which needs the SPI lock).
-  2. About 30-35 s after the Settings screen was drawn (the bound plus up to one 5 s tick), the UART prints `[RWD] render() has run for 30xxx ms in Settings on battery (bound 30000 ms): restarting into deep sleep`. The board restarts and sleeps: `Render watchdog: render() of Settings had run for 30 s at the restart; sleeping`. The panel keeps the Settings page.
+  1. Open Settings from Home. The panel keeps the Home page and the keys do nothing: Back is read, and the screen change waits for the render lock for good (and the loop task stalls at its next clock change, which needs the SPI lock).
+  2. About 30-35 s after Settings was opened (the bound plus up to one 5 s tick), the UART prints `[RWD] render() has run for 30xxx ms in Settings on battery (bound 30000 ms): restarting into deep sleep`. The board restarts and sleeps: `Render watchdog: render() of Settings had run for 30 s at the restart; sleeping`. The panel keeps the Home page.
   3. The sleep current reads the floor of [POWER.md section 1](POWER.md#1-sleep-current-budget) (MEAS-01), and the front light, if it was on, is dark.
-  4. The power key wakes the board into an ordinary boot, with `The session before the last sleep ended in the render watchdog: render() of Settings had run for 30 s` in the log. Opening Settings again repeats it, and nothing counts as an abnormal reset: after any number of repeats the next press still boots (WK-03's limit of 3 does not apply).
+  4. The power key wakes the board into an ordinary boot, with `The session before the last sleep ended in the render watchdog: render() of Settings had run for 30 s` in the log, followed by the hung session's last log lines (`held:`). Opening Settings again repeats it, and nothing counts as an abnormal reset: after any number of repeats the next press still boots (WK-03's limit of 3 does not apply).
   5. Plug USB in, open Settings and wait a minute: the board stays frozen and awake, on any supply. Pull the cable out: it restarts and sleeps within about 10 s (the charge ladder takes two readings a second apart to change its answer, then the next 5 s look), or about 25 s once the loop task has stalled (a key pressed in the frozen screen, or the next clock change), which sends the watchdog to read the pin itself. With the ADC lock held as well (the second variant) it cannot read the pin, and the board restarts and sleeps at 30-35 s on USB too. With the `silkscreen-batlog` build the card's `battery.csv` has an orphan row (`k` = B) for the cycle.
 
-  Remove the patch and flash the unpatched build afterwards; the 30 s bound must never ship.
+  **A hung sleep entry.** The patch makes `enterDeepSleep()` hang right after its mark is set, before the sleep screen is drawn, the lock taken or the card touched. In `src/main.cpp`, inside the `#if FREEINK_CAP_POWER_POLICY` at the top of `enterDeepSleep()`:
+
+  ```diff
+  --- a/src/main.cpp
+  +++ b/src/main.cpp
+       renderwatchdog::beginSleepEntry();
+  +  for (;;) vTaskDelay(1000);  // scratch: the sleep entry never gets further
+  ```
+
+  Build, flash and unplug USB as above. Hold POWER until the sleep entry starts (or let the timeout do it): the keys stop, and the panel keeps the page it showed, because the sleep screen is never drawn. About 30-35 s later the UART prints `[RWD] the sleep entry has run for 30xxx ms on battery (bound 30000 ms): restarting into deep sleep` and then `Render watchdog: the sleep entry had run for 30 s without sleeping at the restart; sleeping`. The sleep current reads the floor, the power key wakes the board into an ordinary boot, and the log says `The session before the last sleep ended in the render watchdog: the sleep entry had run for 30 s without sleeping`, followed by the `held:` lines. On USB nothing happens until the cable is pulled.
+
+  **States to repeat the hung render in** (the pin table of POWER.md section 3.3 reasons about them; none has run on a board). Repeat the render patch, with the 4.26" and the 3.68" builds where both are on the bench, and read the sleep current 60 s after the restart:
+  - *Front light lit*, in each of the warm, the cool and the blend setting: the light must be dark from the restart on (no glow on the panel, no tens of mA in the meter), and a normal wake must not light it unless Restore Light on Wake is set.
+  - *Wi-Fi up*, joined as a station with the file-transfer server running: the radio is gone after the restart (the current is at the floor), and the next boot starts it clean.
+  - *A transfer writing to the card* when the render hangs (upload a large file from the browser, then open Settings): the file is cut and the card was not unmounted, so after the wake run the PC's check on the card (`chkdsk`, or the OS's repair) and open the library; a cut file is the loss to expect, and nothing else on the card should change (CrossPoint's test firmware's P8 does that comparison for `/.crosspoint`).
+
+  Remove the patches and flash the unpatched build afterwards; the 30 s bounds must never ship.
 - **Reader overlay.** CrossInk has no counterpart of CrossPoint's `xteinkClassPanel()` overlay policy. Check by eye that closing the reader menu leaves the page's gray levels clean on both panels.
 - **Not in CrossPoint.** Quick Lock, the Nearby screens, the radio shortcuts and automatic page turns are CrossInk's, and are checked in C6 and C7.
