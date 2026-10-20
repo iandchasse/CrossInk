@@ -95,16 +95,23 @@ On CrossInk they are steps C1-C13 of [PORTING.md, Bring-up checklist](PORTING.md
   -static_assert(BOUND_MS >= 3UL * 90UL * 1000UL, "the bound must clear three 90 s e-ink refresh sequences");
   --- a/src/activities/ActivityManager.cpp
   +++ b/src/activities/ActivityManager.cpp
+  +#include <SPI.h>  // with the includes at the top of the file
        renderwatchdog::beginRender(currentActivity->name.c_str());
-  +      if (currentActivity->name == "Settings") for (;;) vTaskDelay(1000);
+  +      if (currentActivity->name == "Settings") {
+  +        SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));
+  +        SPI.beginTransaction(SPISettings(1000000, MSBFIRST, SPI_MODE0));  // waits for its own lock for good: the freeze
+  +        for (;;) vTaskDelay(1000);
+  +      }
   ```
 
+  The render lock is held by `renderTaskLoop()`; the two `beginTransaction()` calls hold the SPI bus the way the 3.68" panel's freeze did (the second waits for the class's own non-recursive lock while the first holds the HAL's), which is what the sleep path's own steps would wait for (POWER.md section 3.3). A second variant adds the ADC lock before them (`#include <SharedAdc.h>` and `const freeink::adc::Lock adc;`): the key poll then waits for it, the loop stops passing, and the watchdog cannot read the charge pin, so it acts as on battery after 15 s of a stale loop, USB or not (step 5 then differs: see there).
+
   Build it as `silkscreen` (or `silkscreen-368`), flash it, and unplug USB. On battery, with a UART adapter on TP1/TP2 (the line is `esp_rom_printf`, which has no lock to wait for):
-  1. Open Settings from Home. The page stays on the panel and the keys do nothing: Back is read, and the screen change waits for the render lock for good.
+  1. Open Settings from Home. The page stays on the panel and the keys do nothing: Back is read, and the screen change waits for the render lock for good (and the loop task stalls at its next clock change, which needs the SPI lock).
   2. About 30-35 s after the Settings screen was drawn (the bound plus up to one 5 s tick), the UART prints `[RWD] render() has run for 30xxx ms in Settings on battery (bound 30000 ms): restarting into deep sleep`. The board restarts and sleeps: `Render watchdog: render() of Settings had run for 30 s at the restart; sleeping`. The panel keeps the Settings page.
   3. The sleep current reads the floor of [POWER.md section 1](POWER.md#1-sleep-current-budget) (MEAS-01), and the front light, if it was on, is dark.
   4. The power key wakes the board into an ordinary boot, with `The session before the last sleep ended in the render watchdog: render() of Settings had run for 30 s` in the log. Opening Settings again repeats it, and nothing counts as an abnormal reset: after any number of repeats the next press still boots (WK-03's limit of 3 does not apply).
-  5. Plug USB in, open Settings and wait a minute: the board stays frozen and awake, on any supply. Pull the cable out: it restarts and sleeps within about 10 s (the charge ladder takes two readings a second apart to change its answer, then the next 5 s look), or about 25 s if a key was pressed in the frozen screen, which stops the loop task and sends the watchdog to read the pin itself. With the `silkscreen-batlog` build the card's `battery.csv` has an orphan row (`k` = B) for the cycle.
+  5. Plug USB in, open Settings and wait a minute: the board stays frozen and awake, on any supply. Pull the cable out: it restarts and sleeps within about 10 s (the charge ladder takes two readings a second apart to change its answer, then the next 5 s look), or about 25 s once the loop task has stalled (a key pressed in the frozen screen, or the next clock change), which sends the watchdog to read the pin itself. With the ADC lock held as well (the second variant) it cannot read the pin, and the board restarts and sleeps at 30-35 s on USB too. With the `silkscreen-batlog` build the card's `battery.csv` has an orphan row (`k` = B) for the cycle.
 
   Remove the patch and flash the unpatched build afterwards; the 30 s bound must never ship.
 - **Reader overlay.** CrossInk has no counterpart of CrossPoint's `xteinkClassPanel()` overlay policy. Check by eye that closing the reader menu leaves the page's gray levels clean on both panels.
