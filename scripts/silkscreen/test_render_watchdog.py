@@ -218,6 +218,18 @@ def check_hooks(activity_manager: str, main: str) -> list[str]:
          "setup() must call sleepIfRenderWatchdog() right after sleepIfResetLoop(), before gpio.begin()")
     need(bool(re.search(r'^\s*#\s*include\s+"util/RenderWatchdog.h"', main, re.M)),
          'main.cpp must include "util/RenderWatchdog.h"')
+    # setup(): the boot after the sleep takes the note the restart left, behind the gate.
+    try:
+        setup = function_body(main, "void setup()")
+    except GuardError as e:
+        problems.append(f"main.cpp: {e}")
+    else:
+        sig = significant(setup)
+        texts = [t for _, t in sig]
+        report = [k for k, t in enumerate(texts) if "renderwatchdog::takeReport(" in t]
+        need(len(report) == 1, "setup() must call renderwatchdog::takeReport() exactly once (the boot after the sleep)")
+        if report:
+            need(gated(setup, sig[report[0]][0]), f"renderwatchdog::takeReport() must sit behind #if {GATE}")
     return problems
 
 
@@ -341,6 +353,7 @@ def source_controls() -> int:
         "task start removed": (mutate(am, "renderwatchdog::start();\n", ""), main),
         "heartbeat removed": (am, mutate(main, "renderwatchdog::noteLoopPass();\n", "")),
         "early sleep call removed": (am, mutate(main, "sleepIfRenderWatchdog();\n", "")),
+        "report not taken": (am, mutate(main, "renderwatchdog::takeReport(watchdogEvent)", "false")),
         "own copy of the sleep sequence": (
             am, mutate(main, "  sleepWithoutDrivers();\n}\n\n// Low-battery cutoff at boot", "  resolvePanelController();\n}\n\n// Low-battery cutoff at boot")),
     }
