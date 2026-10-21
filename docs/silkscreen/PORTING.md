@@ -455,9 +455,9 @@ pio run -e silkscreen -t upload
   - `fetch.recurseSubmodules = false`.
 
   The submodule itself keeps `origin` (Free-Ink GitHub) and adds `silkscreen-sdk` (the local shared SDK, push disabled).
-- **Fresh clones.** A fresh clone resolves the SDK commits only once the shared `silkscreen` branch is pushed to `iandchasse/freeink-sdk`. Until then, clone this folder rather than GitHub.
+- **Fresh clones.** The shared `silkscreen` branch is on `iandchasse/freeink-sdk` and this branch is on `iandchasse/CrossInk` (default branch `silkscreen`; a separate repository, not a GitHub fork, because CrossInk shares CrossPoint's fork network and GitHub allows one fork per network), both pushed 2026-10-20 with CrossPoint's `scripts/silkscreen/publish.sh`. A plain clone resolves the SDK submodule from there.
 - **Windows:** `git config core.longpaths true`.
-- **GitHub Pages.** CrossInk's Pages site globs `docs/**/*.md` (`site/src/lib/docs.ts`), so these files would appear on the site if this branch were ever deployed to Pages. That never happens on an unpushed fork. If it ever might, move them under `docs/development/`, which the site leaves out.
+- **GitHub Pages.** CrossInk's Pages site globs `docs/**/*.md` (`site/src/lib/docs.ts`), so these files would appear on the site if this branch were ever deployed to Pages. The branch is now public on `iandchasse/CrossInk`, where the Pages workflow runs only on pushes to `main` and Pages is off unless the owner turns it on. If it ever might deploy, move them under `docs/development/`, which the site leaves out.
 
 ## The shared SDK
 
