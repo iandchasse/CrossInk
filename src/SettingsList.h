@@ -611,8 +611,11 @@ inline SettingInfo buildSideButtonActionSetting(const StrId nameId, uint8_t Cros
 // returns an owned copy and can add SD-card font and dictionary options.
 // 111 common entries, plus publisher fonts and four touch-only edge gestures.
 // getBaseSettingsCapacity() adds the two runtime IMU entries.
-inline constexpr size_t BASE_SETTINGS_CAPACITY =
-    111 + (CROSSINK_SCALABLE_FONTS ? 1 : 0) + (CROSSINK_APP_CAP_TOUCH ? 4 : 0);
+#if CROSSINK_SCALABLE_FONTS
+inline constexpr size_t BASE_SETTINGS_CAPACITY = 112 + (CROSSINK_APP_CAP_TOUCH ? 4 : 0);
+#else
+inline constexpr size_t BASE_SETTINGS_CAPACITY = 111 + (CROSSINK_APP_CAP_TOUCH ? 4 : 0);
+#endif
 
 inline size_t getBaseSettingsCapacity() {
   return BASE_SETTINGS_CAPACITY + (QuickActions::supportsTiltPageTurn() ? 2 : 0);
