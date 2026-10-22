@@ -461,7 +461,7 @@ CrossPointPosition KOReaderSyncActivity::mapRemotePosition(const std::shared_ptr
   const char* cacheSuffix = sectionCacheSuffixForRenderMode(renderMode);
   CrossPointPosition remotePosition{};
   bool usedRichPosition = false;
-  // The client only accepts rich positions from the official CrossPoint Sync server.
+  // The client accepts rich positions only for profiles that support them.
   // Filename matching still needs source-document mapping because optimized books can diverge.
   if (remoteCoordinateSpace == PositionCoordinateSpace::CurrentDocument && remote.position.has_value()) {
     const auto richMapped = ProgressMapper::fromRichPosition(epub, *remote.position, renderer, cacheSuffix);
@@ -734,7 +734,7 @@ void KOReaderSyncActivity::performUpload() {
   // Rich CrossPoint position for the default CrossPoint sync server (lossless
   // CrossPoint<->CrossPoint sync). The HTTP client also enforces this boundary
   // before serializing the extension.
-  if (KOREADER_STORE.usesCrossPointSyncServer()) {
+  if (KOREADER_STORE.supportsRichProgress()) {
     KOReaderRichPosition pos;
     const float pct = localProgress.percentage < 0.0f   ? 0.0f
                       : localProgress.percentage > 1.0f ? 1.0f
@@ -761,6 +761,7 @@ void KOReaderSyncActivity::performUpload() {
     if (epub) {
       meta.title = epub->getTitle();
       meta.authors = epub->getAuthor();
+      meta.loadExtended(*epub);
     } else {
       LOG_ERR("KOSync", "Epub unavailable for metadata; sending filename only");
     }

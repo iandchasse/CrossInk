@@ -40,7 +40,7 @@ void UsbDriveActivity::onEnter() {
   requestUpdateAndWait();
   {
     RenderLock lock(*this);
-    filenameFontSystem.release(renderer);
+    filenameFontSystem.suspend(renderer);
   }
 #ifndef SIMULATOR
   // The host can replace fonts without going through firmware file APIs.
@@ -67,6 +67,7 @@ void UsbDriveActivity::onExit() {
 #ifndef SIMULATOR
   if (!restartRequested) Storage.endUsbDrive();
 #endif
+  filenameFontSystem.resume();
   Activity::onExit();
 }
 

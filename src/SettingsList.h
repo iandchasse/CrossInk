@@ -363,8 +363,10 @@ inline uint8_t shortcutRawValue(const ShortcutOptionCatalog catalog, const Cross
   using Chord = CrossPointSettings::POWER_CHORD_ACTION;
 
   switch (catalog) {
-    case ShortcutOptionCatalog::PowerButton:
     case ShortcutOptionCatalog::SideButton:
+      if (action == Action::ROTATE_FLIP) return CrossPointSettings::SIDE_ROTATE_FLIP;
+      return static_cast<uint8_t>(action);
+    case ShortcutOptionCatalog::PowerButton:
       return static_cast<uint8_t>(action);
     case ShortcutOptionCatalog::ButtonChord:
       switch (action) {
@@ -400,6 +402,8 @@ inline uint8_t shortcutRawValue(const ShortcutOptionCatalog catalog, const Cross
           return Chord::CHORD_LIBRARY;
         case Action::SELECT_CHAPTER:
           return Chord::CHORD_SELECT_CHAPTER;
+        case Action::ROTATE_FLIP:
+          return Chord::CHORD_ROTATE_FLIP;
         case Action::FILE_TRANSFER:
           return Chord::CHORD_FILE_TRANSFER;
         case Action::CALIBRE_WIRELESS:
@@ -499,6 +503,8 @@ inline uint8_t shortcutRawValue(const ShortcutOptionCatalog catalog, const Cross
           return LongPress::LONG_MENU_BACK_HOME;
         case Action::SELECT_CHAPTER:
           return LongPress::LONG_MENU_SELECT_CHAPTER;
+        case Action::ROTATE_FLIP:
+          return LongPress::LONG_MENU_ROTATE_FLIP;
         case Action::FRONTLIGHT_PANEL:
           return LongPress::LONG_MENU_FRONTLIGHT_PANEL;
         case Action::PAGE_TURN:
@@ -587,7 +593,6 @@ inline SettingInfo buildSideButtonActionSetting(const StrId nameId, uint8_t Cros
       {CrossPointSettings::SIDE_DECREASE_FONT, StrId::STR_DECREASE_FONT_SIZE},
       {CrossPointSettings::SIDE_ROTATE_COUNTERCLOCKWISE, StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
       {CrossPointSettings::SIDE_ROTATE_CLOCKWISE, StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
-      {CrossPointSettings::SIDE_ROTATE_FLIP, StrId::STR_LONG_PRESS_BEHAVIOR_ORIENTATION},
   };
   for (const auto& [action, label] : readerActions) {
     setting.enumValues.push_back(label);
@@ -604,10 +609,10 @@ inline SettingInfo buildSideButtonActionSetting(const StrId nameId, uint8_t Cros
 // #1636) so the per-entry SettingInfo cost is paid once. Read-only consumers
 // can use it directly; mutable device UI lists use getSettingsList(), which
 // returns an owned copy and can add SD-card font and dictionary options.
-// 108 common entries (107 of upstream's and Silkscreen's Key hints row). Four edge gesture
-// entries are compiled only for touch devices; getBaseSettingsCapacity() adds the two
-// runtime IMU entries.
-inline constexpr size_t BASE_SETTINGS_CAPACITY = 108 + (CROSSINK_APP_CAP_TOUCH ? 4 : 0);
+// 111 common entries, plus publisher fonts and four touch-only edge gestures.
+// getBaseSettingsCapacity() adds the two runtime IMU entries.
+inline constexpr size_t BASE_SETTINGS_CAPACITY =
+    111 + (CROSSINK_SCALABLE_FONTS ? 1 : 0) + (CROSSINK_APP_CAP_TOUCH ? 4 : 0);
 
 inline size_t getBaseSettingsCapacity() {
   return BASE_SETTINGS_CAPACITY + (QuickActions::supportsTiltPageTurn() ? 2 : 0);
@@ -918,8 +923,9 @@ inline std::vector<SettingInfo> buildControlsTapsGesturesSettingsList(const std:
   // it. getSettingsList() has already dropped the row when the touch panel is not fitted.
   const bool hasDisableTouchscreen =
       boardKeepsKeysBesideTouch() && hasSettingByName(allSettings, StrId::STR_DISABLE_TOUCHSCREEN);
-  settings.reserve(3 + (hasPinch ? 1u : 0u) + (hasRotation ? 1u : 0u) + (hasTwoFingerSwipe ? 1u : 0u) +
+  settings.reserve(4 + (hasPinch ? 1u : 0u) + (hasRotation ? 1u : 0u) + (hasTwoFingerSwipe ? 1u : 0u) +
                    (hasEdgeGestures ? 1u : 0u) + (hasDisableTouchscreen ? 1u : 0u));
+  addSettingByName(settings, allSettings, StrId::STR_TOUCH_READER_CONTROLS);
   addSettingByName(settings, allSettings, StrId::STR_NEXT_PAGE);
   addSettingByName(settings, allSettings, StrId::STR_PREV_PAGE);
   if (hasPinch) addSettingByName(settings, allSettings, StrId::STR_PINCH_FONT_RESIZE);

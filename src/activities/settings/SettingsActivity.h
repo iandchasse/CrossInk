@@ -361,7 +361,7 @@ class SettingsActivity final : public Activity {
  public:
   explicit SettingsActivity(GfxRenderer& renderer, MappedInputManager& mappedInput, bool dismissOnUpSwipe = false,
                             bool returnToParentOnClose = false, View view = View::Root);
-  bool allowGlobalHomeSwipeGesture() const override { return false; }
+  bool allowGlobalHomeSwipeGesture() const override { return !dismissOnUpSwipe && !optionPopup.isActive(); }
   bool handleHomeGesture() override;
   // Light Controls opens the panel over Settings, and a Sync & Transfer pick would not be carried out here.
   bool handlesFrontlightPanelAction() const override { return false; }
