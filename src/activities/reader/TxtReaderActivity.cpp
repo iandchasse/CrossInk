@@ -179,6 +179,7 @@ void TxtReaderActivity::onExit() {
   if (!flushQueuedProgress()) {
     LOG_ERR("TRS", "Failed to flush debounced reader progress on exit");
   }
+  pluginEvents.exit(getCurrentBookPath(), getScreenshotInfo().progressPercent);
 
   // Reset orientation back to portrait for the rest of the UI
   renderer.setOrientation(GfxRenderer::Orientation::Portrait);
@@ -225,6 +226,7 @@ bool TxtReaderActivity::handleFrontlightPanelResult(const FrontlightPanelResult&
 }
 
 void TxtReaderActivity::loop() {
+  pluginEvents.pollWhenIdle(getCurrentBookPath());
   if (quickActionsPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 #if CROSSINK_APP_CAP_TOUCH
   if (handlePinchFontResize()) return;
@@ -327,18 +329,20 @@ void TxtReaderActivity::loop() {
     return;
   }
 
-  const auto side = sideButtonShortcuts.update(mappedInput, millis());
-  if (SideButtonShortcuts::shouldConsume(side, mappedInput)) {
+  const auto side = readerButtonShortcuts.update(mappedInput, mappedInput.buttonSampleTime());
+  if (ReaderButtonShortcuts::shouldConsume(side, mappedInput)) {
     if (side.triggered) {
-      if (side.longPress)
-        mappedInput.suppressNextSideRelease(side.up ? MappedInputManager::Button::Up
-                                                    : MappedInputManager::Button::Down);
+      if (side.longPress) {
+        if (side.front)
+          mappedInput.suppressNextFrontRelease(side.up ? MappedInputManager::Button::Left
+                                                       : MappedInputManager::Button::Right);
+        else
+          mappedInput.suppressNextSideRelease(side.up ? MappedInputManager::Button::Up
+                                                      : MappedInputManager::Button::Down);
+      }
       switch (side.action) {
         case CrossPointSettings::PAGE_TURN:
-          if (currentPage < totalPages - 1) {
-            currentPage++;
-            requestUpdate();
-          }
+          requestPageTurn(false, true);
           break;
         case CrossPointSettings::SIDE_INCREASE_FONT:
         case CrossPointSettings::SIDE_DECREASE_FONT:
@@ -359,7 +363,7 @@ void TxtReaderActivity::loop() {
         default: {
           const auto action = static_cast<CrossPointSettings::SHORT_PWRBTN>(side.action);
           if (action == CrossPointSettings::QUICK_LOCK)
-            handleGlobalPowerButtonAction(action, SideButtonShortcuts::quickLockTrigger(side));
+            handleGlobalPowerButtonAction(action, ReaderButtonShortcuts::quickLockTrigger(side));
           else if (!handleShortcutAction(action))
             handleGlobalPowerButtonAction(action);
           break;
@@ -367,45 +371,6 @@ void TxtReaderActivity::loop() {
       }
     }
     return;
-  }
-
-  const bool frontLongPressChangesFont = SETTINGS.longPressButtonBehavior == CrossPointSettings::FONT_SIZE_CHANGE;
-  if (SETTINGS.longPressButtonBehavior == CrossPointSettings::ORIENTATION_CHANGE ||
-      SETTINGS.longPressButtonBehavior == CrossPointSettings::ORIENTATION_FLIP || frontLongPressChangesFont) {
-    const bool leftReleased = mappedInput.wasReleased(MappedInputManager::Button::Left);
-    const bool rightReleased = mappedInput.wasReleased(MappedInputManager::Button::Right);
-    if (frontButtonLongPressHandled && (leftReleased || rightReleased)) {
-      frontButtonLongPressHandled = false;
-      return;
-    }
-
-    const bool longPressReady = mappedInput.getHeldTime() > ReaderUtils::SKIP_HOLD_MS;
-    const bool prevLongPressed = longPressReady && mappedInput.isPressed(MappedInputManager::Button::Left);
-    const bool nextLongPressed = longPressReady && mappedInput.isPressed(MappedInputManager::Button::Right);
-    if (!frontButtonLongPressHandled && (prevLongPressed || nextLongPressed)) {
-      frontButtonLongPressHandled = true;
-      if (frontLongPressChangesFont) {
-        changeReaderFontSize(/*larger=*/nextLongPressed);
-        return;
-      }
-
-      if (SETTINGS.longPressButtonBehavior == CrossPointSettings::ORIENTATION_FLIP) {
-        applyReaderOrientation(ReaderUtils::flippedOrientation(SETTINGS.orientation));
-        return;
-      }
-
-      SETTINGS.orientation = ReaderUtils::rotatedOrientation(SETTINGS.orientation, /*clockwise=*/prevLongPressed);
-      SETTINGS.saveToFile();
-      {
-        RenderLock lock(*this);
-        ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
-        pageOffsets.clear();
-        currentPageLines.clear();
-        initialized = false;
-      }
-      requestUpdate();
-      return;
-    }
   }
 
   auto [prevTriggered, nextTriggered, fromSideBtn, fromTilt] = ReaderUtils::detectPageTurn(mappedInput);
@@ -417,24 +382,36 @@ void TxtReaderActivity::loop() {
     return;
   }
 
-  if (prevTriggered && currentPage > 0) {
-    currentPage--;
-    requestUpdate();
-  } else if (nextTriggered) {
-    if (currentPage < totalPages - 1) {
-      currentPage++;
-      requestUpdate();
+  requestPageTurn(prevTriggered, nextTriggered);
+}
+
+void TxtReaderActivity::requestPageTurn(const bool previous, const bool next) {
+  {
+    // Indexing publishes the page count on the render task. Retain this turn
+    // until that work finishes, then check bounds while holding its lock.
+    RenderLock lock(*this);
+    if (previous && currentPage > 0) {
+      --currentPage;
+      pluginEvents.noteTurn(false);
+    } else if (next && currentPage < totalPages - 1) {
+      ++currentPage;
+      pluginEvents.noteTurn(true);
+    } else {
+      return;
     }
   }
+  requestUpdate();
 }
 
 bool TxtReaderActivity::changeReaderFontSize(const bool larger, const FontSizeStepMode mode) {
+  RenderLock lock(*this);
   if (!sdFontSystem.changeReaderFontSize(larger, mode)) return false;
   rebuildTextLayout();
   return true;
 }
 
 void TxtReaderActivity::cycleReaderFont() {
+  RenderLock lock(*this);
   const CrossPointSettings::FONT_SIZE effectiveSize = SETTINGS.getEffectiveReaderFontSize();
   SETTINGS.fontFamily = (SETTINGS.fontFamily + 1) % CrossPointSettings::FONT_FAMILY_COUNT;
   SETTINGS.sdFontFamilyName[0] = '\0';
@@ -447,20 +424,17 @@ void TxtReaderActivity::rebuildTextLayout() {
     LOG_ERR("TXT", "Failed to save reader font setting");
   }
   sdFontSystem.ensureLoaded(renderer);
-  {
-    RenderLock lock(*this);
-    pageOffsets.clear();
-    currentPageLines.clear();
-    statusBarRelayoutOffset.reset();
-    statusBarRelayoutPage = -1;
-    initialized = false;
-  }
+  pageOffsets.clear();
+  currentPageLines.clear();
+  statusBarRelayoutOffset.reset();
+  statusBarRelayoutPage = -1;
+  initialized = false;
   requestUpdate();
 }
 
 #if CROSSINK_APP_CAP_TOUCH
 bool TxtReaderActivity::handlePinchFontResize() {
-  if (!SETTINGS.pinchFontResizeEnabled || !SETTINGS.touchReaderControls || !mappedInput.supportsMultiTouch()) {
+  if (!SETTINGS.pinchFontResizeEnabled || !mappedInput.supportsMultiTouch()) {
     resetPinchFontGesture();
     return false;
   }
@@ -502,10 +476,10 @@ bool TxtReaderActivity::handleTwoFingerRotation(const bool clockwise) {
 }
 
 bool TxtReaderActivity::applyReaderOrientation(const uint8_t orientation) {
-  SETTINGS.orientation = orientation;
-  SETTINGS.saveToFile();
   {
     RenderLock lock(*this);
+    SETTINGS.orientation = orientation;
+    SETTINGS.saveToFile();
     ReaderUtils::applyOrientation(renderer, SETTINGS.orientation);
     pageOffsets.clear();
     currentPageLines.clear();
@@ -547,6 +521,7 @@ bool TxtReaderActivity::consumeLongPowerButtonHold() {
 
 bool TxtReaderActivity::supportsQuickAction(const CrossPointSettings::SHORT_PWRBTN action) {
   switch (action) {
+    case CrossPointSettings::SHORT_PWRBTN::ROTATE_FLIP:
     case CrossPointSettings::SHORT_PWRBTN::PREVIOUS_PAGE:
     case CrossPointSettings::SHORT_PWRBTN::SLEEP:
     case CrossPointSettings::SHORT_PWRBTN::FORCE_REFRESH:
@@ -559,6 +534,7 @@ bool TxtReaderActivity::supportsQuickAction(const CrossPointSettings::SHORT_PWRB
     case CrossPointSettings::SHORT_PWRBTN::FILE_BROWSER:
     case CrossPointSettings::SHORT_PWRBTN::LIBRARY:
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_FRONTLIGHT:
+    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_PAGE_TURN_GESTURES:
     case CrossPointSettings::SHORT_PWRBTN::FRONTLIGHT_PANEL:
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_TOUCHSCREEN:
     case CrossPointSettings::SHORT_PWRBTN::BACK_HOME:
@@ -575,10 +551,7 @@ bool TxtReaderActivity::executeReaderShortcutAction(const CrossPointSettings::SH
     case CrossPointSettings::SHORT_PWRBTN::ROTATE_FLIP:
       return applyReaderOrientation(ReaderUtils::flippedOrientation(SETTINGS.orientation));
     case CrossPointSettings::SHORT_PWRBTN::PREVIOUS_PAGE:
-      if (currentPage > 0) {
-        currentPage--;
-        requestUpdate();
-      }
+      requestPageTurn(true, false);
       return true;
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_FONT:
       cycleReaderFont();
@@ -611,6 +584,7 @@ bool TxtReaderActivity::executeReaderShortcutAction(const CrossPointSettings::SH
       toggleHomeButtonInReader();
       return true;
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_FRONTLIGHT:
+    case CrossPointSettings::SHORT_PWRBTN::TOGGLE_PAGE_TURN_GESTURES:
     case CrossPointSettings::SHORT_PWRBTN::FRONTLIGHT_PANEL:
     case CrossPointSettings::SHORT_PWRBTN::TOGGLE_TOUCHSCREEN:
       return handleGlobalPowerButtonAction(action);
@@ -993,6 +967,7 @@ void TxtReaderActivity::renderPage() {
   if (SETTINGS.textAntiAliasing) {
     ReaderUtils::renderAntiAliased(renderer, [&renderLines]() { renderLines(); });
   }
+  pluginEvents.rendered(totalPages > 0 ? static_cast<int>((currentPage + 1LL) * 10000 / totalPages) : 0);
   // scope destructor clears font cache via FontCacheManager
 }
 

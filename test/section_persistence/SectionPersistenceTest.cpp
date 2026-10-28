@@ -23,13 +23,17 @@ extern uint32_t testHyphenationIdentity;
 extern std::vector<BookMetadataCache::TocEntry> testTocEntries;
 
 namespace {
-constexpr uint8_t kFullVersion = 97;
+constexpr uint8_t kFullVersion = 100;
+constexpr uint8_t kStablePageFullVersion = 99;
+constexpr uint8_t kStablePagePartialVersion = 0xD4;
+constexpr uint8_t kPreDropCapFullVersion = 98;
+constexpr uint8_t kPreDropCapPartialVersion = 0xD3;
 constexpr uint8_t kPreImageAlignmentFullVersion = 94;
 constexpr uint8_t kPreImageAlignmentPartialVersion = 0xCF;
 constexpr uint8_t kPreFieldsetFullVersion = 93;
 constexpr uint8_t kPreFieldsetPartialVersion = 0xCE;
 constexpr uint8_t kS3BitmapFullVersion = 90;
-constexpr uint8_t kPartialVersion = 0xD2;
+constexpr uint8_t kPartialVersion = 0xD5;
 constexpr uint8_t kS3BitmapPartialVersion = 0xCB;
 constexpr uint8_t kC3BitmapFullVersion = 89;
 constexpr uint8_t kC3BitmapPartialVersion = 0xCA;
@@ -77,7 +81,7 @@ struct SectionHarness {
         [](std::unique_ptr<Page>, uint16_t, uint16_t, uint32_t, uint32_t) {}, spec.embeddedStyle, "", "",
         spec.imageRendering, std::vector<std::string>{}, nullptr, nullptr, spec.renderMode);
     ASSERT_NE(context->parser, nullptr);
-    context->parser->anchorData = anchors;
+    context->parser->anchorData.assign(anchors.begin(), anchors.end());
     section.build_ = std::move(context);
     ASSERT_TRUE(Storage.openFileForWrite("TEST", section.build_->tmpSectionPath, section.file));
     ASSERT_TRUE(section.writeSectionFileHeader(spec));
@@ -88,8 +92,8 @@ struct SectionHarness {
       ASSERT_EQ(section.build_->pageIndex.prepareAppend(), SectionPageIndex::PrepareResult::Ready);
       const uint32_t offset = section.onPageComplete(std::make_unique<Page>());
       ASSERT_NE(offset, 0U);
-      section.build_->pageIndex.appendPrepared(
-          {offset, static_cast<uint16_t>(i * 3U), static_cast<uint16_t>(i * 5U), static_cast<uint32_t>(i * 17U)});
+      section.build_->pageIndex.appendPrepared({offset, static_cast<uint16_t>(i * 3U), static_cast<uint16_t>(i * 5U),
+                                                static_cast<uint32_t>(i * 17U), static_cast<uint32_t>(i * 13U)});
     }
   }
 
@@ -153,7 +157,8 @@ TEST_F(SectionPersistenceTest, PartialCommitFiltersFutureAnchorsAndFallsBackBeyo
   for (size_t i = 0; i < 10; ++i) {
     ASSERT_EQ(replay->pageIndex.prepareAppend(), SectionPageIndex::PrepareResult::Ready);
     replay->pageIndex.appendPrepared({static_cast<uint32_t>(1000 + i), static_cast<uint16_t>(i * 3U),
-                                      static_cast<uint16_t>(i * 5U), static_cast<uint32_t>(i * 17U)});
+                                      static_cast<uint16_t>(i * 5U), static_cast<uint32_t>(i * 17U),
+                                      static_cast<uint32_t>(i * 13U)});
   }
   reopened.build_ = std::move(replay);
   reopened.builtPageCount_ = 10;
@@ -184,7 +189,13 @@ TEST_F(SectionPersistenceTest, FailedCommitKeepsThePreviousReadableCache) {
 }
 
 TEST_F(SectionPersistenceTest, RejectsCachesFromPreviousLayoutRevisions) {
-  for (const uint8_t staleVersion : {uint8_t{96},
+  for (const uint8_t staleVersion : {kStablePageFullVersion,
+                                     kStablePagePartialVersion,
+                                     kPreDropCapFullVersion,
+                                     kPreDropCapPartialVersion,
+                                     uint8_t{97},
+                                     uint8_t{0xD2},
+                                     uint8_t{96},
                                      uint8_t{0xD1},
                                      uint8_t{95},
                                      uint8_t{0xD0},
@@ -458,4 +469,38 @@ TEST_F(SectionPersistenceTest, ContentsSelectsLatestSubchapterAcrossAnchorBatche
   EXPECT_EQ(h.section.getTocIndexForPage(65), 65);
   EXPECT_EQ(h.section.getTocIndexForPage(0), 0);
   EXPECT_EQ(h.section.getTocIndexForPage(100), 69);
+}
+
+TEST_F(SectionPersistenceTest, ReferenceCoordinatesSurviveCompletePartialAndLiveReplay) {
+  for (const uint8_t version : {kFullVersion, kPartialVersion}) {
+    Storage.reset();
+    SectionHarness harness;
+    harness.begin();
+    harness.appendPages(65);
+    harness.section.build_->parser->referenceTextOffset = 1000;
+    uint32_t textLength = 0;
+    EXPECT_EQ(harness.section.getReferenceTextOffsetForPage(64, textLength), 64U * 13U);
+    EXPECT_EQ(textLength, 0U);
+    ASSERT_TRUE(harness.commit(version, 100, 200));
+    harness.finishSuccessfulCommit();
+    Section reopened(harness.epub, 0, harness.renderer);
+    ASSERT_TRUE(reopened.loadSectionFile(harness.spec));
+    EXPECT_EQ(reopened.getReferenceTextOffsetForPage(64, textLength), 64U * 13U);
+    EXPECT_EQ(textLength, version == kFullVersion ? 1000U : 0U);
+    EXPECT_FALSE(reopened.getReferenceTextOffsetForPage(65, textLength));
+    EXPECT_EQ(reopened.getVisibleTextOffsetForPage(64), 64U * 17U);
+  }
+}
+
+TEST_F(SectionPersistenceTest, PreviousReferenceLessCachesAreRejected) {
+  for (const uint8_t version : {uint8_t{98}, uint8_t{0xD3}}) {
+    Storage.reset();
+    SectionHarness harness;
+    harness.begin();
+    harness.appendPages(2);
+    ASSERT_TRUE(harness.commit(version));
+    harness.finishSuccessfulCommit();
+    Section reopened(harness.epub, 0, harness.renderer);
+    EXPECT_FALSE(reopened.loadSectionFile(harness.spec));
+  }
 }

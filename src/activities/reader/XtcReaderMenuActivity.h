@@ -22,6 +22,7 @@ class XtcReaderMenuActivity final : public Activity {
     DELETE_CACHE,
     SEND_NEARBY_BOOK,
     DISABLE_TOUCHSCREEN,
+    GO_TO_PERCENT,
     LIGHT_CONTROLS,
   };
 
@@ -41,8 +42,8 @@ class XtcReaderMenuActivity final : public Activity {
   void onFrontlightPanelClosed() override;
 
  private:
-  // Every row, the touch toggle and the Light Controls row on: nine. One interaction per row, and one spare.
-  static constexpr size_t kMaxMenuItems = 9;
+  // Every row, including Go to percent, touch toggle and Light Controls: ten.
+  static constexpr size_t kMaxMenuItems = 10;
   using UiHost = UiAppHost<kMaxMenuItems + 1, 2>;
   using UiApp = UiHost::App;
 

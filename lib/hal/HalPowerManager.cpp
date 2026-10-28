@@ -121,9 +121,9 @@ void HalPowerManager::setPowerSaving(bool enabled) {
     enabled = false;
   }
 
-  const LockMode mode = currentLockMode;
+  const bool locked = lockCount > 0;
 
-  if (mode == None && enabled && !isLowPower) {
+  if (!locked && enabled && !isLowPower) {
     LOG_DBG("PWR", "Going to low-power mode");
     if (!setCpuFrequencyMhz(LOW_POWER_FREQ)) {
       LOG_DBG("PWR", "Failed to set CPU frequency = %d MHz", LOW_POWER_FREQ);
@@ -134,7 +134,7 @@ void HalPowerManager::setPowerSaving(bool enabled) {
     }
     isLowPower = true;
 
-  } else if ((!enabled || mode != None) && isLowPower) {
+  } else if ((!enabled || locked) && isLowPower) {
     LOG_DBG("PWR", "Restoring normal CPU frequency");
     if (!setCpuFrequencyMhz(normalFreq)) {
       LOG_DBG("PWR", "Failed to set CPU frequency = %d MHz", normalFreq);
@@ -448,7 +448,8 @@ bool HalPowerManager::firmwareUpdateBlockedByBattery() const {
 bool HalPowerManager::noChargeableCell() const {
   if (!BoardConfig::powerPolicy().noChargeableCellNotice) return false;
   const unsigned long now = millis();
-  if (_noCellPolledMs != 0 && now - _noCellPolledMs < BATTERY_POLL_MS) return _noCellCached;
+  if (_noCellPolledMs != 0 && now - _noCellPolledMs < (BoardConfig::isSilkscreen() ? 1500UL : BATTERY_POLL_MS))
+    return _noCellCached;
   _noCellPolledMs = now != 0 ? now : 1;
   // The charger's no-battery blink decides by itself: the charger then holds P+
   // between its recharge threshold and 4.2 V, so P+ cannot show the missing cell.
@@ -578,25 +579,14 @@ bool HalPowerManager::getBatteryDiagnostics(BatteryDiagnostics& out) const {
 
 HalPowerManager::Lock::Lock() {
   xSemaphoreTake(powerManager.modeMutex, portMAX_DELAY);
-  // Current limitation: only one lock at a time
-  if (powerManager.currentLockMode != None) {
-    LOG_ERR("PWR", "Lock already held, ignore");
-    valid = false;
-  } else {
-    powerManager.currentLockMode = NormalSpeed;
-    valid = true;
-  }
+  ++powerManager.lockCount;
   xSemaphoreGive(powerManager.modeMutex);
-  if (valid) {
-    // Immediately restore normal CPU frequency if currently in low-power mode
-    powerManager.setPowerSaving(false);
-  }
+  // Immediately restore normal CPU frequency if currently in low-power mode.
+  powerManager.setPowerSaving(false);
 }
 
 HalPowerManager::Lock::~Lock() {
   xSemaphoreTake(powerManager.modeMutex, portMAX_DELAY);
-  if (valid) {
-    powerManager.currentLockMode = None;
-  }
+  --powerManager.lockCount;
   xSemaphoreGive(powerManager.modeMutex);
 }

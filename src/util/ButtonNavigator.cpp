@@ -76,30 +76,44 @@ void ButtonNavigator::onReleaseImpl(const Button* const buttons, const size_t co
   });
 
   if (wasReleased) {
-    if (lastContinuousNavTime == 0) {
+    if (!hasRepeated) {
       callback();
     }
 
-    lastContinuousNavTime = 0;
+    hasRepeated = false;
   }
 }
 
 void ButtonNavigator::onContinuousImpl(const Button* const buttons, const size_t count, const Callback& callback) {
-  const bool isPressed = std::any_of(buttons, buttons + count, [this](const Button button) {
+  const bool wasPressed = std::any_of(buttons, buttons + count, [](const MappedInputManager::Button button) {
+    return mappedInput != nullptr && mappedInput->wasPressed(button);
+  });
+  if (wasPressed) {
+    // A render wait can age a sampled press before the activity receives it.
+    // Give this press its own repeat window; never count it as a hold as well.
+    lastPressTime = mappedInput->buttonSampleTime();
+    hasRepeated = false;
+    return;
+  }
+
+  const bool isPressed = std::any_of(buttons, buttons + count, [this](const MappedInputManager::Button button) {
     return mappedInput != nullptr && mappedInput->isPressed(button) && shouldNavigateContinuously();
   });
 
   if (isPressed) {
     callback();
-    lastContinuousNavTime = millis();
+    lastContinuousNavTime = mappedInput->buttonSampleTime();
+    hasRepeated = true;
   }
 }
 
 bool ButtonNavigator::shouldNavigateContinuously() const {
   if (!mappedInput) return false;
 
-  const bool buttonHeldLongEnough = mappedInput->getHeldTime() > continuousStartMs;
-  const bool navigationIntervalElapsed = (millis() - lastContinuousNavTime) > continuousIntervalMs;
+  const uint32_t now = mappedInput->buttonSampleTime();
+  const bool buttonHeldLongEnough =
+      mappedInput->getHeldTime() > continuousStartMs && (now - lastPressTime) > continuousStartMs;
+  const bool navigationIntervalElapsed = !hasRepeated || (now - lastContinuousNavTime) > continuousIntervalMs;
 
   return buttonHeldLongEnough && navigationIntervalElapsed;
 }

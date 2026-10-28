@@ -1,6 +1,7 @@
 #include "OpdsBookBrowserActivity.h"
 
 #include <Arduino.h>
+#include <DownloadFileSwap.h>
 #include <FreeInkUIIcon.h>
 #include <FsHelpers.h>
 #include <GfxRenderer.h>
@@ -32,7 +33,6 @@
 #include "components/UiAppHelpers.h"
 #include "components/icons/listIcons.h"
 #include "fontIds.h"
-#include "network/DownloadFileSwap.h"
 #include "network/HttpDownloader.h"
 #include "util/BookCacheUtils.h"
 #include "util/OpdsDownloadFolder.h"
@@ -671,43 +671,55 @@ void OpdsBookBrowserActivity::fetchFeed(const std::string& path) {
   const std::string authorizationOrigin = UrlUtils::ensureProtocol(server.url);
   LOG_DBG("OPDS", "Fetching: %s", UrlUtils::forLog(url).c_str());
   OpdsParser parser(entries.get(), MAX_OPDS_FEED_ENTRIES);
-  {
+  HttpRequestDiagnostics diagnostics;
+  auto result = HttpDownloader::OK;
+  if (parser) {
     OpdsParserStream stream{parser};
     HttpDownloader::DownloadOptions downloadOptions;
     downloadOptions.transport = HttpDownloader::Transport::WOLFSSL;
     downloadOptions.authorizationOrigin = authorizationOrigin;
-    HttpRequestDiagnostics diagnostics;
-    const auto result = HttpDownloader::streamUrl(
+    result = HttpDownloader::streamUrl(
         url, [&stream](const uint8_t* data, const size_t len) { return stream.write(data, len) == len; }, nullptr,
         server.username, server.password, std::move(downloadOptions), &diagnostics);
-    if (result != HttpDownloader::OK) {
-      state = BrowserState::ERROR;
-      switch (classifyFeedFailure(diagnostics, result == HttpDownloader::HTTP_ERROR)) {
-        case OpdsFeedError::Unauthorized:
-          errorMessage = tr(STR_FEED_UNAUTHORIZED);
-          break;
-        case OpdsFeedError::Redirected:
-          errorMessage = tr(STR_FEED_REDIRECTED);
-          break;
-        case OpdsFeedError::ServerError:
-          errorMessage = tr(STR_FEED_SERVER_ERROR);
-          break;
-        case OpdsFeedError::Unreachable:
-          errorMessage = tr(STR_FEED_UNREACHABLE);
-          break;
-        default:
-          errorMessage = tr(STR_FETCH_FEED_FAILED);
-          break;
-      }
-      requestUpdate();
-      return;
+  }  // Finalize the parser before deciding whether to publish or discard entries.
+
+  // A parser rejection is the cause of a callback-aborted download, rather
+  // than a server/connectivity error. Do not hide it behind the HTTP result.
+  if (!parser && (result == HttpDownloader::OK || diagnostics.callbackRejected)) {
+    clearEntries();
+    state = BrowserState::ERROR;
+    if (parser.getErrorReason() == OpdsParserError::BUFFER_MEMORY) {
+      errorMessage = tr(STR_OPDS_FEED_BUFFER_MEMORY_ERROR);
+    } else if (parser.getErrorReason() == OpdsParserError::PARSER_MEMORY) {
+      errorMessage = tr(STR_MEMORY_ERROR);
+    } else {
+      errorMessage = tr(STR_PARSE_FEED_FAILED);
     }
+    requestUpdate();
+    return;
   }
 
-  if (!parser) {
+  if (result != HttpDownloader::OK) {
+    clearEntries();
     state = BrowserState::ERROR;
-    errorMessage = parser.getErrorReason() == OpdsParserError::BUFFER_MEMORY ? tr(STR_OPDS_FEED_BUFFER_MEMORY_ERROR)
-                                                                             : tr(STR_PARSE_FEED_FAILED);
+    switch (classifyFeedFailure(diagnostics,
+                                result == HttpDownloader::HTTP_ERROR || result == HttpDownloader::UNAUTHORIZED)) {
+      case OpdsFeedError::Unauthorized:
+        errorMessage = tr(STR_FEED_UNAUTHORIZED);
+        break;
+      case OpdsFeedError::Redirected:
+        errorMessage = tr(STR_FEED_REDIRECTED);
+        break;
+      case OpdsFeedError::ServerError:
+        errorMessage = tr(STR_FEED_SERVER_ERROR);
+        break;
+      case OpdsFeedError::Unreachable:
+        errorMessage = tr(STR_FEED_UNREACHABLE);
+        break;
+      default:
+        errorMessage = tr(STR_FETCH_FEED_FAILED);
+        break;
+    }
     requestUpdate();
     return;
   }
@@ -758,7 +770,9 @@ void OpdsBookBrowserActivity::clearEntries() {
   // The app's interaction table still references the old row indices until
   // the next render, so stop routing touches while clearing the backing data.
   uiReady = false;
-  for (size_t i = 0; entries && i < entryCount; ++i) {
+  // A failed fetch can populate slots before entryCount is published. Clear
+  // the full bounded array so partial-feed strings cannot survive a retry.
+  for (size_t i = 0; entries && i < OPDS_BROWSER_ENTRY_CAPACITY; ++i) {
     entries[i] = OpdsEntry{};
   }
   entryCount = 0;
@@ -925,6 +939,7 @@ void OpdsBookBrowserActivity::downloadBook(DownloadRequest request, const std::s
   HttpDownloader::DownloadOptions downloadOptions;
   downloadOptions.shouldCancel = pollCancel;
   downloadOptions.bufferSize = OPDS_DOWNLOAD_BUFFER_SIZE;
+  downloadOptions.reserveFullRecord = true;
   downloadOptions.transport = HttpDownloader::Transport::WOLFSSL;
   downloadOptions.authorizationOrigin = authorizationOrigin;
   downloadOptions.stageAsPart = true;

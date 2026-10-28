@@ -1,5 +1,7 @@
 #include "ActivityManager.h"
 
+#include "activities/plugins/PluginCatalogActivity.h"
+
 #if CROSSINK_SCALABLE_FONTS
 #include <HalScalableFont.h>
 #endif
@@ -23,6 +25,7 @@
 #include "CrossPointState.h"
 #include "DeviceCapabilities.h"
 #include "FilenameFontSystem.h"
+#include "GlobalActions.h"
 #include "OpdsServerStore.h"
 #include "RecentBooksStore.h"
 #include "ReleaseNotes.h"
@@ -215,6 +218,8 @@ bool applyConfiguredSwipeAction(Activity& activity, ActivityManager& activityMan
       return activityManager.handleShortcutAction(CrossPointSettings::BACK_HOME);
     case CrossPointSettings::TWO_FINGER_SWIPE_HOME_READER:
       return activityManager.handleShortcutAction(CrossPointSettings::HOME_READER);
+    case CrossPointSettings::TWO_FINGER_SWIPE_TOGGLE_PAGE_TURN_GESTURES:
+      return handleGlobalPowerButtonAction(CrossPointSettings::TOGGLE_PAGE_TURN_GESTURES);
     case CrossPointSettings::TWO_FINGER_SWIPE_SELECT_CHAPTER:
     case CrossPointSettings::TWO_FINGER_SWIPE_NEXT_CHAPTER:
     case CrossPointSettings::TWO_FINGER_SWIPE_PREVIOUS_CHAPTER:
@@ -512,6 +517,7 @@ void ActivityManager::renderTaskLoop() {
 #if defined(CROSSINK_LANGUAGE_BENCHMARK)
       language_benchmark::beginFrame(currentActivity->name.c_str());
 #endif
+      mappedInput.setMenuMode(currentActivity->usesMenuButtonOrientation());
 #if FREEINK_CAP_POWER_POLICY
       // The watchdog's clock starts here, with the lock held: time spent waiting for it is not rendering.
       renderwatchdog::beginRender(currentActivity->name.c_str());
@@ -559,6 +565,10 @@ void ActivityManager::loop() {
 #endif
 
   if (currentActivity) {
+    if (mappedInput.isMenuMode() != currentActivity->usesMenuButtonOrientation()) {
+      RenderLock lock;
+      mappedInput.setMenuMode(currentActivity->usesMenuButtonOrientation());
+    }
     mappedInput.setPowerAsConfirmInReaderMode(currentActivity->allowPowerAsConfirmInReaderMode());
 
     if (currentActivity->blocksGlobalInput()) {
@@ -655,6 +665,7 @@ void ActivityManager::loop() {
       } else {
         currentActivity = std::move(stackActivities.back());
         stackActivities.pop_back();
+        mappedInput.setMenuMode(currentActivity->usesMenuButtonOrientation());
         restoredActivityNeedsRender = true;
 
         // A file-transfer child may have released UI fonts. Restore them for
@@ -800,6 +811,10 @@ void ActivityManager::loop() {
     }
   }
 
+  if (currentActivity && mappedInput.isMenuMode() != currentActivity->usesMenuButtonOrientation()) {
+    RenderLock lock;
+    mappedInput.setMenuMode(currentActivity->usesMenuButtonOrientation());
+  }
   if (requestedUpdate.exchange(false)) {
     // Using direct notification to signal the render task to update
     // Increment counter so multiple rapid calls won't be lost
@@ -922,8 +937,13 @@ void ActivityManager::exitActivity(const RenderLock& lock) {
 }
 
 void ActivityManager::enterCurrentActivity() {
+  {
+    RenderLock lock;
+    mappedInput.setMenuMode(currentActivity->usesMenuButtonOrientation());
+  }
   currentActivity->onEnter();
   RenderLock lock;
+  mappedInput.setMenuMode(currentActivity->usesMenuButtonOrientation());
   enteringActivity = false;
   entryRenderRequested = false;
 }
@@ -1061,6 +1081,15 @@ void ActivityManager::goToLibrary() {
   replaceActivity(std::move(library));
 }
 
+void ActivityManager::goToPlugins() {
+  auto plugins = makeUniqueNoThrow<PluginCatalogActivity>(renderer, mappedInput, true);
+  if (!plugins) {
+    LOG_ERR("ACT", "Cannot allocate Plugins activity");
+    return;
+  }
+  replaceActivity(std::move(plugins));
+}
+
 void ActivityManager::goToBrowser() {
   const auto& servers = OPDS_STORE.getServers();
   // Skip the server picker when there's only one server configured
@@ -1102,12 +1131,12 @@ bool ActivityManager::goToOpdsServer(const uint32_t serverIndex, const bool netw
 }
 
 void ActivityManager::goToReader(std::string path, const bool suppressBackRelease, const bool allowFastInitialRefresh,
-                                 const bool cleanImageBaseOnEntry) {
+                                 const bool cleanImageBaseOnEntry, const bool keepWakeFrame) {
   // OPDS credentials are unrelated to local reading and may contain several
   // heap-backed strings. Home reloads them lazily when it becomes active.
   OPDS_STORE.release();
   replaceActivity(std::make_unique<ReaderActivity>(renderer, mappedInput, std::move(path), suppressBackRelease,
-                                                   allowFastInitialRefresh, cleanImageBaseOnEntry));
+                                                   allowFastInitialRefresh, cleanImageBaseOnEntry, keepWakeFrame));
 }
 
 void ActivityManager::goToReaderAndRunMenuAction(std::string path, const uint8_t action) {
@@ -1163,10 +1192,12 @@ void ActivityManager::goHome(HomeMenuItem initialMenuItem, const HalDisplay::Ref
     const auto& activityName = currentActivity->name;
     if (activityName == "FileBrowser") {
       initialMenuItem = HomeMenuItem::FILE_BROWSER;
+    } else if (activityName == "PluginCatalog") {
+      initialMenuItem = HomeMenuItem::PLUGINS;
     } else if (activityName == "Library") {
       initialMenuItem = HomeMenuItem::LIBRARY;
     } else if (activityName == "OpdsBookBrowser") {
-      initialMenuItem = HomeMenuItem::OPDS_BROWSER;
+      initialMenuItem = HomeMenuItem::FILE_TRANSFER;
     } else if (activityName == "CrossPointWebServer") {
       initialMenuItem = HomeMenuItem::FILE_TRANSFER;
     } else if (activityName == "NearbyStatsSync") {
@@ -1517,3 +1548,13 @@ void RenderLock::unlock() {
  * @note Must not be called from ISR context — xSemaphoreGetMutexHolder is not ISR-safe.
  */
 bool RenderLock::peek() { return xSemaphoreGetMutexHolder(activityManager.renderingMutex) != nullptr; }
+
+bool RenderLock::heldByCurrentTask() {
+  return xSemaphoreGetMutexHolder(activityManager.renderingMutex) == xTaskGetCurrentTaskHandle();
+}
+
+void ActivityManager::preparePluginSleep() {
+  RenderLock lock;
+  for (auto& activity : stackActivities) activity->prepareForSleep();
+  if (currentActivity) currentActivity->prepareForSleep();
+}
