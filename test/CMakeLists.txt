@@ -108,6 +108,7 @@ add_subdirectory(library_text)
 add_subdirectory(library_format)
 add_subdirectory(library_index_file)
 add_subdirectory(content_opf_parser)
+add_subdirectory(adobe_font_obfuscation)
 add_subdirectory(library_builder)
 add_subdirectory(library_input_buffer)
 add_subdirectory(library_recent_order)
@@ -161,6 +162,7 @@ add_subdirectory(reading_session_checkpoint)
 
 add_subdirectory(protected_paths)
 add_subdirectory(plugin_manifest_classification)
+add_subdirectory(plugin_catalog_paging)
 add_subdirectory(plugin_http_policy)
 add_subdirectory(plugin_bundle)
 
@@ -186,3 +188,8 @@ add_test(NAME BookmarkListMemoryRegression
   COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/scripts/test_bookmark_list_memory.py)
 
 add_subdirectory(bookmark_store)
+
+add_test(NAME UpstreamPortRegressions
+  COMMAND ${Python3_EXECUTABLE} ${REPO_ROOT}/test/scripts/test_upstream_ports.py)
+
+add_subdirectory(gif_support)

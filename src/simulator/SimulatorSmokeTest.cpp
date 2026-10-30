@@ -29,6 +29,7 @@
 #include "ReadingUploadSmokeTest.h"
 #include "SilentRestart.h"
 #include "StatsUploadSmokeTest.h"
+#include "UpstreamFeatureSmokeTest.h"
 #include "util/WordSelectNavigator.h"
 #if CROSSINK_SCALABLE_FONTS
 #include <HalScalableFont.h>
@@ -1457,9 +1458,35 @@ struct ScreenCalibrationSmokeTest {
     UITheme::getInstance().reload();
     renderer.setOrientation(GfxRenderer::Portrait);
     renderer.setViewableInsets(ScreenInsets{{{32, 32, 32, 32}}});
+    {
+      auto download = makeUniqueNoThrow<FontDownloadActivity>(renderer, mappedInputManager);
+      if (!download) return false;
+      download->manifestFamilies_ = makeUniqueNoThrow<FontDownloadActivity::ManifestFamily[]>(1);
+      if (!download->manifestFamilies_) return false;
+      download->manifestFamilyCount_ = 1;
+      download->manifestFamilies_[0].name = "Installed font";
+      download->manifestFamilies_[0].installed = true;
+      download->state_ = FontDownloadActivity::FAMILY_LIST;
+      applySharedUiTheme(download->app_, download->uiTarget_);
+      download->app_.setScreen(&FontDownloadActivity::listScreen, download.get());
+      valid &= download->rebuildListItems();
+      if (download->listItemCount_ != 1) return false;
+      valid &= !(download->listItems_[0].state & freeink::ui::StateDisabled);
+      download->render(std::move(lock));
+      capture("upstream-installed-font-selection");
+    }
     auto keyboard =
         std::make_unique<KeyboardEntryActivity>(renderer, mappedInputManager, "Password", "", 64, InputType::Password);
     keyboard->onEnter();
+    keyboard->text = "café";
+    keyboard->cursorPos = keyboard->text.size();
+    keyboard->passwordVisible = false;
+    keyboard->cursorMode = false;
+    valid &= keyboard->displayTextForCurrentState() == "***é";
+    keyboard->render(std::move(lock));
+    capture("upstream-password-utf8");
+    keyboard->text.clear();
+    keyboard->cursorPos = 0;
     keyboard->render(std::move(lock));
     const auto keys = keyboard->keyboardRect();
     const auto safe = UITheme::getInstance().getScreenSafeArea(renderer, true, false);
@@ -2946,7 +2973,19 @@ class SimulatorSmokeTest {
     verifyRows(all);
     verifyRows(controls);
     if (!QuickActions::supportsTiltPageTurn()) {
-      LOG_INF("SMOKE", "Simulator smoke test passed: tilt settings hidden without a gyroscope");
+      SETTINGS.tiltPageTurn = 1;
+      SETTINGS.tiltPageTurnDirection = 2;
+      SETTINGS.tiltNextPageOnly = 1;
+      if (!SETTINGS.saveToFile()) fail("Cannot save tilt settings without a gyroscope");
+      SETTINGS.tiltPageTurn = 0;
+      SETTINGS.tiltPageTurnDirection = 0;
+      SETTINGS.tiltNextPageOnly = 0;
+      if (!SETTINGS.loadFromFile() || SETTINGS.tiltPageTurn != 1 || SETTINGS.tiltPageTurnDirection != 2 ||
+          SETTINGS.tiltNextPageOnly != 1)
+        fail("Failed IMU probe lost saved tilt settings");
+      SETTINGS.fromJson(original.as<JsonVariantConst>());
+      if (!SETTINGS.saveToFile()) fail("Cannot restore tilt settings after persistence check");
+      LOG_INF("SMOKE", "Simulator smoke test passed: tilt settings persist and remain hidden without a gyroscope");
       return;
     }
     if (SETTINGS.tiltNextPageOnly != 0) fail("Tilt Next Page Only must default to Off");
@@ -6910,6 +6949,7 @@ class SimulatorSmokeTest {
       tickFilenameFont();
       return;
     }
+    if (tickUpstreamFeatureSmokeTest()) return;
     if (tickAssetDownloadSmokeTest()) return;
     if (tickOpdsCatalogSmokeTest()) return;
     if (tickBookmarkListSmokeTest()) return;
@@ -8800,8 +8840,21 @@ class SimulatorSmokeTest {
       swipe(height / 3, height * 3 / 4);
       inputScript.push_back(assertActivity(screens[screen]));
       swipe(height - 8, height * 2 / 3);
-      inputScript.push_back(assertActivity("Home"));
+      // Release Notes reserves vertical swipes for paging, including its bottom actions.
+      inputScript.push_back(assertActivity(screen == 3 ? "ReleaseNotes" : "Home"));
     }
+    if (!Storage.writeFile("/books/home-swipe.txt", "TXT bottom-edge Home swipe regression.\n"))
+      fail("Failed to write TXT Home swipe fixture");
+    inputScript.push_back({ScriptActionType::OpenHomeSwipeScreen, MappedInputManager::Button::Back, nullptr, 0, 6, 0});
+    inputScript.push_back(render("TXT before Home swipe regression", 12));
+    inputScript.push_back(assertActivity("TxtReader"));
+    addTap(MappedInputManager::Button::Confirm);
+    inputScript.push_back(render("TXT without sharing popup", 4));
+    inputScript.push_back(assertActivity("TxtReader"));
+    swipe(height * 3 / 4, height / 3);
+    inputScript.push_back(assertActivity("TxtReader"));
+    swipe(height - 8, height * 2 / 3);
+    inputScript.push_back(assertActivity("Home"));
     inputScript.push_back(openSmokeBook());
     inputScript.push_back(render("Reader before Home swipe regression", 12));
     inputScript.push_back(assertActivity("EpubReader"));
@@ -9612,6 +9665,9 @@ class SimulatorSmokeTest {
           case 5:
             activityManager.pushActivity(std::make_unique<SettingsActivity>(renderer, mappedInputManager, false, true,
                                                                             SettingsActivity::View::FileBrowser));
+            break;
+          case 6:
+            activityManager.goToReader("/books/home-swipe.txt", true);
             break;
         }
         break;

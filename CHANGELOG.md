@@ -69,6 +69,10 @@
 - Jump to a percentage in XTC and XTCH books from the reader menu, using the same slider and numeric keypad as EPUB books.
 - Install SD card plugins with browser interfaces, on-device catalogs, sign-in, and configurable download folders. Enable Plugins in Settings → System, then open Plugins from Home. Download the optional Plugin Hub to discover, install, and update compatible plugins.
 - Center Status Bar option for the top and bottom reader status bars, which centers all items in one row joined by a •, ·, –, or | separator.
+- Browse OPDS 2 JSON catalogs, groups, facets, publication descriptions, and indirect EPUB links using the same bounded catalog storage as Atom feeds. OAuth and LCP service fulfillment are not included (CrossPoint #3629).
+- Render non-interlaced GIF images, covers, and thumbnails in EPUBs, using the first frame of animated files (CrossPoint #2299).
+- Uninstall an installed plugin after holding Confirm for one second or long-pressing its row, with confirmation before its files are removed (CrossPoint #4100).
+- Choose Cover Overlay to place a transparent sleep image over the current book cover (CrossPoint #3770).
 
 ### Fixed
 
@@ -195,6 +199,14 @@
 - Reserve the retained TLS input buffer after sending bulk HTTPS requests, including OPDS book downloads, to avoid later full-record allocation failures when a server ignores the small-record request (adapted from Eszter Schuffert, FreeInk SDK #154 and #155 via CrossPoint #4167).
 - Use full refreshes on SSD2677 Sticky displays when previous-frame memory is unavailable, preventing stale black pixels.
 - Reduce memory used by OPDS book feeds with long descriptions, release partial catalogs after failed requests, and stop transfers promptly when parsing fails.
+- Keep saved tilt preferences when the sensor fails its startup check, while hiding unavailable controls (CrossPoint #4078).
+- Fix skipped and repeated plugin catalog entries, including compatibility-filtered static lists, and support encoded item fields in plugin URLs (CrossPoint #4170, #4195, #4196).
+- Connect plugin HTTPS requests before copying custom headers to reduce memory pressure during connection setup (CrossPoint #4167).
+- Align SD-font text-width measurements with drawing while preserving character spacing; existing EPUB layouts rebuild automatically (CrossPoint #3985).
+- Preserve complete non-English characters in Wi-Fi names and masked password previews, and keep installed font rows visibly selectable (CrossPoint #4079, #4106, #4101).
+- Load Adobe-obfuscated publisher fonts in EPUBs on devices with scalable font support.
+
+- Ask before setting a sleep cover from the image viewer, and use complete translated delete and sleep-cover questions (CrossPoint #3994, #4097).
 
 ### Changed
 
@@ -239,6 +251,10 @@
 - Move OPDS Browser into File Transfer, keeping room for Plugins and Settings on Home.
 - Save periodic reading-stat checkpoints every five minutes of accepted reading instead of every minute, while keeping session-end, sleep, and restart saves.
 - Match menu button directions and front Up/Down labels to screen orientation on X3, X4 Pro, and X4 Classic while preserving tab navigation and reader page-turn preferences. Slider side buttons follow the screen orientation, with the upper button increasing values and the lower button decreasing them.
+- Reduce temporary allocations while finding EPUB line breaks and disable unused XML parser input-context buffering (CrossPoint #4126, #4118).
+- Revalidate plugin files with content-based ETags so unchanged files do not need to be transferred again (CrossPoint #4193).
+
+- Use themed web confirmations and alerts, accessible file dialogs, and clearer dropdown arrows; preserve upload cancellation and feedback timers (CrossPoint #3984, #4090).
 
 ## [v1.6.1] - 2026-10-03
 

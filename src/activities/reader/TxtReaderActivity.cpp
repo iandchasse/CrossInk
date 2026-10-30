@@ -229,6 +229,11 @@ void TxtReaderActivity::loop() {
   pluginEvents.pollWhenIdle(getCurrentBookPath());
   if (quickActionsPopup.handleInput(mappedInput, [this] { requestUpdate(); })) return;
 #if CROSSINK_APP_CAP_TOUCH
+  // TXT has no reader drawer: the bottom edge exits directly on every touch device.
+  if (mappedInput.wasBottomEdgeUpSwipe()) {
+    onGoHome();
+    return;
+  }
   if (handlePinchFontResize()) return;
 #endif
   const auto touch = ReaderUtils::detectTouchPageTurn(renderer, mappedInput);
@@ -301,7 +306,7 @@ void TxtReaderActivity::loop() {
     return;
   }
 
-  if (confirmReleased) {
+  if (boardKeepsKeysBesideTouch() && confirmReleased) {
     openReaderMenu();
     return;
   }

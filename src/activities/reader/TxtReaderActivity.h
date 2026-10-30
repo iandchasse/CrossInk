@@ -64,6 +64,7 @@ class TxtReaderActivity final : public Activity {
   std::optional<size_t> statusBarRelayoutOffset;
   int statusBarRelayoutPage = -1;
 
+  void openReaderMenu();
   void renderPage();
   void renderStatusBar() const;
   void requestPageTurn(bool previous, bool next);
@@ -91,7 +92,6 @@ class TxtReaderActivity final : public Activity {
   void cycleReaderFont();
   // Font changes and layout invalidation share the caller's RenderLock.
   void rebuildTextLayout();
-  void openReaderMenu();
   bool applyReaderOrientation(uint8_t orientation);
 #if CROSSINK_APP_CAP_TOUCH
   bool handlePinchFontResize();

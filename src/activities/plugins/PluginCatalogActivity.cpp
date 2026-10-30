@@ -77,6 +77,7 @@ constexpr auto DETAIL_REPOSITORY = JsonListParser::F_BASE;
 constexpr auto DETAIL_PAGE_URL = JsonListParser::F_URL;
 constexpr auto DETAIL_PAGE_FORMAT = JsonListParser::F_BASE;
 constexpr int MAX_PAGE_SIZE = 16;
+constexpr unsigned long PLUGIN_UNINSTALL_HOLD_MS = 1000;
 
 // JsonListParser has six generic field slots. The compatibility and details
 // passes store other fields in the slots they do not need.
@@ -205,6 +206,7 @@ std::vector<PluginRef> discoverPlugins() {
   for (const auto& e : entries) {
     PluginRef ref;
     ref.name = e.name;
+    ref.dir = e.dir;
     ref.title = e.name;
     // Browser-only plugins (no device.json) stay listed so an install is
     // visibly installed, but carry no manifest to open (empty manifestPath).
@@ -408,8 +410,10 @@ std::string PluginCatalogActivity::substituted(std::string tpl, const Item* item
   substituteAll(tpl, "{plugin_api}", num);
   snprintf(num, sizeof(num), "%d", page);
   substituteAll(tpl, "{page}", num);
-  snprintf(num, sizeof(num), "%d", manifest.pageSize + 1);
+  snprintf(num, sizeof(num), "%d", plugincatalogpaging::limitFor(browsePaging(), manifest.pageSize));
   substituteAll(tpl, "{limit}", num);
+  snprintf(num, sizeof(num), "%d", std::max(0, page - 1) * manifest.pageSize);
+  substituteAll(tpl, "{offset}", num);
   substituteAll(tpl, "{query}", urlEncodeQuery(searchQuery));
   substituteAll(tpl, "{query_raw}", searchQuery);
   if (item) {
@@ -417,6 +421,15 @@ std::string PluginCatalogActivity::substituted(std::string tpl, const Item* item
     substituteAll(tpl, "{title}", item->title);
     substituteAll(tpl, "{author}", item->author);
     substituteAll(tpl, "{url}", item->url);
+    // Encoded forms for URL query values and paths, built only when used: a
+    // field can be KBs and its encoded copy three times that.
+    const std::pair<const char*, const std::string*> encoded[] = {{"{id_enc}", &item->id},
+                                                                  {"{title_enc}", &item->title},
+                                                                  {"{author_enc}", &item->author},
+                                                                  {"{url_enc}", &item->url}};
+    for (const auto& [key, value] : encoded) {
+      if (tpl.find(key) != std::string::npos) substituteAll(tpl, key, urlEncodeQuery(*value));
+    }
   }
   return tpl;
 }
@@ -553,6 +566,63 @@ void PluginCatalogActivity::enterPluginPicker() {
     break;
   }
   requestUpdate();
+}
+
+void PluginCatalogActivity::confirmUninstallPlugin(const int pickerIndex) {
+  if (state != State::PLUGIN_PICKER) return;
+  const int offset = (showPluginHubInstallRow ? 1 : 0);
+  const int pluginIndex = pickerIndex - offset;
+  if (pluginIndex < 0 || pluginIndex >= static_cast<int>(installedPlugins.size())) return;
+
+  const PluginRef plugin = installedPlugins[pluginIndex];
+  if (plugin.name.empty() || plugin.name == "." || plugin.name == ".." ||
+      plugin.name.find_first_of("/\\") != std::string::npos) {
+    LOG_ERR("PCAT", "Refusing unsafe plugin name: %s", plugin.name.c_str());
+    return;
+  }
+  bool safeDir = false;
+  for (const char* root : PluginLocations::ROOTS) {
+    if (plugin.dir == std::string(root) + "/" + plugin.name) {
+      safeDir = true;
+      break;
+    }
+  }
+  if (!safeDir) {
+    LOG_ERR("PCAT", "Refusing unsafe plugin uninstall path: %s", plugin.dir.c_str());
+    return;
+  }
+
+  char message[256];
+  snprintf(message, sizeof(message), tr(STR_PLUGIN_UNINSTALL_CONFIRM), plugin.title.c_str());
+  auto confirmation =
+      makeUniqueNoThrow<ConfirmationActivity>(renderer, mappedInput, tr(STR_PLUGIN_UNINSTALL_TITLE), message,
+                                              mappedInput.isPressed(MappedInputManager::Button::Confirm));
+  if (!confirmation) {
+    LOG_ERR("PCAT", "OOM: plugin uninstall confirmation");
+    return;
+  }
+
+  confirmation->setOptionLabels(StrId::STR_CANCEL, StrId::STR_PLUGIN_UNINSTALL);
+
+  std::string returnPluginName;
+  if (pluginIndex + 1 < static_cast<int>(installedPlugins.size()))
+    returnPluginName = installedPlugins[pluginIndex + 1].name;
+  else if (pluginIndex > 0)
+    returnPluginName = installedPlugins[pluginIndex - 1].name;
+
+  app.clearTapFlash();
+  startActivityForResult(std::move(confirmation), [this, plugin, returnPluginName](const ActivityResult& result) {
+    uninstallHoldHandled = false;
+    if (result.isCancelled) {
+      requestUpdate();
+      return;
+    }
+    RenderLock lock;
+    const bool removed = !Storage.exists(plugin.dir.c_str()) || Storage.removeDir(plugin.dir.c_str());
+    if (!removed) LOG_ERR("PCAT", "Failed to recursively uninstall plugin: %s", plugin.dir.c_str());
+    if (removed) pickerReturnName = returnPluginName;
+    enterPluginPicker();
+  });
 }
 
 void PluginCatalogActivity::enterCatalog() {
@@ -835,6 +905,10 @@ const std::string& PluginCatalogActivity::activeBrowseBody() const {
   return pick(manifest.browseLists[currentList].body, manifest.browseReq.body);
 }
 
+plugincatalogpaging::Paging PluginCatalogActivity::browsePaging() const {
+  return plugincatalogpaging::pagingOf(activeBrowseUrl(), activeBrowseBody(), manifest.browseReq.headers);
+}
+
 void PluginCatalogActivity::fetchPageNow(const int newPage) {
   if (!manifest.isXmlList()) page = newPage;
   if (!fetchBrowseResponse() || !parseBrowseResponse()) return;
@@ -848,28 +922,28 @@ bool PluginCatalogActivity::parseBrowseResponse() {
   session.reset();
   if (manifest.isXmlList()) return parseXmlList();
 
-  // Compatibility is opt-in. If the manifest does not map compatibility
-  // fields, the normal single streaming pass is unchanged. When it does, make
-  // a bounded first pass that remembers compatible indexes only from the
-  // displayed page. The extra titled row remains pagination lookahead.
-  // Catalog entries that omit compatibility values match by default; explicit
-  // restrictions must match this firmware.
+  const auto paging = browsePaging();
+  const bool localPaging = paging == plugincatalogpaging::Paging::Static;
+  const size_t pageOffset = localPaging ? static_cast<size_t>(std::max(0, page - 1)) * manifest.pageSize : 0;
+  // Static feeds count only compatible entries. Server pages retain their raw boundaries.
   std::array<int, MAX_PAGE_SIZE> compatibleRows{};
   size_t compatibleCount = 0;
   bool rawHasMore = false;
   if (manifest.filtersCompatibility()) {
     int rowIndex = 0;
-    int titledRows = 0;
+    plugincatalogpaging::PageWindow filteredWindow(pageOffset, manifest.pageSize);
+    plugincatalogpaging::PageWindow serverWindow(0, manifest.pageSize);
     const std::string unused;
     auto selectCompatible = [&](JsonListParser::Row& row) {
       const int thisRow = rowIndex++;
       if (row.field[JsonListParser::F_TITLE].empty()) return;
-      if (++titledRows > manifest.pageSize) {
-        rawHasMore = true;
-        return;
-      }
-      if (catalogEntryCompatible(row.field[COMPAT_FAMILY], row.field[COMPAT_API_MIN], row.field[COMPAT_REQUIRES]))
+      const bool compatible =
+          catalogEntryCompatible(row.field[COMPAT_FAMILY], row.field[COMPAT_API_MIN], row.field[COMPAT_REQUIRES]);
+      if (localPaging) {
+        if (filteredWindow.take(compatible)) compatibleRows[compatibleCount++] = thisRow;
+      } else if (serverWindow.take() && compatible) {
         compatibleRows[compatibleCount++] = thisRow;
+      }
     };
     const std::string* compatibilityFields[JsonListParser::F_COUNT] = {};
     for (auto& field : compatibilityFields) field = &unused;
@@ -885,21 +959,22 @@ bool PluginCatalogActivity::parseBrowseResponse() {
       fail(StrId::STR_PARSE_FEED_FAILED);
       return false;
     }
+    rawHasMore = localPaging ? filteredWindow.hasMore(paging) : serverWindow.hasMore(paging);
   }
 
   releaseRows();
-  if (!allocateItems(manifest.pageSize + 1)) return false;
+  if (!allocateItems(manifest.pageSize)) return false;
   int rowIndex = 0;
   size_t compatibleIndex = 0;
-  // The unfiltered extra row controls server pagination; compatibility only
-  // controls which rows from this page are displayed.
+  plugincatalogpaging::PageWindow visibleWindow(pageOffset, manifest.pageSize);
   auto append = [&](JsonListParser::Row& row) {
     const int thisRow = rowIndex++;
     if (manifest.filtersCompatibility()) {
       if (compatibleIndex >= compatibleCount || compatibleRows[compatibleIndex] != thisRow) return;
-      compatibleIndex++;
+      ++compatibleIndex;
+    } else if (!visibleWindow.take(!row.field[JsonListParser::F_TITLE].empty())) {
+      return;
     }
-    if (row.field[JsonListParser::F_TITLE].empty() || static_cast<int>(itemCount) > manifest.pageSize) return;
     Item item;
     item.title = std::move(row.field[JsonListParser::F_TITLE]);
     item.author = std::move(row.field[JsonListParser::F_AUTHOR]);
@@ -910,8 +985,6 @@ bool PluginCatalogActivity::parseBrowseResponse() {
     item.files = std::move(row.files);
     items[itemCount++] = std::move(item);
   };
-  // Streamed straight from the SD temp file: neither the raw response nor a
-  // parsed document occupies DRAM, only the rows kept.
   const std::string* const fields[] = {&manifest.titlePath, &manifest.authorPath,  &manifest.idPath,
                                        &manifest.urlPath,   &manifest.versionPath, &manifest.bundleBasePath};
   auto parser = makeUniqueNoThrow<JsonListParser>(
@@ -922,11 +995,7 @@ bool PluginCatalogActivity::parseBrowseResponse() {
     fail(StrId::STR_PARSE_FEED_FAILED);
     return false;
   }
-  hasMore = manifest.filtersCompatibility() ? rawHasMore : static_cast<int>(itemCount) > manifest.pageSize;
-  if (static_cast<int>(itemCount) > manifest.pageSize) {
-    items[manifest.pageSize] = {};
-    itemCount = manifest.pageSize;
-  }
+  hasMore = manifest.filtersCompatibility() ? rawHasMore : visibleWindow.hasMore(paging);
   computeInstallStatus();
   return true;
 }
@@ -1084,11 +1153,13 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBundle(const Item& 
         relative.find('\\') != std::string::npos)
       return HttpDownloader::FILE_ERROR;
     const std::string dest = stage + '/' + relative;
-    if (!protectedpaths::isPluginPath(dest) || !pluginhttp::validRequest(base + relative, "GET"))
+    if (base.size() + relative.size() > 2048) return HttpDownloader::HTTP_ERROR;
+    const std::string fileUrl = pluginhttp::escapeUrl(base + relative);
+    if (!protectedpaths::isPluginPath(dest) || !pluginhttp::validRequest(fileUrl, "GET"))
       return HttpDownloader::FILE_ERROR;
     const auto slash = dest.rfind('/');
     if (!Storage.ensureDirectoryExists(dest.substr(0, slash).c_str())) return HttpDownloader::FILE_ERROR;
-    const auto result = downloadFile(base + relative, dest);
+    const auto result = downloadFile(fileUrl, dest);
     if (result != HttpDownloader::OK) return result;
   }
   if (!PluginBundle::publish(directory)) return HttpDownloader::FILE_ERROR;
@@ -1120,6 +1191,9 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
   if (fileUrl.empty()) {
     return HttpDownloader::FILE_ERROR;
   }
+
+  if (fileUrl.size() > 2048) return HttpDownloader::HTTP_ERROR;
+  fileUrl = pluginhttp::escapeUrl(fileUrl);
 
   const std::string folderDir = downloadDir();
   const char* folder = folderDir.c_str();
@@ -1204,6 +1278,28 @@ HttpDownloader::DownloadError PluginCatalogActivity::downloadBook(const Item& it
 }
 
 // Sign-in and completion states precede the shared catalog input handling.
+void PluginCatalogActivity::onRowLongPress(const int index) {
+  if (state != State::PLUGIN_PICKER) return;
+  activeNav().selected = index;
+  confirmUninstallPlugin(index);
+}
+
+bool PluginCatalogActivity::handleButtons() {
+  if (uninstallHoldHandled && mappedInput.wasReleased(MappedInputManager::Button::Confirm)) {
+    uninstallHoldHandled = false;
+    return true;
+  }
+  if (!mappedInput.isPressed(MappedInputManager::Button::Confirm)) uninstallHoldHandled = false;
+  if (state == State::PLUGIN_PICKER && !uninstallHoldHandled &&
+      mappedInput.isPressed(MappedInputManager::Button::Confirm) &&
+      mappedInput.getHeldTime() >= PLUGIN_UNINSTALL_HOLD_MS) {
+    uninstallHoldHandled = true;
+    confirmUninstallPlugin(activeNav().selected);
+    return true;
+  }
+  return UiListActivity::handleButtons();
+}
+
 bool PluginCatalogActivity::handleCustomInput() {
   if (ignoreHubInstallerBackRelease) {
     if (mappedInput.wasReleased(MappedInputManager::Button::Back)) {
@@ -1631,8 +1727,9 @@ void PluginCatalogActivity::buildBrowsingScreen(UiScreen& screen) {
   props.items = rowItems.data();
   props.count = static_cast<uint16_t>(rowItems.size());
   props.action = ACTION_ROW;
-  props.inputMask = fui::InputTouch;  // physical buttons stay in loop()
-  props.valueInset = 8;               // air between the nav chevron and the row edge
+  props.inputMask = state == State::PLUGIN_PICKER ? static_cast<uint16_t>(fui::InputTouch | fui::InputLongPress)
+                                                  : static_cast<uint16_t>(fui::InputTouch);
+  props.valueInset = 8;  // air between the nav chevron and the row edge
   if (state == State::PLUGIN_PICKER) {
     // Let a long plugin description wrap onto a second line under the title;
     // the row grows to fit it. maxLines=2 also marks the style caller-owned

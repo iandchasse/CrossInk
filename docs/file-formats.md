@@ -878,6 +878,20 @@ Binary layout:
 
 ## `section.bin`
 
+### Version 102
+
+Complete caches use `102`; suspended partial caches use `0xD7`. GIF images now
+participate in EPUB layout, so older pages must be rebuilt. The binary layout
+is unchanged.
+
+### Version 101
+
+Complete caches use `101`; suspended partial caches use `0xD6`. SD-font layout
+rounds each glyph advance to pixels before summing, matching drawing while
+preserving character spacing and boundary kerning. The payload is unchanged.
+Both complete and partial caches from version `100` / `0xD5` and earlier rebuild
+automatically; saved reading progress and book metadata are preserved.
+
 ### Version 100
 
 Complete caches use `100`; suspended partial caches use `0xD5`. The payload
