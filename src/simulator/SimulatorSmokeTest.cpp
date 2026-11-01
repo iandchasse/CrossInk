@@ -3913,6 +3913,42 @@ class SimulatorSmokeTest {
     const auto capture = [&](const std::string& name) { captureStatusBarScreen(name.c_str()); };
     const char* longTitle = "Les paramètres globaux très longs avec descendantes gypsy jumping";
     {
+      // A frame keeps its sample even if a new poll becomes due between its two bars.
+      renderer.setOrientation(GfxRenderer::Portrait);
+      ReaderStatusBarConfig batteryBar;
+      batteryBar.slots.fill(ReaderStatusBarItem::Empty);
+      batteryBar.slots[ReaderStatusBarConfig::CENTER] = ReaderStatusBarItem::Battery;
+      batteryBar.progressBar = CrossPointSettings::HIDE_PROGRESS;
+      ReaderStatusBarContent content;
+      for (const auto style : {ReaderStatusBarBatteryStyle::IconAndPercent, ReaderStatusBarBatteryStyle::IconOnly,
+                               ReaderStatusBarBatteryStyle::PercentOnly}) {
+        batteryBar.batteryStyle = style;
+        for (const auto position : {ReaderStatusBarPosition::Top, ReaderStatusBarPosition::Bottom}) {
+          const auto drawSample = [&](const int percent) {
+            content.batteryPercentage = percent;
+            renderer.clearScreen();
+            GUI.drawReaderStatusBar(renderer, position, content, &batteryBar);
+            return hashBytes(renderer.getFrameBuffer(), renderer.getBufferSize());
+          };
+          const auto low = drawSample(10);
+          const auto high = drawSample(90);
+          // USB icons intentionally show a fixed lightning bolt, independent of percentage.
+          const bool showsPercentage = style != ReaderStatusBarBatteryStyle::IconOnly || !gpio.isUsbConnected();
+          if ((showsPercentage && low == high) || drawSample(10) != low) {
+            fail("Reader bar ignored its frame's battery snapshot (style=%d, position=%d)", static_cast<int>(style),
+                 static_cast<int>(position));
+          }
+        }
+      }
+      content.batteryPercentage = 13;
+      batteryBar.batteryStyle = ReaderStatusBarBatteryStyle::IconAndPercent;
+      renderer.clearScreen();
+      GUI.drawReaderStatusBar(renderer, ReaderStatusBarPosition::Top, content, &batteryBar);
+      GUI.drawReaderStatusBar(renderer, ReaderStatusBarPosition::Bottom, content, &batteryBar);
+      capture("battery-shared-snapshot-13");
+      LOG_INF("SMOKE", "Battery frame snapshots verified across both bars and all styles");
+    }
+    {
       // Centered bars: every separator, then a long title on a bookmarked page.
       renderer.setOrientation(GfxRenderer::Portrait);
       ReaderStatusBarContent content;
@@ -7423,8 +7459,8 @@ class SimulatorSmokeTest {
         if (std::getenv("CROSSINK_SIMULATOR_SMOKE_FRONTLIGHT_LAYOUT")) {
           if (!mappedInputManager.hasHomeKey() || !mappedInputManager.hasTouchHardware())
             fail("Frontlight layout regression requires the X4 Pro simulator");
-          activityManager.replaceActivity(std::make_unique<HomeActivity>(renderer, mappedInputManager));
-          queueStep("Frontlight layout Home", SmokeStep::FrontlightLayout, 4);
+          activityManager.goToReader(std::getenv("CROSSINK_SIMULATOR_SMOKE_BOOK"), true);
+          queueStep("Frontlight layout reader", SmokeStep::FrontlightLayout, 12);
           break;
         }
         if (std::getenv("CROSSINK_SIMULATOR_SMOKE_TILT_SETTINGS")) {
@@ -8534,18 +8570,27 @@ class SimulatorSmokeTest {
 
       case SmokeStep::FrontlightLayout: {
         // Both scales, all four orientations, and all eight themes, with and
-        // without the additional reader progress row.
-        if (frontlightLayoutPass == 128) {
-          LOG_INF("SMOKE", "Frontlight layout: 128 scale/orientation/theme/context combinations passed");
-          step = SmokeStep::Done;
+        // without the reader progress row. Exercise both handle swipes and taps.
+        if (frontlightLayoutPass == 256) {
+          LOG_INF("SMOKE", "Frontlight layout: 256 layout and dismissal combinations passed");
+          FrontlightPanelContext context;
+          context.activeReaderBook = true;
+          activityManager.pushActivity(
+              std::make_unique<FrontlightPanelActivity>(renderer, mappedInputManager, std::move(context)));
+          inputScript = {render("Frontlight before explicit Home", 4), homeTap(), render("Frontlight explicit Home", 8),
+                         assertActivity("Home")};
+          scriptIndex = 0;
+          inputCompletionStep = SmokeStep::Done;
+          step = SmokeStep::ReaderInput;
           break;
         }
+        const unsigned layoutCase = frontlightLayoutPass % 128;
         {
           RenderLock lock;
           SETTINGS.uiScale =
-              (frontlightLayoutPass / 64) ? CrossPointSettings::UI_SCALE_LARGE : CrossPointSettings::UI_SCALE_SMALL;
-          SETTINGS.uiTheme = (frontlightLayoutPass / 8) % 8;
-          renderer.setOrientation(static_cast<GfxRenderer::Orientation>((frontlightLayoutPass / 2) % 4));
+              (layoutCase / 64) ? CrossPointSettings::UI_SCALE_LARGE : CrossPointSettings::UI_SCALE_SMALL;
+          SETTINGS.uiTheme = (layoutCase / 8) % 8;
+          renderer.setOrientation(static_cast<GfxRenderer::Orientation>((layoutCase / 2) % 4));
           UITheme::getInstance().reload();
         }
         FrontlightPanelContext context;
@@ -8595,8 +8640,14 @@ class SimulatorSmokeTest {
         }
         const int x = handle.x + handle.width / 2;
         const int y = handle.y + handle.height / 2;
-        inputScript = {touchDown(x, y), touchRelease(x, y), render("Frontlight closed by visible handle", 4),
-                       assertActivity("Home")};
+        if (frontlightLayoutPass < 128) {
+          const int endY = std::max(0, y - renderer.getScreenHeight() / 3);
+          inputScript = {touchDown(x, y), touchMove(x, endY), touchRelease(x, endY),
+                         render("Frontlight closed by handle swipe", 4), assertActivity("EpubReader")};
+        } else {
+          inputScript = {touchDown(x, y), touchRelease(x, y), render("Frontlight closed by visible handle", 4),
+                         assertActivity("EpubReader")};
+        }
         scriptIndex = 0;
         ++frontlightLayoutPass;
         inputCompletionStep = SmokeStep::FrontlightLayout;

@@ -5,6 +5,21 @@ All POD fields are written in the ESP32 little-endian representation used by
 `Serialization.h`; strings are length-prefixed UTF-8 unless a format notes a
 fixed-size char buffer.
 
+## Server reading streak
+
+`/.crosspoint/server_streak_<source>.bin` caches the combined CrossPoint Sync
+calendar. `<source>` is the MD5 of the server base URL, a newline, and sync
+username; no password is stored. The version 1 payload is 99 bytes: version
+(`uint8_t`), anchor day since 2000-01-01 (`uint32_t`), 92 history bytes (bit N is
+anchor minus N days, LSB first), and longest streak (`uint16_t`). The shared
+`SyncFiles` writer appends CRC32 for a total of 103 bytes, publishes through
+`.tmp`, and retains `.bak` for interruption/corruption recovery.
+
+This is a replaceable server snapshot. Streak displays combine it with local
+history when Reading Stats sync is enabled for the matching account. It is never
+merged into `global_stats.bin`, uploaded as device history, or exported through
+Nearby. Existing stats/cache versions stay unchanged; no cache reset is needed.
+
 ## Bookmark file safety
 
 Bookmark files under `/.crosspoint/bookmarks/` retain their existing binary
@@ -734,7 +749,7 @@ folder already exists.
 | hasId | `uint8` | `1` when `id` is valid |
 | method | `uint8` | `DocumentMatchMethod` the id was computed with |
 | id | 16 bytes | raw KOReader document MD5 |
-| fileSize | `uint32` | book size when `id` was computed; a different size recomputes it |
+| fileSize | `uint32` | book size when `id` was recorded; binary matching samples the current file at lookup |
 | statsStamp | `uint32` | stats catch-up id that last sent this book |
 | clippingsStamp | `uint32` | clippings catch-up id that last sent this book |
 | walkStamp | `uint32` | version 2: first-walk id that finished this book |
