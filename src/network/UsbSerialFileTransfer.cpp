@@ -2,6 +2,7 @@
 
 #include <AppVersion.h>
 #include <Arduino.h>
+#include <BookKey.h>
 #include <FsHelpers.h>
 #include <HalStorage.h>
 #if FREEINK_DEVICE_SILKSCREEN && !defined(SIMULATOR)
@@ -681,7 +682,7 @@ void handleRename() {
     return;
   }
 
-  if (Storage.rename(src, dst)) {
+  if (bookkey::moveFile(src, dst)) {
     library::invalidateLibraryIndex();
     clearCachesForPath(src);
     if (!clearBookCachePreservingUserState(dst, true)) {

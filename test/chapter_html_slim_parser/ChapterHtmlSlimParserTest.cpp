@@ -1,6 +1,7 @@
 #include <Epub/Page.h>
 #include <Epub/converters/ImageDimsProbe.h>
 #include <GfxRenderer.h>
+#include <UniqueCodepointSet.h>
 #include <gtest/gtest.h>
 
 #include <algorithm>
@@ -41,6 +42,7 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
   std::array<BlockStyle, ChapterHtmlSlimParser::MAX_BLOCK_STYLE_DEPTH> blockStyles{};
 
   void SetUp() override {
+    Storage.files.clear();
     GfxRenderer::loanActive = false;
     GfxRenderer::fileProbeHadLoan = false;
     MemoryBudget::imageAllowed = true;
@@ -141,6 +143,41 @@ class ChapterHtmlSlimParserTest : public ::testing::TestWithParam<const char*> {
     EXPECT_EQ(parser.currentPage->elements[0]->yPos, 10);
     EXPECT_EQ(parser.currentPage->elements[1]->yPos, 118);
     EXPECT_EQ(parser.currentPageNextY, 118 + renderer.getLineHeight(0));
+  }
+
+  void expectHeadingSpacing(bool decorated, bool sized, bool extraSpacing) {
+    renderer.scalableBaseSize = sized ? 12 : 0;
+    parser.extraParagraphSpacing = extraSpacing;
+    // Structure and spacing from #913; no book text needed.
+    const XML_Char* wrapper[] = {"style",
+                                 decorated ? "margin:1em auto 1.5em auto;padding:0.3em 1em;background-color:#1A1A1A;"
+                                             "border-top:2px solid;border-bottom:2px solid"
+                                           : "margin:1em auto 1.5em auto;padding:0.3em 1em",
+                                 nullptr};
+    const XML_Char* heading[] = {"style", "margin:0.1em 0", nullptr};
+    ChapterHtmlSlimParser::startElement(&parser, "div", wrapper);
+    const int wrapperBottom = parser.blockStyleBuf_[parser.blockStyleCount_ - 1].bottomInset();
+    ChapterHtmlSlimParser::startElement(&parser, "h2", heading);
+    ChapterHtmlSlimParser::characterData(&parser, "Chapter", 7);
+    ChapterHtmlSlimParser::endElement(&parser, "h2");
+    ChapterHtmlSlimParser::endElement(&parser, "div");
+    for (const char* word : {"First", "Second", "Third"}) {
+      ChapterHtmlSlimParser::startElement(&parser, "p", nullptr);
+      ChapterHtmlSlimParser::characterData(&parser, word, std::strlen(word));
+      ChapterHtmlSlimParser::endElement(&parser, "p");
+    }
+    parser.makePages();
+    ASSERT_TRUE(parser.currentPage);
+    std::vector<int> positions;
+    for (const auto& element : parser.currentPage->elements) {
+      if (element->getTag() == TAG_PageLine) positions.push_back(element->yPos);
+    }
+    ASSERT_EQ(positions.size(), 4u);
+    const int lineHeight = renderer.getLineHeight(0);
+    EXPECT_GE(positions[1] - positions[0], lineHeight + wrapperBottom);
+    const int paragraphStep = lineHeight + (extraSpacing ? lineHeight / 2 : 0);
+    EXPECT_EQ(positions[2] - positions[1], paragraphStep);
+    EXPECT_EQ(positions[3] - positions[2], paragraphStep);
   }
 
   BlockStyle parseParagraph(const char* className) {
@@ -1818,6 +1855,22 @@ TEST_F(ChapterHtmlSlimParserTest, BorderedParagraphAddsABoxAfterItsText) {
             1);
 }
 
+TEST_F(ChapterHtmlSlimParserTest, ChapterHeadingSpacingDoesNotLeakPastFirstParagraph) {
+  expectHeadingSpacing(true, true, false);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, PlainChapterHeadingSpacingDoesNotLeakPastFirstParagraph) {
+  expectHeadingSpacing(false, true, false);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, ChapterHeadingPreservesUserParagraphSpacing) {
+  expectHeadingSpacing(true, true, true);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, FixedFontChapterHeadingKeepsClosingSpacing) {
+  expectHeadingSpacing(true, false, false);
+}
+
 TEST_F(ChapterHtmlSlimParserTest, BareFieldsetFramesChildParagraphsAndRestoresFollowingText) {
   ChapterHtmlSlimParser::startElement(&parser, "fieldset", nullptr);
   ASSERT_EQ(parser.boxScopeCount, 1u);
@@ -2004,6 +2057,33 @@ TEST_F(ChapterHtmlSlimParserTest, BorderedParagraphKeepsClosingPaddingAndMargin)
   const auto& last = parser.currentPage->elements.back();
   ASSERT_EQ(last->getTag(), TAG_PageLine);
   EXPECT_GE(last->yPos, textBottom + 42);
+}
+
+TEST_F(ChapterHtmlSlimParserTest, EmptyBottomBorderKeepsItsMarginBelowTheRule) {
+  const XML_Char* attrs[] = {"style", "border-bottom:2px solid;margin-bottom:20px", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "div", attrs);
+  ChapterHtmlSlimParser::endElement(&parser, "div");
+  ASSERT_TRUE(parser.currentPage);
+  ASSERT_EQ(parser.currentPage->elements.size(), 1u);
+  const auto& rule = parser.currentPage->elements.front();
+  ASSERT_EQ(rule->getTag(), TAG_PageBorderBox);
+  EXPECT_EQ(rule->yPos, 0);
+  EXPECT_EQ(parser.currentPageNextY, 26);  // Six pixels for the box, then its margin.
+}
+
+TEST_F(ChapterHtmlSlimParserTest, EmptyBottomBorderAfterTextKeepsItsMarginBelowTheRule) {
+  ChapterHtmlSlimParser::startElement(&parser, "p", nullptr);
+  ChapterHtmlSlimParser::characterData(&parser, "Before", 6);
+  ChapterHtmlSlimParser::endElement(&parser, "p");
+  const XML_Char* attrs[] = {"style", "border-bottom:2px solid;margin-bottom:20px", nullptr};
+  ChapterHtmlSlimParser::startElement(&parser, "div", attrs);
+  ChapterHtmlSlimParser::endElement(&parser, "div");
+  ASSERT_TRUE(parser.currentPage);
+  ASSERT_EQ(parser.currentPage->elements.size(), 2u);
+  const auto& rule = parser.currentPage->elements.back();
+  ASSERT_EQ(rule->getTag(), TAG_PageBorderBox);
+  EXPECT_EQ(rule->yPos, renderer.getLineHeight(0));
+  EXPECT_EQ(parser.currentPageNextY, renderer.getLineHeight(0) + 26);
 }
 
 TEST_F(ChapterHtmlSlimParserTest, ChildSelectorKeepsAlternativeAncestorMatches) {
@@ -2206,4 +2286,26 @@ TEST(ImageDimsProbe, GifSignaturesAndLittleEndianDimensions) {
   invalid.write(bytes, sizeof(bytes));
   ImageDimensions dims{};
   EXPECT_FALSE(invalid.getDimensions(dims));
+}
+
+TEST_F(ChapterHtmlSlimParserTest, DeferredPrewarmDoesNotDelayBeginAndRestoresParserPosition) {
+  renderer.sdFont = true;
+  Storage.files[filepath] = "<html><body><p>" + std::string(2048, 'a') + " é字 </p></body></html>";
+  parser.setDeferAdvancePrewarm(true);
+  ASSERT_TRUE(parser.beginParse());
+  EXPECT_EQ(renderer.prewarmCalls, 0u);
+  ASSERT_TRUE(parser.parseFile_.seek(19));
+  const auto resume = parser.parseFile_.position();
+  int slices = 0;
+  while (parser.prewarmSectionAdvanceStep()) {
+    EXPECT_EQ(parser.parseFile_.position(), resume);
+    ASSERT_LT(++slices, 100);
+  }
+  EXPECT_GT(renderer.prewarmCalls, 0u);
+  EXPECT_TRUE(std::is_sorted(renderer.prewarmed.begin(), renderer.prewarmed.end()));
+  EXPECT_EQ(std::count(renderer.prewarmed.begin(), renderer.prewarmed.end(), 'a'), 1);
+  EXPECT_EQ(std::count(renderer.prewarmed.begin(), renderer.prewarmed.end(), 0xE9), 1);
+  EXPECT_EQ(std::count(renderer.prewarmed.begin(), renderer.prewarmed.end(), 0x5B57), 1);
+  parser.abortParse();
+  EXPECT_FALSE(parser.prewarmSectionAdvanceStep());
 }

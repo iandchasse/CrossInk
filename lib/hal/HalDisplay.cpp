@@ -2,9 +2,7 @@
 #include <HalGPIO.h>
 #include <Logging.h>
 #include <PowerManager.h>
-#if FREEINK_CAP_DISPLAY_PROBE_POLICY
 #include <XteinkDetect.h>
-#endif
 
 #include "HalSpiBus.h"
 
@@ -30,17 +28,44 @@ HalDisplay::HalDisplay() : einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_R
 
 HalDisplay::~HalDisplay() {}
 
-void HalDisplay::begin(bool seamless) {
-  HalSpiBus::Lock spiLock;
-
-  // Set X3-specific panel mode before initializing. This is the X3 board's call: the Silkscreen
-  // 3.68" variant's facade is in X3 mode from construction and has no X3 board to detect.
-  if (gpio.deviceIsX3()) {
-    einkDisplay.setDisplayX3();
+void HalDisplay::startBegin() {
+#if !defined(SIMULATOR) && FREEINK_DEVICE_X4PRO
+  if (hardwareReady || beginDone) return;
+  beginDone = xSemaphoreCreateBinaryStatic(&beginDoneStorage);
+  // Initialization uses a temporary 6 KiB stack; it is returned before rendering.
+  if (xTaskCreate(
+          [](void* context) {
+            auto* self = static_cast<HalDisplay*>(context);
+            self->beginHardware();
+            xSemaphoreGive(self->beginDone);
+            vTaskDelete(nullptr);
+          },
+          "displayInit", 6144, this, 1, nullptr) != pdPASS) {
+    beginDone = nullptr;
+    LOG_ERR("HAL", "Display init task unavailable; using synchronous startup");
   }
+#endif
+}
 
+void HalDisplay::beginHardware() {
+  HalSpiBus::Lock spiLock;
+#if !defined(SIMULATOR) && !FREEINK_MCU_C3 && !FREEINK_CAP_DISPLAY_PROBE_POLICY
+  freeink::applyXteinkDisplayController();
+#endif
+  if (gpio.deviceIsX3()) einkDisplay.setDisplayX3();
   einkDisplay.begin();
+  hardwareReady = true;
+}
 
+void HalDisplay::begin(bool seamless) {
+#ifndef SIMULATOR
+  if (beginDone) {
+    xSemaphoreTake(beginDone, portMAX_DELAY);
+    beginDone = nullptr;
+  }
+#endif
+  if (!hardwareReady) beginHardware();
+  HalSpiBus::Lock spiLock;
   if (seamless) {
     // Defuse the SDK's X3 _x3InitialFullSyncsRemaining counter (no-op on X4)
     // so the first paint isn't promoted to FULL (~770ms). Skips the wakeup-
@@ -113,6 +138,9 @@ void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
 }
 
 void HalDisplay::waitRefreshComplete() { einkDisplay.waitRefreshComplete(); }
+#if FREEINK_DEVICE_PICCO
+void HalDisplay::powerOffBetweenFrames() { einkDisplay.powerOffBetweenFrames(); }
+#endif
 
 bool HalDisplay::supportsAsyncRefresh() const { return einkDisplay.supportsAsyncRefresh(); }
 
@@ -243,3 +271,21 @@ uint16_t HalDisplay::getDisplayHeight() const { return einkDisplay.getDisplayHei
 uint16_t HalDisplay::getDisplayWidthBytes() const { return einkDisplay.getDisplayWidthBytes(); }
 
 uint32_t HalDisplay::getBufferSize() const { return einkDisplay.getBufferSize(); }
+
+bool HalDisplay::supportsDeferredGrayscaleBase() const {
+#ifdef SIMULATOR
+  return false;
+#else
+  return einkDisplay.supportsDeferredGrayscaleBase();
+#endif
+}
+
+bool HalDisplay::displayGrayscaleBaseAsync(RefreshMode fallback) {
+#ifdef SIMULATOR
+  displayGrayscaleBase(fallback);
+  return false;
+#else
+  HalSpiBus::Lock spiLock;
+  return einkDisplay.displayGrayscaleBaseAsync(convertRefreshMode(fallback));
+#endif
+}

@@ -30,7 +30,9 @@
 #include "StablePageSelectionModel.h"
 #include "activities/reader/ControlsOptionsActivity.h"
 #include "activities/settings/StatusBarSettingsActivity.h"
+#include "util/ImageDisplayMode.h"
 #if CROSSINK_SCALABLE_FONTS
+#include "BookFontSystem.h"
 #include "activities/settings/TtfRenderOptionsActivity.h"
 #endif
 #include "components/DrawerHandle.h"
@@ -650,14 +652,15 @@ void EpubReaderDrawerActivity::rebuildTtfRenderingRows() {
   state.paneTopIndex = std::min<int16_t>(state.paneTopIndex, static_cast<int16_t>(paneRows.size() - 1));
 }
 
-void EpubReaderDrawerActivity::saveTtfRenderingProfile() {
+bool EpubReaderDrawerActivity::saveTtfRenderingProfile() {
   const char* const family = draft.sdFontFamilyName.data();
-  if (ttfRenderProfile == TTF_RENDER_PROFILES.profileFor(family)) return;
+  if (ttfRenderProfile == TTF_RENDER_PROFILES.profileFor(family)) return true;
   if (!TTF_RENDER_PROFILES.setProfile(family, ttfRenderProfile)) {
     LOG_ERR("ERDM", "Failed to save TTF rendering profile for %s", family);
-    return;
+    return false;
   }
   ttfRenderingChanged = ttfRenderProfile != initialTtfRenderProfile;
+  return true;
 }
 
 void EpubReaderDrawerActivity::finishTtfRenderingEdit() {
@@ -1060,6 +1063,10 @@ bool EpubReaderDrawerActivity::showsSamplePreview() const {
   return readerDrawerShowsSamplePreview(state.pane, state.tab, enumOptionRow);
 }
 
+bool EpubReaderDrawerActivity::showsSamplePreviewAaNote(const ReaderSettingsDraft& settings) const {
+  return CROSSINK_APP_READER_SAMPLE_PREVIEW && state.pane == ReaderDrawerPane::FontFamily && settings.textAntiAliasing;
+}
+
 bool EpubReaderDrawerActivity::samplePreviewBesideControls() const {
   return readerDrawerSamplePreviewBesideControls(isLandscapeOrientation(renderer.getOrientation()));
 }
@@ -1350,6 +1357,7 @@ void EpubReaderDrawerActivity::buildRows(UiApp::ScreenType& screen) {
     props.action = ACTION_ROW;
     props.valueId = static_cast<int16_t>(top + i);
     props.drawChevron = rowShowsNavigationCaret(row);
+    props.enabled = row != RowId::FontFamily || !publisherBodyFontActive();
     props.labelText = screen.theme().bodyText;
     props.valueText = screen.theme().smallText;
     if (buttonDevice) props.minTouchSize = rowHeight;
@@ -1365,7 +1373,15 @@ void EpubReaderDrawerActivity::buildRows(UiApp::ScreenType& screen) {
       toggle.toggleValue = static_cast<int16_t>(top + i);
       screen.toggleRow(toggle, buttonDevice ? rowHeight : 0);
     } else {
+      const fui::Rect rowBounds{screen.body().x, screen.body().y, screen.body().width, rowHeight};
       screen.settingRow(props, buttonDevice ? rowHeight : 0);
+      if (!props.enabled) {
+        // This renderer predates the SDK's gray-text API. A transparent white
+        // checker mask dims only the row's existing ink, with no extra buffer.
+        static constexpr uint8_t dimMask[] = {0x80, 0x40};
+        screen.target().bitmap(rowBounds, fui::BitmapRef{dimMask, 2, 2, fui::BitmapFormat::BW1}, fui::BitmapMode::Tile,
+                               fui::Paint::solid(fui::Color::White));
+      }
     }
   }
   fui::drawListScrollIndicator(screen.target(), drawerScrollbarBounds(listBounds), rows.size(), visibleRows, top,
@@ -1969,14 +1985,20 @@ void EpubReaderDrawerActivity::activateRow(const RowId row) {
       saveTtfRenderingProfile();
       requestUpdate();
       return;
-    case RowId::TtfReset:
+    case RowId::TtfReset: {
+      const TtfRenderProfile previous = ttfRenderProfile;
       ttfRenderProfile = {};
+      const bool saved = saveTtfRenderingProfile();
+      if (!saved) ttfRenderProfile = previous;
       rebuildTtfRenderingRows();
-      saveTtfRenderingProfile();
+      static constexpr StrId options[] = {StrId::STR_OK};
+      ttfResetPopup.show(saved ? StrId::STR_TTF_DEFAULTS_RESET : StrId::STR_TTF_RESET_FAILED, options, 1, 0, nullptr);
       requestUpdate();
       return;
+    }
 #endif
     case RowId::FontFamily:
+      if (publisherBodyFontActive()) return;
       discoverFonts();
       openPane(ReaderDrawerPane::FontFamily);
       return;
@@ -2078,7 +2100,6 @@ void EpubReaderDrawerActivity::activateRow(const RowId row) {
       closeAndReturn(false, EpubReaderMenuAction::RESET_BOOK_READER_SETTINGS);
       return;
     case RowId::TextAa:
-    case RowId::ImageGrayscale:
     case RowId::Focus:
     case RowId::GuideDots:
     case RowId::Hyphenation:
@@ -2161,9 +2182,6 @@ void EpubReaderDrawerActivity::activateRow(const RowId row) {
 
 void EpubReaderDrawerActivity::toggleSetting(const RowId row) {
   switch (row) {
-    case RowId::ImageGrayscale:
-      draft.imageGrayscale = !draft.imageGrayscale;
-      break;
     case RowId::TextAa:
       draft.textAntiAliasing = !draft.textAntiAliasing;
       break;
@@ -2195,8 +2213,6 @@ void EpubReaderDrawerActivity::toggleSetting(const RowId row) {
     // Anti-aliasing changes pixels only. Rebuilding the EPUB section here
     // makes the in-drawer preview appear to zoom while the page reflows.
     markSettingChanged(ReaderSettingsChangeMask::Preview | ReaderSettingsChangeMask::NonLayout);
-  } else if (row == RowId::ImageGrayscale) {
-    markSettingChanged(ReaderSettingsChangeMask::NonLayout);
   } else {
     const bool previews = row == RowId::Focus || row == RowId::GuideDots;
     markSettingChanged(previews ? ReaderSettingsChangeMask::Preview | ReaderSettingsChangeMask::Relayout
@@ -2259,9 +2275,10 @@ void EpubReaderDrawerActivity::showEnumOptions(const RowId row) {
       break;
     case RowId::Images:
       title = StrId::STR_IMAGES;
-      labels = {tr(STR_IMAGES_DISPLAY), tr(STR_IMAGES_PLACEHOLDER), tr(STR_IMAGES_SUPPRESS)};
-      raw = {0, 1, 2};
-      currentRaw = draft.imageRendering;
+      labels = {tr(STR_IMAGES_DISPLAY), tr(STR_IMAGES_DISPLAY_BW), tr(STR_IMAGES_PLACEHOLDER), tr(STR_IMAGES_SUPPRESS)};
+      raw = {ImageDisplayMode::Grayscale, ImageDisplayMode::BlackAndWhite, ImageDisplayMode::Placeholder,
+             ImageDisplayMode::Hidden};
+      currentRaw = ImageDisplayMode::selected(draft.imageRendering, draft.imageGrayscale);
       break;
     case RowId::RenderMode:
       title = StrId::STR_EPUB_RENDER_MODE;
@@ -2391,7 +2408,7 @@ void EpubReaderDrawerActivity::selectEnumOption(const int index) {
       markSettingChanged(ReaderSettingsChangeMask::Relayout);
       break;
     case RowId::Images:
-      draft.imageRendering = value;
+      ImageDisplayMode::apply(value, draft.imageRendering, draft.imageGrayscale);
       markSettingChanged(ReaderSettingsChangeMask::NonLayout);
       break;
     case RowId::RenderMode:
@@ -2790,7 +2807,8 @@ void EpubReaderDrawerActivity::renderPreviewContents(const ReaderSettingsDraft& 
   if (CROSSINK_APP_READER_SAMPLE_PREVIEW) {
     const auto& metrics = UITheme::getInstance().getMetrics();
     const int labelTextHeight = renderer.getTextHeight(UI_10_FONT_ID);
-    const int noteHeight = previewSettings.textAntiAliasing ? labelTextHeight + 2 : 0;
+    const bool showAaNote = showsSamplePreviewAaNote(previewSettings);
+    const int noteHeight = showAaNote ? labelTextHeight + 2 : 0;
     const char* name = previewSettings.sdFontFamilyName[0]
                            ? previewSettings.sdFontFamilyName.data()
                            : (previewSettings.fontFamily == 0 ? tr(STR_LEXEND_DECA) : tr(STR_BITTER));
@@ -2802,7 +2820,7 @@ void EpubReaderDrawerActivity::renderPreviewContents(const ReaderSettingsDraft& 
     renderer.beginTextClip(preview.x, preview.y, preview.width, preview.height);
     renderer.drawText(UI_10_FONT_ID, preview.x + metrics.previewPadding, labelY, label,
                       ReaderUtils::readerForegroundBlack());
-    if (previewSettings.textAntiAliasing) {
+    if (showAaNote) {
       std::snprintf(label, sizeof(label), "%s: %s", tr(STR_TEXT_AA), tr(STR_PREVIEW_UNAVAILABLE));
       renderer.drawText(SMALL_FONT_ID, preview.x + metrics.previewPadding, labelY + labelTextHeight + 6, label,
                         ReaderUtils::readerForegroundBlack());
@@ -2869,7 +2887,7 @@ void EpubReaderDrawerActivity::renderSamplePreviewText(const ReaderSettingsDraft
   const fui::Rect area = previewBounds();
   const int labelTextHeight = renderer.getTextHeight(UI_10_FONT_ID);
   const int labelHeight =
-      labelTextHeight + (settings.textAntiAliasing ? labelTextHeight + 2 : 0) + metrics.previewPadding + 8;
+      labelTextHeight + (showsSamplePreviewAaNote(settings) ? labelTextHeight + 2 : 0) + metrics.previewPadding + 8;
   const int textHeight = std::max(0, area.height - labelHeight - metrics.previewPadding);
   // The sample is a short page: show top AND bottom margins proportionally
   // to its height, while horizontal margins and font sizes remain actual pixels.
@@ -2986,6 +3004,17 @@ void EpubReaderDrawerActivity::renderPreviewWithAntiAliasing(const int previewFo
 }
 
 void EpubReaderDrawerActivity::loop() {
+#if CROSSINK_SCALABLE_FONTS
+  if (ttfResetPopup.handleInput(mappedInput, [this] { requestUpdate(); })) {
+    if (!ttfResetPopup.isActive()) {
+      // The centered popup can cover reader pixels above the drawer. Restore
+      // the book backdrop as well as any draft preview before repainting.
+      activityManager.restoreBackdropBehindCurrentOverlay();
+      previewDirty = true;
+    }
+    return;
+  }
+#endif
   if (mappedInput.wasBottomEdgeUpSwipe()) {
     closeAndReturn(false, EpubReaderMenuAction::GO_HOME, false);
     return;
@@ -3214,6 +3243,10 @@ void EpubReaderDrawerActivity::loop() {
 }
 
 void EpubReaderDrawerActivity::render(RenderLock&&) {
+#if CROSSINK_SCALABLE_FONTS
+  if (ttfResetPopup.processRender(renderer, mappedInput)) return;
+  resolvePublisherBodyFontName();
+#endif
   const bool buttonDevice = !mappedInput.hasTouchHardware();
   const int16_t drawerEdge =
       buttonDevice ? drawerHeight() : static_cast<int16_t>(renderer.getScreenHeight() - drawerHeight());
@@ -3373,8 +3406,6 @@ const char* EpubReaderDrawerActivity::rowLabel(const RowId row) const {
       return tr(STR_EMBEDDED_STYLE);
     case RowId::Images:
       return tr(STR_IMAGES);
-    case RowId::ImageGrayscale:
-      return tr(STR_IMAGE_GRAYSCALE);
     case RowId::SelectChapter:
       return tr(STR_SELECT_CHAPTER);
     case RowId::GoToPercent:
@@ -3469,9 +3500,37 @@ const char* EpubReaderDrawerActivity::rowLabel(const RowId row) const {
   return "";
 }
 
+bool EpubReaderDrawerActivity::publisherBodyFontActive() const {
+#if CROSSINK_SCALABLE_FONTS
+  return draft.publisherFonts == static_cast<uint8_t>(PublisherFonts::All) && draft.embeddedStyle &&
+         draft.epubRenderMode != static_cast<uint8_t>(EpubRenderMode::Light) && publisherBodyFontName[0];
+#else
+  return false;
+#endif
+}
+
+#if CROSSINK_SCALABLE_FONTS
+void EpubReaderDrawerActivity::resolvePublisherBodyFontName() {
+  if (publisherBodyFontNameResolved || state.pane != ReaderDrawerPane::ReaderFont || !epub || !draft.embeddedStyle ||
+      draft.publisherFonts != static_cast<uint8_t>(PublisherFonts::All) ||
+      draft.epubRenderMode == static_cast<uint8_t>(EpubRenderMode::Light))
+    return;
+  publisherBodyFontNameResolved = true;
+  if (!bookFontSystem.loadedFaces()) return;
+  if (publisherBodyFontProbe) publisherBodyFontFamily = publisherBodyFontProbe(publisherBodyFontContext);
+  // This informational row must not load fonts or change their admission order.
+  if (!bookFontSystem.hasLoadedFamily(publisherBodyFontFamily)) return;
+  if (!bookFontSystem.copyFamilyName(publisherBodyFontFamily, publisherBodyFontName, sizeof(publisherBodyFontName)))
+    std::snprintf(publisherBodyFontName, sizeof(publisherBodyFontName), "%s", tr(STR_PUBLISHER_FONTS));
+}
+#endif
+
 const char* EpubReaderDrawerActivity::rowValue(const RowId row, char* buffer, const size_t bufferSize) const {
   switch (row) {
     case RowId::FontFamily: {
+#if CROSSINK_SCALABLE_FONTS
+      if (publisherBodyFontActive()) return publisherBodyFontName;
+#endif
       if (draft.sdFontFamilyName[0] != '\0') return draft.sdFontFamilyName.data();
       static constexpr std::array<StrId, CrossPointSettings::BUILTIN_FONT_COUNT> labels = {StrId::STR_LEXEND_DECA,
                                                                                            StrId::STR_BITTER};
@@ -3514,9 +3573,10 @@ const char* EpubReaderDrawerActivity::rowValue(const RowId row, char* buffer, co
       return I18N.get(labels[std::min<size_t>(draft.publisherFonts, labels.size() - 1)]);
     }
     case RowId::Images: {
-      static const std::array<StrId, 3> labels = {StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_PLACEHOLDER,
-                                                  StrId::STR_IMAGES_SUPPRESS};
-      return I18N.get(labels[std::min<size_t>(draft.imageRendering, labels.size() - 1)]);
+      static constexpr std::array<StrId, ImageDisplayMode::Count> labels = {
+          StrId::STR_IMAGES_DISPLAY, StrId::STR_IMAGES_DISPLAY_BW, StrId::STR_IMAGES_PLACEHOLDER,
+          StrId::STR_IMAGES_SUPPRESS};
+      return I18N.get(labels[ImageDisplayMode::selected(draft.imageRendering, draft.imageGrayscale)]);
     }
     case RowId::RenderMode: {
       static const std::array<StrId, 3> labels = {StrId::STR_RENDER_MODE_CROSSINK_DEFAULT,
@@ -3550,7 +3610,6 @@ bool EpubReaderDrawerActivity::rowIsToggle(const RowId row) const {
     case RowId::TrackBookStats:
     case RowId::NightMode:
     case RowId::TextAa:
-    case RowId::ImageGrayscale:
     case RowId::Focus:
     case RowId::GuideDots:
     case RowId::Hyphenation:
@@ -3600,8 +3659,6 @@ bool EpubReaderDrawerActivity::rowToggleValue(const RowId row) const {
       return SETTINGS.screenInverted != 0;
     case RowId::TextAa:
       return draft.textAntiAliasing;
-    case RowId::ImageGrayscale:
-      return draft.imageGrayscale;
     case RowId::Focus:
       return draft.focusReadingEnabled;
     case RowId::GuideDots:

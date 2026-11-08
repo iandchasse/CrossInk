@@ -10,8 +10,11 @@ class HalFrontlight {
  public:
   static HalFrontlight& getInstance() { return instance; }
 
-  // Bring up the PWM channel(s) and apply the given persisted state. With the
-  // load probe, a light the SDK records as absent is not switched on.
+  // Detect and initialize the driver before settings validate light actions.
+  // Does not apply saved light state; safe to call again when restoring it.
+  void initializeHardware();
+
+  // Apply the given persisted state, initializing the driver if needed.
   void begin(uint8_t brightness, uint8_t warmth, bool on);
 
   bool present() const { return manager.present(); }
@@ -101,6 +104,7 @@ class HalFrontlight {
   HalFrontlight() = default;
 
   FrontlightManager manager;
+  bool initialized = false;
   // The SDK manager folds "off" into brightness 0; keep the user's level and
   // the on/off state separate so toggling restores the previous level.
   uint8_t lastBrightness = 60;

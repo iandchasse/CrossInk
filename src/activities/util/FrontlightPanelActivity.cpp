@@ -95,16 +95,19 @@ void FrontlightPanelActivity::onEnter() {
   warmth = Frontlight.warmth();
   // A single-colour light: warmth is the string that lights, and that is saved.
   if (warmthLocked()) warmth = Frontlight.stringMissing(true) ? 0 : 100;
-  lightOn = Frontlight.isOn();
+  observedLightOn = Frontlight.isOn();
   navKeysArmed = !boardHasFrontButtons();
 #if FREEINK_CAP_FRONTLIGHT_PROBE
   // Also after a switch-on elsewhere, or a restore at wake, found no light.
-  noLightNote = !lightOn && Frontlight.noLightFound();
+  noLightNote = !observedLightOn && Frontlight.noLightFound();
 #endif
   initialInversion = SETTINGS.screenInverted;
   initialTouchscreenDisabled = SETTINGS.disableReaderTouchscreen;
-  pendingTouchscreenDisabled = initialTouchscreenDisabled;
   mappedInput.setReaderTouchscreenOverride(true);
+  // Picco also locks touch outside readers. Keep this recovery panel usable,
+  // preserving an outer recovery session when the drawer is nested.
+  previousTouchscreenRecoveryOverride = mappedInput.isTouchscreenRecoveryOverrideEnabled();
+  mappedInput.setTouchscreenRecoveryOverride(true);
 
   uiReady = false;
   applySharedUiTheme(app, uiTarget);
@@ -123,29 +126,29 @@ void FrontlightPanelActivity::onEnter() {
 void FrontlightPanelActivity::onExit() {
   // Debounced persistence: one SPIFFS write on close, never per slider tick.
   const bool inversionChanged = initialInversion != static_cast<bool>(SETTINGS.screenInverted);
-  const bool touchscreenChanged = initialTouchscreenDisabled != pendingTouchscreenDisabled;
-  SETTINGS.disableReaderTouchscreen = pendingTouchscreenDisabled ? 1 : 0;
-  const bool frontlightChanged =
-      !context.showReaderDetails && (SETTINGS.frontlightBrightness != brightness ||
-                                     SETTINGS.frontlightWarmth != warmth || SETTINGS.frontlightOn != (lightOn ? 1 : 0));
+  const bool touchscreenChanged = initialTouchscreenDisabled != static_cast<bool>(SETTINGS.disableReaderTouchscreen);
+  const bool frontlightChanged = !context.showReaderDetails &&
+                                 (SETTINGS.frontlightBrightness != brightness || SETTINGS.frontlightWarmth != warmth ||
+                                  SETTINGS.frontlightOn != (Frontlight.isOn() ? 1 : 0));
   if (frontlightChanged || inversionChanged || touchscreenChanged) {
     if (!context.showReaderDetails) {
       SETTINGS.frontlightBrightness = brightness;
       SETTINGS.frontlightWarmth = warmth;
-      SETTINGS.frontlightOn = lightOn ? 1 : 0;
+      SETTINGS.frontlightOn = Frontlight.isOn() ? 1 : 0;
     }
     // The drawer can be opened over a dictionary or another reader child.
     // Find the owning reader so its per-book values stay out of the global file.
     activityManager.persistGlobalSettings();
   }
   mappedInput.setReaderTouchscreenOverride(false);
+  mappedInput.setTouchscreenRecoveryOverride(previousTouchscreenRecoveryOverride);
   Activity::onExit();
 }
 
 void FrontlightPanelActivity::onExternalFrontlightChange() {
   brightness = Frontlight.brightness();
   warmth = Frontlight.warmth();
-  lightOn = Frontlight.isOn();
+  observedLightOn = Frontlight.isOn();
   requestUpdate();
 }
 
@@ -155,11 +158,8 @@ void FrontlightPanelActivity::onBrightnessEvent(const fui::ActionEvent& event, v
   self->brightness = percentFromPermille(event.dragPermille);
   Frontlight.setBrightness(self->brightness);
   // Adjusting brightness while off is an obvious "I want light" intent.
-  if (!self->lightOn && self->levelSwitchesOn()) {
-    self->lightOn = true;
-    Frontlight.setOn(true);
-  }
-  // Also a level raised from 0 while on, which lights the light again.
+  if (self->levelSwitchesOn()) Frontlight.setOn(true);
+  self->observedLightOn = Frontlight.isOn();
   self->noteSwitchOnResult();
 }
 
@@ -198,10 +198,8 @@ void FrontlightPanelActivity::adjustBrightness(const int delta) {
   if (next == brightness) return;
   brightness = static_cast<uint8_t>(next);
   Frontlight.setBrightness(brightness);
-  if (!lightOn && levelSwitchesOn()) {
-    lightOn = true;
-    Frontlight.setOn(true);
-  }
+  if (levelSwitchesOn()) Frontlight.setOn(true);
+  observedLightOn = Frontlight.isOn();
   noteSwitchOnResult();
   requestUpdate();
 }
@@ -244,10 +242,8 @@ void FrontlightPanelActivity::stepWarmthByKey(const bool warmer) {
 }
 
 void FrontlightPanelActivity::toggleLight() {
-  // From the live state: a light the LED monitor switched off reads off, so the
-  // first press is the retry.
-  lightOn = !Frontlight.isOn();
-  Frontlight.setOn(lightOn);
+  Frontlight.setOn(!Frontlight.isOn());
+  observedLightOn = Frontlight.isOn();
   noteSwitchOnResult();
   requestUpdate();
 }
@@ -256,7 +252,7 @@ void FrontlightPanelActivity::toggleLight() {
 void FrontlightPanelActivity::noteSwitchOnResult() {
   if (Frontlight.takeNoLightNotice()) {
     noLightNote = true;
-    lightOn = false;
+    observedLightOn = false;
   } else if (Frontlight.isOn()) {
     noLightNote = false;
   }
@@ -272,7 +268,7 @@ void FrontlightPanelActivity::syncLightState() {
   // the result here, shows the note and leaves the light saved as off on close.
   if (!context.showReaderDetails && !awaitingSwitchOnResult && Frontlight.switchOnPending()) {
     awaitingSwitchOnResult = true;
-    lightOn = true;
+    observedLightOn = true;
     requestUpdate();
   }
   if (awaitingSwitchOnResult && !Frontlight.switchOnPending()) noteSwitchOnResult();
@@ -309,13 +305,9 @@ void FrontlightPanelActivity::drawNote(UiApp::ScreenType& screen, const char* te
 #endif
 
 void FrontlightPanelActivity::toggleReaderTouchscreen() {
-  pendingTouchscreenDisabled = !pendingTouchscreenDisabled;
-  {
-    RenderLock lock;
-    BookActions::drawToast(renderer,
-                           pendingTouchscreenDisabled ? tr(STR_TOUCHSCREEN_DISABLED) : tr(STR_TOUCHSCREEN_ENABLED));
-  }
-  delay(1000);
+  SETTINGS.disableReaderTouchscreen = SETTINGS.disableReaderTouchscreen ? 0 : 1;
+  BookActions::showTouchscreenToast(renderer, activityManager.isReaderActivity(),
+                                    BookActions::TouchscreenToggleSource::FrontlightDrawer);
   requestUpdate();
 }
 
@@ -428,8 +420,8 @@ void FrontlightPanelActivity::loop() {
 
   // A power-button shortcut can change the light globally while this panel is
   // open. Keep the panel's state and eventual persistence in sync.
-  if (!context.showReaderDetails && lightOn != Frontlight.isOn()) {
-    lightOn = Frontlight.isOn();
+  if (!context.showReaderDetails && observedLightOn != Frontlight.isOn()) {
+    observedLightOn = Frontlight.isOn();
     requestUpdate();
   }
 
@@ -720,7 +712,7 @@ void FrontlightPanelActivity::buildPanelScreen(UiApp::ScreenType& screen) {
     const std::array<fui::BitmapRef, 5> icons = {
         fui::bitmapFromIcon(icon_reading_stats_24), fui::bitmapFromIcon(icon_transfer_24),
         fui::bitmapFromIcon(icon_tabler_moon_filled_24), fui::bitmapFromIcon(icon_sliders_horizontal_24),
-        fui::bitmapFromIcon(pendingTouchscreenDisabled ? icon_device_tablet_off_24 : icon_device_tablet_24)};
+        fui::bitmapFromIcon(SETTINGS.disableReaderTouchscreen ? icon_device_tablet_off_24 : icon_device_tablet_24)};
     for (int16_t slotIndex = 0; slotIndex < slotCount; ++slotIndex) {
       const int16_t i = tiles[static_cast<size_t>(slotIndex)];
       const int16_t x = static_cast<int16_t>(actionBar.x + slotIndex * slotWidth);

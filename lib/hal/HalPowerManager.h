@@ -12,6 +12,10 @@
 
 #include "HalGPIO.h"
 
+#if FREEINK_DEVICE_PICCO
+#include <BatteryEstimate.h>
+#endif
+
 // Opt-in battery telemetry for diagnosing a miscalibrated fuel gauge. Off in
 // every shipping environment; the `debug` PlatformIO env sets it to 1. Defined
 // here because this is the lowest layer that consumes it.
@@ -33,6 +37,13 @@ class HalPowerManager {
   mutable bool _batteryPollStarted = false;      // Zero percent and millis() == 0 are valid samples.
   mutable bool _noCellCached = false;            // noChargeableCell()'s last answer
   mutable unsigned long _noCellPolledMs = 0;     // and when it was read, 0 = never
+
+#if FREEINK_DEVICE_PICCO
+  mutable BatteryEstimate _batteryEstimate;
+  mutable uint64_t _batterySampleRtcMs = 0;
+  bool _batteryResumed = false;
+  uint16_t getPiccoBatteryPercentage() const;
+#endif
 
   uint32_t lockCount = 0;                 // Overlapping jobs keep full speed until the last lock ends.
   SemaphoreHandle_t modeMutex = nullptr;  // Protect access to lockCount and CPU mode
@@ -77,6 +88,12 @@ class HalPowerManager {
   // as startDeepSleep() does. Boards without the SDK power policy take no such
   // sleep, and get startDeepSleep().
   void startDeepSleepMinimal(HalGPIO& gpio) const;
+#if FREEINK_DEVICE_PICCO
+  // Called once at startup. USB light-sleep wakes use an intentional restart.
+  void restoreBatteryAfterSleep(bool usbSleepWake);
+  // Remain in light sleep on USB power; true means Power requested wake.
+  bool holdWhileUsbPowered(HalGPIO& gpio) const;
+#endif
 
   // Boot-time sleep decisions (BoardConfig::powerPolicy(), Silkscreen). Each is
   // false, or a no-op, on boards whose profile sets none of these fields.
@@ -232,6 +249,17 @@ class HalPowerManager {
     bool socKnown = false;
     bool millivoltsKnown = false;
     bool chargingKnown = false;
+    uint16_t displayedPercent = 0;
+    bool displayedKnown = false;
+    bool externalPower = false;
+    bool externalPowerKnown = false;
+    bool chargeComplete = false;
+    bool chargeCompleteKnown = false;
+    int16_t chargerStatus = -1;
+    int16_t estimateState = -1;
+    uint32_t settlingMs = 0;
+    uint32_t sampleAgeMs = 0;
+    bool resumed = false;
   };
 
   // Samples the battery backend directly, bypassing getBatteryPercentage()'s

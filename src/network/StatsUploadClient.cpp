@@ -2,6 +2,7 @@
 
 #include <ArduinoJson.h>
 #include <HalPowerManager.h>
+#include <HalStorage.h>
 #include <I18n.h>
 #include <KOReaderCredentialStore.h>
 #include <KOReaderSyncClient.h>
@@ -43,6 +44,9 @@ struct StatsUploadClient::Impl {
 // Keep the client and bounded reply buffer off the small main-task stack.
 StatsUploadClient::StatsUploadClient() : impl(makeUniqueNoThrow<Impl>()) {}
 StatsUploadClient::~StatsUploadClient() = default;
+void StatsUploadClient::close() {
+  if (impl) impl->http.end();
+}
 
 bool StatsUploadClient::deviceId(char* out, const size_t capacity) {
   if (KOReaderSyncClient::readerId(out, capacity)) return true;
@@ -50,7 +54,7 @@ bool StatsUploadClient::deviceId(char* out, const size_t capacity) {
   return false;
 }
 
-StatsUploadClient::Result StatsUploadClient::put(const char* endpoint, const char* payload, const bool book,
+StatsUploadClient::Result StatsUploadClient::put(const char* endpoint, const char* payload, const unsigned bookCount,
                                                  const bool daily, const char* sessionId) {
   if (!impl) {
     LOG_ERR("StatsSync", "Cannot allocate HTTP client");
@@ -97,7 +101,7 @@ StatsUploadClient::Result StatsUploadClient::put(const char* endpoint, const cha
                                       });
   complete = http.responseComplete();
 #endif
-  LOG_INF("StatsSync", "Upload response: HTTP %d", status);
+  LOG_INF("StatsSync", "PUT %s: HTTP %d", endpoint, status);
   // A missing sessions endpoint on an older Sync server does not invalidate
   // support for the existing stats endpoints. Keep the outbox for an upgrade.
   if (!sessionId) recordMissingApi(status);
@@ -116,12 +120,71 @@ StatsUploadClient::Result StatsUploadClient::put(const char* endpoint, const cha
       (sessionId && (!reply["accepted_session_ids"].is<JsonArray>() || reply["accepted_session_ids"].size() != 1 ||
                      !reply["accepted_session_ids"][0].is<const char*>() ||
                      strcmp(reply["accepted_session_ids"][0].as<const char*>(), sessionId) != 0)) ||
-      (book && (!reply["accepted"].is<unsigned>() || reply["accepted"].as<unsigned>() != 1)) ||
+      (bookCount && (!reply["accepted"].is<unsigned>() || reply["accepted"].as<unsigned>() != bookCount)) ||
       (daily && (!reply["accepted_daily"].is<unsigned>() || reply["accepted_daily"].as<unsigned>() != 1))) {
     return failure(Result::InvalidResponse);
   }
   // Only a valid extension reply proves support; a catch-all 200 page does not.
   KOREADER_STORE.setServerSupport(SyncServerSupport::SUPPORTED);
+  return Result::Ok;
+}
+
+StatsUploadClient::Result StatsUploadClient::get(const char* endpoint, const char* responsePath,
+                                                 const size_t maxBytes) {
+  if (!impl) {
+    LOG_ERR("StatsSync", "Cannot allocate download HTTP client");
+    return Result::LowMemory;
+  }
+  auto& http = impl->http;
+  http.end();
+  if (ESP.getFreeHeap() < 35000 || ESP.getMaxAllocHeap() < 20000) {
+    LOG_ERR("StatsSync", "Insufficient memory for download");
+    return Result::LowMemory;
+  }
+  http.setInsecure();
+  http.setTimeout(15000);
+  if (!http.begin(KOREADER_STORE.getBaseUrl() + endpoint)) return Result::Network;
+  http.addHeader("Accept", "application/json");
+  applyCustomHttpHeaders(http, KOREADER_STORE.getCustomHeaders());
+  http.addHeader("x-auth-user", KOREADER_STORE.getUsername());
+  http.addHeader("x-auth-key", KOREADER_STORE.getMd5Password());
+  // Stream escaped JSON to SD instead of reserving its worst-case size during TLS.
+  FsFile file;
+  if (!Storage.openFileForWrite("StatsSync", responsePath, file)) {
+    LOG_ERR("StatsSync", "Cannot open download file");
+    http.end();
+    return Result::InvalidResponse;
+  }
+  ScopedCleanup cleanup{[&file] { file.close(); }};
+  size_t size = 0;
+  bool stored = true;
+  const auto store = [&](const uint8_t* data, const size_t length) {
+    if (length > maxBytes - size || file.write(data, length) != length) {
+      stored = false;
+      return false;
+    }
+    size += length;
+    return true;
+  };
+  bool complete;
+#ifdef SIMULATOR
+  const int status = http.GET();
+  const auto& body = http.getString();
+  complete = store(reinterpret_cast<const uint8_t*>(body.c_str()), body.length());
+#else
+  const int status = http.GET(store);
+  complete = http.responseComplete();
+#endif
+  http.end();
+  LOG_INF("StatsSync", "Download response: HTTP %d", status);
+  if (status <= 0) return Result::Network;
+  if (status == 401) return Result::Auth;
+  if (status == 404 || status == 405) return Result::Unsupported;
+  if (status != 200) return Result::Server;
+  if (!stored || !complete || !file.sync() || !file.close()) {
+    LOG_ERR("StatsSync", "Incomplete download file");
+    return Result::InvalidResponse;
+  }
   return Result::Ok;
 }
 

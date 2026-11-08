@@ -17,9 +17,11 @@
 #include "activities/reader/BookReadingStats.h"
 #include "activities/reader/EpubReaderUtils.h"
 #include "activities/reader/GlobalReadingStats.h"
+#include "clippings/ClippingIdentity.h"
 #include "network/ClippingsUpload.h"
 #include "network/ReadingSyncUpload.h"
 #include "util/FolderBookIterator.h"
+#include "util/StatsStorage.h"
 
 namespace {
 void require(bool ok, const char* what) {
@@ -204,7 +206,7 @@ bool prepareReadingUploadSmokeTest() {
       ClippingStore::readForUpload("/read/first.epub", 0, saved, quote, done) && !done && saved.timestamp >= 946684800U,
       "new clipping uses calendar time");
   char id[17];
-  require(ClippingsUpload::identity(1752300000, "hello", id) && std::strcmp(id, "00dd471ed33eb756") == 0,
+  require(clippingSyncIdentity(1752300000, "hello", id) && std::strcmp(id, "00dd471ed33eb756") == 0,
           "SHA256 server identity vector");
   // Persisted history is independent of whether a saved position can be mapped.
   if (const char* variant = std::getenv("CROSSINK_READING_TEST_PROGRESS_VARIANT")) {
@@ -230,8 +232,8 @@ bool prepareReadingUploadSmokeTest() {
       Epub epub(path, "/.crosspoint");
       require(BookReadingStats::remove(epub.getCachePath()), "remove stats fixture");
     }
-    Storage.remove("/.crosspoint/global_stats.bin");
-    Storage.remove("/.crosspoint/global_stats.bin.bak");
+    Storage.remove(StatsStorage::localPath("/.crosspoint/global_stats.bin").c_str());
+    Storage.remove((StatsStorage::localPath("/.crosspoint/global_stats.bin") + ".bak").c_str());
   }
   if (std::getenv("CROSSINK_READING_TEST_TRACKING_DISABLED")) SETTINGS.trackReadingStats = 0;
   if (std::getenv("CROSSINK_READING_TEST_EMPTY_FOLDER")) {

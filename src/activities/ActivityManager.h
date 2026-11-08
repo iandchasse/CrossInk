@@ -136,7 +136,6 @@ class ActivityManager {
   bool handleHomeReaderShortcut();
   bool continueHomeReaderUnwind();
   bool handleGlobalHomeGesture();
-  bool restoreBackdropBehindCurrentOverlay();
 
  public:
   explicit ActivityManager(GfxRenderer& renderer, MappedInputManager& mappedInput)
@@ -162,12 +161,13 @@ class ActivityManager {
   void goToNearbyStatsSync();
   bool goToNearbyBookSend(std::string path, bool returnToReader);
   void goToNearbyBookReceive();
-  void goToSettings(bool dismissOnUpSwipe = false, bool openLanguageDownloads = false);
+  void goToSettings(bool dismissOnUpSwipe = false, bool openLanguageDownloads = false,
+                    bool touchscreenRecovery = false);
   void markReleaseNotesShown() { releaseNotesShown = true; }
   void goToFileBrowser(std::string path = {});
   void goToLibrary();
   void goToBrowser();
-  void goToPlugins();
+  bool goToPlugins(bool networkBootReady = false);
   bool goToOpdsServer(uint32_t serverIndex, bool networkBootReady = false);
   void goToReader(std::string path, bool suppressBackRelease = false, bool allowFastInitialRefresh = false,
                   bool cleanImageBaseOnEntry = false, bool keepWakeFrame = false);
@@ -239,6 +239,10 @@ class ActivityManager {
   // If immediate is true, the update will be triggered immediately.
   // Otherwise, it will be deferred until the end of the current loop iteration.
   void requestUpdate(bool immediate = false);
+
+  // Main-loop only, without RenderLock: restore the reader pixels covered by
+  // a dismissed popup inside a partial-screen overlay.
+  bool restoreBackdropBehindCurrentOverlay();
 
   // Trigger a render and block until it completes.
   // Returns Rejected when a synchronous render would be unsafe, such as from the render task,

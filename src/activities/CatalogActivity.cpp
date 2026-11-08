@@ -30,6 +30,11 @@ void CatalogActivity::onExit() {
   if (WiFi.getMode() != WIFI_MODE_NULL) {
     WiFi.disconnect(false);
     delay(30);
+#ifndef SIMULATOR
+    // Clear Wi-Fi/TLS fragmentation before returning to normal reading.
+    silentRestart();
+#endif
+    // Also runs when deep sleep suppresses the restart, or in the simulator.
     WiFi.mode(WIFI_OFF);
   }
 #ifndef SIMULATOR
@@ -199,7 +204,8 @@ void CatalogActivity::onDownloadProgress(const size_t downloaded, const size_t t
 
 HttpDownloader::DownloadError CatalogActivity::downloadFile(const std::string& url, const std::string& dest,
                                                             const std::string& user, const std::string& password,
-                                                            const std::vector<HttpDownloader::Header>& headers) {
+                                                            const std::vector<HttpDownloader::Header>& headers,
+                                                            HttpDownloader::Transport transport) {
   {
     RenderLock lock;
     downloadProgress = downloadTotal = 0;
@@ -214,12 +220,16 @@ HttpDownloader::DownloadError CatalogActivity::downloadFile(const std::string& u
     RenderLock lock;
     if (auto* fcm = renderer.getFontCacheManager()) fcm->releaseSdFontCaches();
   }
-  if (ESP.getFreeHeap() < (64 * 1024) || ESP.getMaxAllocHeap() < (32 * 1024)) {
+  // Match upstream's wolfSSL floor; the certificate-verified Hub installer
+  // uses ESP HTTP and retains its existing, larger handshake reserve.
+  const uint32_t minFreeHeap = transport == HttpDownloader::Transport::WOLFSSL ? 40000 : 64 * 1024;
+  const uint32_t minMaxAlloc = transport == HttpDownloader::Transport::WOLFSSL ? 20000 : 32 * 1024;
+  if (ESP.getFreeHeap() < minFreeHeap || ESP.getMaxAllocHeap() < minMaxAlloc) {
     LOG_ERR("CAT", "Low heap for download (%u free, %u max block)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
     return HttpDownloader::HTTP_ERROR;
   }
   HttpDownloader::DownloadOptions options;
-  options.transport = HttpDownloader::Transport::WOLFSSL;
+  options.transport = transport;
   options.stageAsPart = true;
   options.checkFreeSpace = true;
   options.headers = &headers;

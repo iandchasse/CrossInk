@@ -9,6 +9,8 @@
 #include <algorithm>
 #include <cstring>
 #include <iterator>
+#include <limits>
+#include <string_view>
 #include <vector>
 
 #include "sync/BookSyncFile.h"
@@ -58,7 +60,8 @@ struct StatsFileCandidate {
 constexpr size_t MAX_PRESERVED_CACHE_FILES = std::size(EPUB_USER_STATE_FILES) > std::size(PAGE_PROGRESS_FILES)
                                                  ? std::size(EPUB_USER_STATE_FILES)
                                                  : std::size(PAGE_PROGRESS_FILES);
-constexpr size_t MAX_STATS_FILES_TO_PRESERVE = 8;
+// Keep both save slots and legacy interrupted saves for up to eight versions.
+constexpr size_t MAX_STATS_FILES_TO_PRESERVE = 8 * 3;
 constexpr char STATS_PREFIX[] = "stats";
 constexpr char STATS_SUFFIX[] = ".bin";
 
@@ -88,37 +91,34 @@ const PreservedCacheFile* preservedFilesForPath(const std::string& path, size_t&
   return nullptr;
 }
 
+std::string_view statsPayloadName(const char* name) {
+  std::string_view value = name ? name : "";
+  if (value.ends_with(".bak") || value.ends_with(".tmp")) value.remove_suffix(4);
+  return value;
+}
+
 bool isStatsFileName(const char* name) {
-  if (!name) {
-    return false;
-  }
-  const size_t nameLen = strlen(name);
-  constexpr size_t prefixLen = std::size(STATS_PREFIX) - 1;
-  constexpr size_t suffixLen = std::size(STATS_SUFFIX) - 1;
-  return nameLen >= prefixLen + suffixLen && strncmp(name, STATS_PREFIX, prefixLen) == 0 &&
-         strcmp(name + nameLen - suffixLen, STATS_SUFFIX) == 0;
+  const auto payload = statsPayloadName(name);
+  return payload.size() >= sizeof(STATS_PREFIX) + sizeof(STATS_SUFFIX) - 2 && payload.starts_with(STATS_PREFIX) &&
+         payload.ends_with(STATS_SUFFIX);
 }
 
 int statsFileVersion(const char* name) {
-  if (!name || strcmp(name, "stats.bin") == 0) {
-    return 0;
-  }
-
-  constexpr char VERSION_PREFIX[] = "stats_v";
-  constexpr size_t versionPrefixLen = std::size(VERSION_PREFIX) - 1;
-  constexpr size_t suffixLen = std::size(STATS_SUFFIX) - 1;
-  const size_t nameLen = strlen(name);
-  if (nameLen <= versionPrefixLen + suffixLen || strncmp(name, VERSION_PREFIX, versionPrefixLen) != 0 ||
-      strcmp(name + nameLen - suffixLen, STATS_SUFFIX) != 0) {
+  const auto payload = statsPayloadName(name);
+  if (payload == "stats.bin") return 0;
+  constexpr std::string_view prefix = "stats_v";
+  constexpr size_t suffixLength = sizeof(STATS_SUFFIX) - 1;
+  if (!payload.starts_with(prefix) || !payload.ends_with(STATS_SUFFIX) ||
+      payload.size() <= prefix.size() + suffixLength)
     return -1;
-  }
-
   int version = 0;
-  for (size_t i = versionPrefixLen; i < nameLen - suffixLen; ++i) {
-    if (name[i] < '0' || name[i] > '9') {
-      return -1;
-    }
-    version = version * 10 + (name[i] - '0');
+  for (size_t i = prefix.size(); i < payload.size() - suffixLength; ++i) {
+    // Device-qualified names keep the version before the origin suffix.
+    if (payload[i] == '_') break;
+    if (payload[i] < '0' || payload[i] > '9') return -1;
+    const int digit = payload[i] - '0';
+    if (version > (std::numeric_limits<int>::max() - digit) / 10) return -1;
+    version = version * 10 + digit;
   }
   return version;
 }
@@ -161,6 +161,11 @@ bool appendStatsPreservedFiles(const std::string& cachePath, std::vector<Resolve
     if (isDirectory || nameLen == 0 || !isStatsFileName(name)) {
       continue;
     }
+    if (candidates.size() == MAX_STATS_FILES_TO_PRESERVE) {
+      dir.close();
+      LOG_ERR("BookCache", "Too many stats files to preserve safely: %s", cachePath.c_str());
+      return false;
+    }
     candidates.push_back({name, statsFileVersion(name)});
   }
   dir.close();
@@ -173,10 +178,6 @@ bool appendStatsPreservedFiles(const std::string& cachePath, std::vector<Resolve
   });
 
   for (size_t i = 0; i < candidates.size(); ++i) {
-    if (i >= MAX_STATS_FILES_TO_PRESERVE) {
-      LOG_DBG("BookCache", "Dropping older stats file during cache preservation: %s", candidates[i].name.c_str());
-      continue;
-    }
     files.push_back({candidates[i].name, std::string(tmpPrefix) + candidates[i].name});
   }
   return true;

@@ -16,6 +16,7 @@
 #include "activities/reader/StatsUploadPayload.h"
 #include "network/ReadingSyncUpload.h"
 #include "network/StatsUploadClient.h"
+#include "util/StatsStorage.h"
 
 namespace {
 void require(bool ok, const char* what) {
@@ -46,6 +47,20 @@ void verifyStatsUploadContract() {
   require(strlen(json["history_b64"].as<const char*>()) == 124 &&
               std::strncmp(json["history_b64"].as<const char*>(), "BwAA", 4) == 0,
           "calendar bit order");
+  // A v3 save interrupted halfway through its trailer must leave the other slot usable.
+  ++global.totalSessions;
+  require(global.save(), "create second global stats slot");
+  FsFile torn;
+  std::array<uint8_t, GlobalReadingStats::CURRENT_FILE_SIZE + 5> partial{GlobalReadingStats::CURRENT_FILE_VERSION};
+  require(Storage.openFileForWrite("SMOKE", StatsStorage::localPath("/.crosspoint/global_stats.bin").c_str(), torn) &&
+              torn.write(partial.data(), partial.size()) == partial.size() && torn.close(),
+          "truncate primary trailer");
+  loaded = GlobalReadingStats::load();
+  require(loaded.totalSessions == global.totalSessions && loaded.totalReadingSeconds == 3456,
+          "recover backup after torn trailer");
+  ++loaded.totalSessions;
+  require(loaded.save() && GlobalReadingStats::load().totalSessions == loaded.totalSessions,
+          "resume saving after recovery");
   // Every count at its maximum still fits the fixed request budget.
   global.totalSessions = global.totalReadingSeconds = global.totalPagesTurned = global.completedBooks = UINT32_MAX;
   global.timeOfDaySeconds.fill(UINT32_MAX);
@@ -71,8 +86,8 @@ void verifyStatsUploadContract() {
           "dates remain UTC beyond 2038");
   require(item["completed"].is<bool>() && item["completed"] == true, "boolean fields");
   // Do not leave fixture counters in the normal app-flow smoke session.
-  Storage.remove("/.crosspoint/global_stats.bin");
-  Storage.remove("/.crosspoint/global_stats.bin.bak");
+  Storage.remove(StatsStorage::localPath("/.crosspoint/global_stats.bin").c_str());
+  Storage.remove((StatsStorage::localPath("/.crosspoint/global_stats.bin") + ".bak").c_str());
 
   const char* server = std::getenv("CROSSINK_STATS_TEST_SERVER");
   if (server) {
@@ -94,6 +109,89 @@ void verifyStatsUploadContract() {
     StatsUploadClient client;
     char id[32];
     require(StatsUploadClient::deviceId(id, sizeof(id)), "simulator identity");
+    if (const char* countText = std::getenv("CROSSINK_STATS_TEST_BATCH")) {
+      const unsigned count = std::atoi(countText);
+      require(count > 0 && count <= StatsUploadPayload::BookBatch::MAX_ITEMS, "batch count");
+      std::vector<char> batchPayload(4096);
+      StatsUploadPayload::BookBatch batch(batchPayload.data(), batchPayload.size());
+      require(batch.begin(id), "batch start");
+      for (unsigned i = 0; i < count; ++i) {
+        char document[33];
+        snprintf(document, sizeof(document), "%032x", i + 1);
+        require(batch.add(document, BookReadingStats{}), "batch item");
+      }
+      require(batch.finish(), "batch finish");
+      const char* expected = std::getenv("CROSSINK_STATS_TEST_ERROR");
+      const auto wanted =
+          expected ? static_cast<StatsUploadClient::Result>(std::atoi(expected)) : StatsUploadClient::Result::Ok;
+      require(client.put("/api/v1/stats/books", batch.payload(), count) == wanted, "batch acknowledgment count");
+      LOG_INF("SMOKE", "Stats upload transport smoke passed");
+      std::_Exit(0);
+    }
+    if (const char* mode = std::getenv("CROSSINK_STATS_TEST_STEP")) {
+      using Step = ReadingSyncUpload::GlobalStatsStep;
+      using Result = StatsUploadClient::Result;
+      SETTINGS.trackReadingStats = 1;
+      KOREADER_STORE.setSyncStats(true);
+      global = {};
+      require(global.save(), "step fixture totals");
+      if (strcmp(mode, "daily") == 0)
+        require(DailyReadingStats::record(9769, 61) && DailyReadingStats::flush(), "step fixture daily history");
+      if (strcmp(mode, "sessions") == 0 || strcmp(mode, "corrupt-session") == 0) {
+        ReadingSessionJournal::Record record;
+        strcpy(record.id, "0123456789abcdef0123456789abcdef");
+        strcpy(record.document, DOCUMENT);
+        record.startedAt = 1609502400;
+        record.endedAt = 1609503000;
+        record.seconds = 600;
+        require(ReadingSessionJournal::save(record), "step fixture session");
+        if (strcmp(mode, "corrupt-session") == 0)
+          require(Storage.writeFile((StatsStorage::localPath("/.crosspoint/reading_sessions", true) +
+                                     "/0123456789abcdef0123456789abcdef.bin")
+                                        .c_str(),
+                                    "bad"),
+                  "step fixture corrupt session");
+      }
+      if (strcmp(mode, "empty-streak") == 0) {
+        Storage.remove(StatsStorage::localPath("/.crosspoint/global_stats.bin").c_str());
+        Storage.remove((StatsStorage::localPath("/.crosspoint/global_stats.bin") + ".bak").c_str());
+      }
+      Step failedStep = Step::Setup;  // Success must clear stale failure details.
+      const bool skipped = strncmp(mode, "old-streak", 10) == 0 || strcmp(mode, "ok") == 0;
+      const bool streak = strcmp(mode, "streak") == 0 || strcmp(mode, "empty-streak") == 0;
+      const Step expectedStep = skipped                       ? Step::None
+                                : strcmp(mode, "totals") == 0 ? Step::Totals
+                                : strcmp(mode, "daily") == 0  ? Step::Daily
+                                : streak                      ? Step::Streak
+                                                              : Step::Sessions;
+      const auto expectedResult = skipped                       ? Result::Ok
+                                  : strcmp(mode, "totals") == 0 ? Result::Server
+                                                                : Result::InvalidResponse;
+      require(ReadingSyncUpload::globalStats(&failedStep) == expectedResult, "failed step result");
+      require(failedStep == expectedStep, "failed step attribution");
+      char status[128];
+      const char* label = ReadingSyncUpload::globalStatusLabel(status, sizeof(status), expectedResult, failedStep);
+      const char* part = expectedStep == Step::Totals   ? "Totals"
+                         : expectedStep == Step::Daily  ? "Daily history"
+                         : expectedStep == Step::Streak ? "Reading Streak"
+                                                        : "Sessions";
+      require(skipped ? strcmp(label, "Done") == 0 : strstr(label, part) != nullptr, "failed step UI label");
+      KOREADER_STORE.setSyncStats(false);
+      require(
+          strcmp(ReadingSyncUpload::globalStatusLabel(status, sizeof(status), expectedResult, failedStep), "OFF") == 0,
+          "disabled stats keeps OFF label");
+      KOREADER_STORE.setSyncStats(true);
+      // The buffer-reusing overload must report local serialization failures too.
+      require(global.save(), "restore totals for buffer test");
+      require(ReadingSyncUpload::globalStats(client, payload.data(), 20, id, &failedStep) == Result::InvalidResponse &&
+                  failedStep == Step::Totals,
+              "small payload buffer attribution");
+      SETTINGS.trackReadingStats = 0;
+      require(ReadingSyncUpload::globalStats(&failedStep) == Result::Skipped && failedStep == Step::None,
+              "skipped attempt clears stale failure");
+      LOG_INF("SMOKE", "All-time stats failed-step smoke passed");
+      std::_Exit(0);
+    }
     if (const char* mode = std::getenv("CROSSINK_STATS_TEST_STREAK")) {
       SETTINGS.trackReadingStats = 1;
       SETTINGS.clockUtcOffsetQ = 48;
@@ -164,7 +262,8 @@ void verifyStatsUploadContract() {
       global.save();
       require(ReadingSessionJournal::save(record), "session fixture");
       const auto first = ReadingSyncUpload::globalStats();
-      const std::string path = "/.crosspoint/reading_sessions/" + std::string(record.id) + ".bin";
+      const std::string path =
+          StatsStorage::localPath("/.crosspoint/reading_sessions", true) + "/" + std::string(record.id) + ".bin";
       if (strcmp(mode, "ok") != 0) {
         const auto wanted = strcmp(mode, "old-server") == 0 ? StatsUploadClient::Result::Unsupported
                                                             : StatsUploadClient::Result::InvalidResponse;
@@ -189,7 +288,7 @@ void verifyStatsUploadContract() {
       std::_Exit(0);
     }
     const char* expected = std::getenv("CROSSINK_STATS_TEST_ERROR");
-    auto result = client.put("/api/v1/stats/global", payload.data(), false);
+    auto result = client.put("/api/v1/stats/global", payload.data(), 0);
     if (expected) {
       const auto wanted = static_cast<StatsUploadClient::Result>(std::atoi(expected));
       require(result == wanted, "expected transport failure classification");
@@ -217,11 +316,10 @@ void verifyStatsUploadContract() {
         require(DailyReadingStats::read(9769, counter) && counter.seconds == 70 && counter.uploaded == 70,
                 "incremental daily ack");
       }
-      require(client.put("/api/v1/stats/global", payload.data(), false) == StatsUploadClient::Result::Ok,
-              "global retry");
+      require(client.put("/api/v1/stats/global", payload.data(), 0) == StatsUploadClient::Result::Ok, "global retry");
       require(StatsUploadPayload::book(payload.data(), payload.size(), id, DOCUMENT, book), "test book payload");
-      require(client.put("/api/v1/stats/books", payload.data(), true) == StatsUploadClient::Result::Ok, "book upload");
-      require(client.put("/api/v1/stats/books", payload.data(), true) == StatsUploadClient::Result::Ok, "book retry");
+      require(client.put("/api/v1/stats/books", payload.data(), 1) == StatsUploadClient::Result::Ok, "book upload");
+      require(client.put("/api/v1/stats/books", payload.data(), 1) == StatsUploadClient::Result::Ok, "book retry");
     }
     LOG_INF("SMOKE", "Stats upload transport smoke passed");
     std::_Exit(0);

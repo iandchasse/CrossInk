@@ -21,6 +21,7 @@
 #include "util/ButtonNavigator.h"
 #if CROSSINK_SCALABLE_FONTS
 #include "TtfRenderProfileStore.h"
+#include "components/OptionPopup.h"
 #endif
 
 class EpubReaderDrawerActivity final : public Activity {
@@ -53,6 +54,13 @@ class EpubReaderDrawerActivity final : public Activity {
 
   // Button menu only: shown under the book title. Set before the activity starts.
   void setChapterTitle(std::string title) { chapterTitle = std::move(title); }
+#if CROSSINK_SCALABLE_FONTS
+  using PublisherBodyFontProbe = uint32_t (*)(void* context);
+  void setPublisherBodyFontProbe(PublisherBodyFontProbe probe, void* context) {
+    publisherBodyFontProbe = probe;
+    publisherBodyFontContext = context;
+  }
+#endif
 
 #ifdef SIMULATOR
   friend struct ReaderDrawerLayoutSmokeTest;
@@ -129,6 +137,15 @@ class EpubReaderDrawerActivity final : public Activity {
   const bool chapterPageCountEstimated = false;
   const uint32_t stablePageSeed = 0;
   std::string chapterTitle;
+#if CROSSINK_SCALABLE_FONTS
+  uint32_t publisherBodyFontFamily = 0;
+  PublisherBodyFontProbe publisherBodyFontProbe = nullptr;
+  void* publisherBodyFontContext = nullptr;
+  char publisherBodyFontName[64] = {};
+  bool publisherBodyFontNameResolved = false;
+  void resolvePublisherBodyFontName();
+#endif
+  bool publisherBodyFontActive() const;
   // Touch uses the Percent keypad directly. Button devices start on the slider
   // and can open this keypad by holding Confirm, as in the old selector.
   char entryText[8] = {0};
@@ -237,6 +254,7 @@ class EpubReaderDrawerActivity final : public Activity {
   // landscape screen, which is only 480 px high; every other menu draws it on every pane.
   bool showsBookBand() const;
   bool showsSamplePreview() const;
+  bool showsSamplePreviewAaNote(const ReaderSettingsDraft& settings) const;
   bool samplePreviewBesideControls() const;
   void renderPreviewUnavailable();
   void renderSamplePreviewText(const ReaderSettingsDraft& settings, int fontId);
@@ -333,13 +351,14 @@ class EpubReaderDrawerActivity final : public Activity {
   void discoverFonts();
   void refreshTtfRenderingRow();
 #if CROSSINK_SCALABLE_FONTS
+  OptionPopup ttfResetPopup;
   TtfRenderProfile ttfRenderProfile{};
   TtfRenderProfile initialTtfRenderProfile{};
   bool ttfRenderingChanged = false;
 
   void rebuildTtfRenderingRows();
   void showTtfRenderingOptions(RowId row);
-  void saveTtfRenderingProfile();
+  bool saveTtfRenderingProfile();
   void finishTtfRenderingEdit();
 #endif
   void discoverDictionaries();

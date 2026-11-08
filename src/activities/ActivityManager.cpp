@@ -605,7 +605,7 @@ void ActivityManager::loop() {
       }
 #endif
 
-      // Frontlight quick panel: top-edge down-swipe on home-key boards, except
+      // Frontlight quick panel: top-edge down-swipe on drawer-layout boards, except
       // that the open EPUB reader exposes the same action across the whole page.
       // Pushed, so it returns to whatever was underneath — including mid-book.
       const bool lightPanelGesture = currentActivity->usesFullScreenReaderVerticalSwipes()
@@ -1053,7 +1053,8 @@ void ActivityManager::goToNearbyStatsSync() {
   replaceActivity(std::make_unique<NearbyStatsSyncActivity>(renderer, mappedInput));
 }
 
-void ActivityManager::goToSettings(const bool dismissOnUpSwipe, const bool openLanguageDownloads) {
+void ActivityManager::goToSettings(const bool dismissOnUpSwipe, const bool openLanguageDownloads,
+                                   const bool touchscreenRecovery) {
   preferredHomeBookPath.clear();
   returningHomeThroughSettings = false;
   if (currentActivity && currentActivity->isHomeActivity()) {
@@ -1065,6 +1066,7 @@ void ActivityManager::goToSettings(const bool dismissOnUpSwipe, const bool openL
   }
   auto settings = std::make_unique<SettingsActivity>(renderer, mappedInput, dismissOnUpSwipe);
   if (openLanguageDownloads) settings->openLanguageDownloadsOnEnter();
+  if (touchscreenRecovery) settings->enableTouchscreenRecovery();
   replaceActivity(std::move(settings));
 }
 
@@ -1081,13 +1083,23 @@ void ActivityManager::goToLibrary() {
   replaceActivity(std::move(library));
 }
 
-void ActivityManager::goToPlugins() {
+bool ActivityManager::goToPlugins(const bool networkBootReady) {
+#ifndef SIMULATOR
+  if (!networkBootReady) {
+    // Hub installation and catalog parsing need the same clean heap as OPDS.
+    silentRestartToNetwork(NetworkBootTarget::PLUGINS);
+    return true;
+  }
+#else
+  (void)networkBootReady;
+#endif
   auto plugins = makeUniqueNoThrow<PluginCatalogActivity>(renderer, mappedInput, true);
   if (!plugins) {
-    LOG_ERR("ACT", "Cannot allocate Plugins activity");
-    return;
+    LOG_ERR("ACT", "Cannot allocate Plugins activity (free=%u maxAlloc=%u)", ESP.getFreeHeap(), ESP.getMaxAllocHeap());
+    return false;
   }
   replaceActivity(std::move(plugins));
+  return true;
 }
 
 void ActivityManager::goToBrowser() {
@@ -1292,8 +1304,9 @@ bool ActivityManager::openReaderSettingsForTouchscreenEscapeHatch() {
   }
 
   if (!currentActivity->openReaderSettingsMenu()) {
-    // TXT has no reader menu, so keep a reliable global Settings fallback.
-    goToSettings();
+    // TXT has no reader menu. Keep its Settings fallback usable while touch
+    // is locked without changing the persisted touchscreen preference.
+    goToSettings(false, false, true);
   }
   return true;
 }
@@ -1526,15 +1539,16 @@ RenderLock::RenderLock(const Mode mode) {
 
 RenderLock::RenderLock([[maybe_unused]] Activity&, const Mode mode) : RenderLock(mode) {}
 
-RenderLock::~RenderLock() {
-  if (isLocked) {
-    xSemaphoreGive(activityManager.renderingMutex);
-    isLocked = false;
-  }
-}
+RenderLock::~RenderLock() { unlock(); }
 
 void RenderLock::unlock() {
   if (isLocked) {
+#if FREEINK_DEVICE_PICCO
+    // A drawing transaction includes all async/grayscale passes. Shut down
+    // only when its owner releases the lock, including direct toast, screenshot
+    // and Quick Lock updates that bypass the activity render task.
+    display.powerOffBetweenFrames();
+#endif
     xSemaphoreGive(activityManager.renderingMutex);
     isLocked = false;
   }

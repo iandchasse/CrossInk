@@ -16,10 +16,9 @@ bool HalFrontlight::hasColourSelect() const {
 
 bool HalFrontlight::warmthIsSelection() const { return hasColourSelect() && !manager.blendsColour(); }
 
-void HalFrontlight::begin(const uint8_t brightness, const uint8_t warmth, const bool on) {
-  if (!manager.present()) {
-    return;
-  }
+void HalFrontlight::initializeHardware() {
+  if (initialized) return;
+  // I2C frontlights report presence only after the SDK probes the driver.
 
   // An enable-gated light (colour select / enable pulse / LED monitor) must go
   // dark before COLOR_SEL changes. A software restart releases both pads at once,
@@ -36,6 +35,14 @@ void HalFrontlight::begin(const uint8_t brightness, const uint8_t warmth, const 
   }
 
   manager.begin();
+  initialized = true;
+}
+
+void HalFrontlight::begin(const uint8_t brightness, const uint8_t warmth, const bool on) {
+  initializeHardware();
+  if (!manager.present()) {
+    return;
+  }
   lastBrightness = brightness > 100 ? 100 : brightness;
   manager.setColorTemperature(warmth > 100 ? 100 : warmth);
   lit = on;

@@ -28,6 +28,11 @@ branch of `#if FREEINK_CAP_POWER_POLICY`, which a Silkscreen build
 (FREEINK_CAP_POWER_POLICY=1) never compiles; its sleep goes through the SDK path
 in the #if branch, which must call deepSleepUntilPowerButton().
 
+Picco's USB light-sleep loop is also allowed, only in
+HalPowerManager::holdWhileUsbPowered() behind
+`#if FREEINK_DEVICE_PICCO && !FREEINK_DEVICE_SILKSCREEN`. Its timer/GPIO
+wake and light-sleep calls cannot compile into a Silkscreen image.
+
 Comment lines and test/ directories are ignored. Runs as a pre-build script of
 the silkscreen environments, or standalone (`python scripts/check_sleep_wake_sources.py`,
 exit status 1 on a violation).
@@ -42,6 +47,9 @@ EXTENSIONS = (".c", ".cpp", ".h", ".hpp")
 SDK_POWER_MANAGER = "freeink-sdk/libs/hardware/PowerManager/src/PowerManager.cpp"
 EXCEPTION_FILE = "lib/hal/HalPowerManager.cpp"
 EXCEPTION_MACRO = "FREEINK_CAP_POWER_POLICY"
+PICCO_USB_MACRO = "FREEINK_DEVICE_PICCO && !FREEINK_DEVICE_SILKSCREEN"
+PICCO_USB_FN = re.compile(r"^bool\s+HalPowerManager::holdWhileUsbPowered\b")
+PICCO_USB_APIS = re.compile(r"\b(esp_sleep_enable_timer_wakeup|esp_sleep_enable_gpio_wakeup|esp_light_sleep_start)\s*\(")
 
 FORBIDDEN = re.compile(
     r"esp_sleep_enable_timer_wakeup|esp_deep_sleep\(|ESP\.deepSleep|esp_sleep_enable_ulp_wakeup|ulp_run|"
@@ -78,7 +86,7 @@ def iter_sources(project_dir):
                     yield os.path.relpath(path, project_dir).replace(os.sep, "/"), path
 
 
-def branch_states(lines):
+def branch_states(lines, macro=EXCEPTION_MACRO):
     """For each line, whether it sits in the #if or the #else branch of EXCEPTION_MACRO."""
     stack = []  # one entry per open conditional: (is EXCEPTION_MACRO, in its #else part)
     states = []
@@ -87,7 +95,7 @@ def branch_states(lines):
         if match:
             kind, rest = match.group(1), match.group(2).strip()
             if kind in ("if", "ifdef", "ifndef"):
-                stack.append((kind == "if" and rest == EXCEPTION_MACRO, False))
+                stack.append((kind == "if" and rest == macro, False))
             elif kind in ("elif", "else") and stack:
                 stack[-1] = (stack[-1][0], True)
             elif kind == "endif" and stack:
@@ -105,11 +113,18 @@ def check(project_dir):
         with open(path, encoding="utf-8", errors="replace") as source:
             lines = source.read().splitlines()
         states = branch_states(lines) if rel == EXCEPTION_FILE else None
+        picco_states = branch_states(lines, PICCO_USB_MACRO) if rel == EXCEPTION_FILE else None
+        in_picco_usb_fn = False
         in_wake_fn = False
         named = False
         exempt = False
         pd_calls = 0
         for number, line in enumerate(lines, 1):
+            if rel == EXCEPTION_FILE:
+                if PICCO_USB_FN.match(line):
+                    in_picco_usb_fn = True
+                elif in_picco_usb_fn and line.startswith("}"):
+                    in_picco_usb_fn = False
             if rel == SDK_POWER_MANAGER:
                 if WAKE_FN_START.match(line):
                     in_wake_fn = True
@@ -135,7 +150,9 @@ def check(project_dir):
                         )
                     elif not PD_ALLOWED_ARGS.search(line):
                         problems.append(f"esp_sleep_pd_config other than ESP_PD_DOMAIN_RTC_PERIPH, ESP_PD_OPTION_ON: {where}")
-            if FORBIDDEN.search(line):
+            picco_usb_call = (in_picco_usb_fn and picco_states is not None and
+                              picco_states[number - 1][0] and PICCO_USB_APIS.search(line))
+            if FORBIDDEN.search(line) and not picco_usb_call:
                 problems.append(f"Forbidden sleep or wake API (only the power button may wake the device): {where}")
             in_exception = states is not None and states[number - 1][1]
             if SDK_OWNED.search(line) and rel != SDK_POWER_MANAGER and not in_exception:

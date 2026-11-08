@@ -5,7 +5,7 @@
 #include "ReadingStatsUtils.h"
 
 // Cumulative reading statistics across all books, persisted to
-// /.crosspoint/global_stats.bin.
+// /.crosspoint/global_stats_<reader>.bin.
 struct GlobalReadingStats {
   uint32_t totalSessions = 0;        // Total book-open events across all books
   uint32_t totalReadingSeconds = 0;  // Accumulated reading time across all books
@@ -21,11 +21,12 @@ struct GlobalReadingStats {
   static constexpr size_t CURRENT_FILE_SIZE = 159;
   static constexpr size_t MIN_SUPPORTED_FILE_SIZE = 13;
 
-  // Loads stats from /.crosspoint/global_stats.bin. Returns default-constructed
+  // Loads this reader's device-qualified stats. Returns default-constructed
   // stats if the file is missing or the version byte does not match.
   static GlobalReadingStats load();
 
   // Checked local export, never includes nearby-device snapshots.
+  static bool exportLocal(uint8_t* data, size_t capacity);
   static bool loadForUpload(GlobalReadingStats& stats);
 
   // Returns true when the optional synced stats directory exists.
@@ -43,8 +44,7 @@ struct GlobalReadingStats {
   // Saves global and pending daily stats. False means either save needs retrying.
   bool save() const;
 
-  // Replaces /.crosspoint/global_stats.bin with a fresh empty file without
-  // rotating or deleting any backup files.
+  // Saves an empty newest snapshot through the same alternating-slot policy.
   static bool resetLocal();
   // Advances after each successful resetLocal(), so an open reader knows its
   // in-memory copy was replaced on disk. Any new path that replaces the file
