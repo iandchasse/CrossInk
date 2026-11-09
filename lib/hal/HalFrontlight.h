@@ -28,6 +28,21 @@ class HalFrontlight {
 
   // Brightness as 0-100 (total light on a warm/cool pair). Setting a value
   // while off leaves the light off; it is applied on the next on().
+  static uint8_t normalizeBrightness(uint8_t percent) { return FrontlightManager::normalizeBrightness(percent); }
+  static uint8_t brightnessStep() { return FrontlightManager::brightnessStep(); }
+  static uint8_t migrateLegacyBrightness(uint8_t percent, bool tenLevelSource = false) {
+    return FrontlightManager::migrateLegacyBrightness(percent, tenLevelSource);
+  }
+  // Called by the loop with the display's first completed paint timestamp.
+  void updateRestore(uint32_t firstPaintMs);
+  bool startupBlocked() const { return manager.startupBlocked(); }
+  bool takeStartupNotice() {
+    update();
+    const bool notice = startupNotice;
+    startupNotice = false;
+    return notice;
+  }
+
   void setBrightness(uint8_t percent);
   // Warm/cool mix, 0 = cool .. 100 = warm. No-op on single-channel boards.
   void setWarmth(uint8_t warmPercent);
@@ -98,7 +113,10 @@ class HalFrontlight {
   // on an enable-gated light. begin() also runs it from a shutdown handler
   // before every software restart, so the driver is dark before the reset lets
   // COLOR_SEL fall to its pull-down.
-  void prepareForSleep() { manager.prepareForSleep(); }
+  void prepareForSleep() {
+    restoreWaiting = false;
+    manager.prepareForSleep();
+  }
 
  private:
   HalFrontlight() = default;
@@ -109,6 +127,8 @@ class HalFrontlight {
   // the on/off state separate so toggling restores the previous level.
   uint8_t lastBrightness = 60;
   bool lit = false;
+  bool restoreWaiting = false;
+  bool startupNotice = false;
 #if FREEINK_CAP_FRONTLIGHT_PROBE
   // Who asked for the switch-on still deciding its load.
   enum class Pending : uint8_t { None, User, Restore };

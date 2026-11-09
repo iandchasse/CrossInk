@@ -16,6 +16,13 @@
 #include <BatteryEstimate.h>
 #endif
 
+#if FREEINK_DEVICE_SILKSCREEN
+#include <BatteryChargeEstimator.h>
+#include <SilkscreenBattery.h>
+
+#include <atomic>
+#endif
+
 // Opt-in battery telemetry for diagnosing a miscalibrated fuel gauge. Off in
 // every shipping environment; the `debug` PlatformIO env sets it to 1. Defined
 // here because this is the lowest layer that consumes it.
@@ -43,6 +50,24 @@ class HalPowerManager {
   mutable uint64_t _batterySampleRtcMs = 0;
   bool _batteryResumed = false;
   uint16_t getPiccoBatteryPercentage() const;
+#endif
+
+#if FREEINK_DEVICE_SILKSCREEN
+#if SILKSCREEN_BATLOG
+  static constexpr int BATTERY_UI_STEP = 1;
+  std::atomic<uint32_t> batteryDisplayTenths{0};
+#else
+  static constexpr int BATTERY_UI_STEP = 5;
+#endif
+  freeink::battery::BatteryChargeEstimator batteryDisplay{
+      {BoardConfig::silkscreen_battery::CAPACITY_MAH, BoardConfig::silkscreen_battery::CHARGE_CURRENT_MA,
+       BoardConfig::silkscreen_battery::DEFAULT_STEP_MV, BoardConfig::silkscreen_battery::STEP_CREEP_PERMILLE},
+      BatteryMonitor::percentTenthsFromMillivolts,
+      BATTERY_UI_STEP};
+  std::atomic<uint32_t> batteryDisplayPercent{freeink::battery::BatteryChargeEstimator::UNKNOWN};
+#if SILKSCREEN_BATLOG
+  void appendBatteryChargeRow(uint32_t now, const char* event);
+#endif
 #endif
 
   uint32_t lockCount = 0;                 // Overlapping jobs keep full speed until the last lock ends.
@@ -210,15 +235,28 @@ class HalPowerManager {
   // power, and with no cell fitted.
   bool firmwareUpdateBlockedByBattery() const;
 
-  // Get battery percentage (range 0-100). The number for display: on Silkscreen (no fuel gauge) it is read off the
-  // cell voltage and cut to 5% steps, 100 from 98 up (the silkscreen-batlog build keeps 1% steps), so it never reads
-  // 1-4. The low-battery cutoff and the firmware-update gate compare millivolts, not this.
+  // Get battery percentage (0-100, or 101 while Silkscreen has no trusted estimate). The number for display: on
+  // Silkscreen (no fuel gauge) it is read off the cell voltage and cut to 5% steps, 100 from 98 up (the
+  // silkscreen-batlog build keeps 1% steps), so it never reads 1-4. The low-battery cutoff and the firmware-update gate
+  // compare millivolts, not this. Silkscreen returns 101 until a trusted estimate is available; themes show --%.
   uint16_t getBatteryPercentage() const;
+#if FREEINK_DEVICE_SILKSCREEN
+  // Main-loop owner. True when the cached estimate changed; no repaint is requested.
+  bool updateBatteryDisplay();
+#if SILKSCREEN_BATLOG
+  void flushBatteryChargeLog();
+#endif
+#endif
 
 #if SILKSCREEN_BATLOG
   // The battery log's reads of state this class keeps: the smoothed battery value in tenths of a percent (0 before
   // the first read) and whether the CPU is at its normal clock.
-  int batteryCachedTenths() const { return _batteryCachedPercent; }
+  int batteryCachedTenths() const {
+#if FREEINK_DEVICE_SILKSCREEN
+    if (BoardConfig::isSilkscreen()) return batteryDisplayTenths.load(std::memory_order_acquire);
+#endif
+    return _batteryCachedPercent;
+  }
   bool atFullClock() const { return !isLowPower; }
 #endif
 

@@ -35,6 +35,12 @@ class HalFrontlight {
   }
   constexpr bool warmthIsSelection() const { return false; }
   constexpr bool hasColourSelect() const { return false; }
+  static uint8_t normalizeBrightness(const uint8_t percent) { return percent > 100 ? 100 : percent; }
+  static constexpr uint8_t brightnessStep() { return 1; }
+  static uint8_t migrateLegacyBrightness(const uint8_t percent, bool = false) { return normalizeBrightness(percent); }
+  constexpr bool startupBlocked() const { return false; }
+  bool takeStartupNotice() { return false; }
+  void updateRestore(uint32_t) {}
   void setBrightness(const uint8_t percent) { lastBrightness = percent > 100 ? 100 : percent; }
   void setWarmth(const uint8_t percent) { lastWarmth = percent > 100 ? 100 : percent; }
   void setOn(const bool on) { lit = on; }

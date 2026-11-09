@@ -15,6 +15,7 @@
 
 #include <ArduinoJson.h>
 #include <BoardConfig.h>
+#include <CrossInkHalFrontlight.h>
 #include <DeviceSecret.h>
 #include <FontFileTypes.h>
 #include <wolfssl/options.h>
@@ -161,6 +162,12 @@ uint8_t enumDisplayIndexForWeb(const SettingInfo& setting, uint8_t rawValue) {
 bool isWebSettingAvailable(const SettingInfo& setting) {
   if (isTiltPageTurnSetting(setting) && !QuickActions::supportsTiltPageTurn()) return false;
 
+#if FREEINK_DEVICE_SILKSCREEN && !FREEINK_SILKSCREEN_368
+  if (setting.valuePtr == &CrossPointSettings::standardHalfRefresh &&
+      BoardConfig::ACTIVE.displayController != BoardConfig::DisplayController::SSD1677) {
+    return false;
+  }
+#endif
   if (setting.category == StrId::STR_STATUS_BARS || setting.nameId == StrId::STR_HIDE_CLOCK ||
       settingKeyIs(setting, "displayStatusBarTextSize")) {
     return false;
@@ -2063,7 +2070,9 @@ void CrossPointWebServer::handlePostSettings() {
         const int val = doc[s.key].as<int>();
         if (val >= s.valueRange.min && val <= s.valueRange.max) {
           if (s.valuePtr) {
-            SETTINGS.*(s.valuePtr) = static_cast<uint8_t>(val);
+            SETTINGS.*(s.valuePtr) = s.valuePtr == &CrossPointSettings::frontlightBrightness
+                                         ? HalFrontlight::normalizeBrightness(static_cast<uint8_t>(val))
+                                         : static_cast<uint8_t>(val);
           } else if (s.value16Ptr) {
             SETTINGS.*(s.value16Ptr) = static_cast<uint16_t>(val);
           }

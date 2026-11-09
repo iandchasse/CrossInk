@@ -1,5 +1,6 @@
 #include "IntervalSelectionActivity.h"
 
+#include <DeviceCapabilities.h>
 #include <FontCacheManager.h>
 #include <GfxRenderer.h>
 #include <I18n.h>

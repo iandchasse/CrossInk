@@ -643,6 +643,8 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   uint8_t uiScale = defaultUiScale();
   // Sunlight fading compensation
   uint8_t fadingFix = 0;
+  // Silkscreen SSD1677: use the standard warmed HALF waveform instead of the full waveform.
+  uint8_t standardHalfRefresh = 0;
   // Quick-return from footnotes when a footnote shortcut is active.
   uint8_t pwrBtnFootnoteBack = 1;
   // Use book's embedded CSS styles for EPUB rendering (1 = enabled, 0 = disabled)
@@ -709,7 +711,11 @@ class CrossPointSettings : public PersistableStore<CrossPointSettings> {
   // Pro). Applied at boot, edited only from the frontlight panel; persisted as
   // category-less entries so they stay out of the Settings screen. Writes are
   // debounced by the panel (saved once on exit), not per slider tick.
+#if FREEINK_DEVICE_SILKSCREEN
+  uint8_t frontlightBrightness = 100;  // 1..100% spans the profile's reduced legacy range
+#else
   uint8_t frontlightBrightness = 60;
+#endif
   uint8_t frontlightWarmth = 50;  // 0 = cool .. 100 = warm
   uint8_t frontlightOn = 0;
 #if FREEINK_DEVICE_PICCO

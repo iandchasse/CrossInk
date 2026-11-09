@@ -631,7 +631,7 @@ inline SettingInfo buildSideButtonActionSetting(const StrId nameId, uint8_t Cros
 // can use it directly; mutable device UI lists use getSettingsList(), which
 // returns an owned copy and can add SD-card font and dictionary options.
 // 111 common entries, plus publisher fonts and four touch-only edge gestures.
-// getBaseSettingsCapacity() adds the three persisted IMU entries.
+// getBaseSettingsCapacity() adds the Silkscreen refresh choice and three persisted IMU entries.
 #if CROSSINK_SCALABLE_FONTS
 inline constexpr size_t BASE_SETTINGS_CAPACITY = 112 + (CROSSINK_APP_CAP_TOUCH ? 4 : 0);
 #else
@@ -645,7 +645,8 @@ inline constexpr size_t SLIDE_SWITCH_SETTINGS_COUNT = 0;
 #endif
 
 inline size_t getBaseSettingsCapacity() {
-  return BASE_SETTINGS_CAPACITY + (QuickActions::supportsTiltPageTurn() ? 3 : 0) + SLIDE_SWITCH_SETTINGS_COUNT;
+  return BASE_SETTINGS_CAPACITY + 3 + SLIDE_SWITCH_SETTINGS_COUNT +
+         (FREEINK_DEVICE_SILKSCREEN && !FREEINK_SILKSCREEN_368 ? 1 : 0);
 }
 
 const std::vector<SettingInfo>& getBaseSettingsList();
@@ -665,6 +666,14 @@ inline std::vector<SettingInfo> getSettingsList(const SdCardFontRegistry* regist
       }
     }
   }
+#if FREEINK_DEVICE_SILKSCREEN && !FREEINK_SILKSCREEN_368
+  // Keep the preference in the persistence list before the panel probe runs.
+  if (BoardConfig::ACTIVE.displayController != BoardConfig::DisplayController::SSD1677) {
+    v.erase(std::remove_if(v.begin(), v.end(),
+                           [](const SettingInfo& s) { return s.valuePtr == &CrossPointSettings::standardHalfRefresh; }),
+            v.end());
+  }
+#endif
   if (!SETTINGS.shouldTrackReadingStats()) {
     for (auto& setting : v) {
       if (setting.valuePtr == &CrossPointSettings::sleepScreen) {
@@ -1070,7 +1079,7 @@ inline std::vector<SettingInfo> buildControlsSideButtonSettingsList(const std::v
 
 inline std::vector<SettingInfo> buildGroupedDisplaySettingsList(const std::vector<SettingInfo>& allSettings) {
   std::vector<SettingInfo> displaySettings;
-  displaySettings.reserve(10);
+  displaySettings.reserve(11 + (FREEINK_DEVICE_SILKSCREEN && !FREEINK_SILKSCREEN_368 ? 1 : 0));
 
   auto addDisplaySetting = [&](StrId nameId) {
     const auto it = std::find_if(allSettings.begin(), allSettings.end(),
@@ -1094,6 +1103,9 @@ inline std::vector<SettingInfo> buildGroupedDisplaySettingsList(const std::vecto
   }
   addDisplaySetting(StrId::STR_UI_SCALE);
   addDisplaySetting(StrId::STR_SUNLIGHT_FADING_FIX);
+#if FREEINK_DEVICE_SILKSCREEN && !FREEINK_SILKSCREEN_368
+  addDisplaySetting(StrId::STR_STANDARD_HALF_REFRESH);
+#endif
   addDisplaySetting(StrId::STR_KEY_HINTS_ON_TOUCH);
 
   return displaySettings;

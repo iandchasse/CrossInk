@@ -468,6 +468,9 @@ uint16_t CrossPointSettings::getReadingIdleTimeThresholdSeconds() const {
 }
 
 void CrossPointSettings::toJson(JsonDocument& doc) const {
+#if FREEINK_DEVICE_SILKSCREEN
+  doc["frontlightBrightnessScale"] = 2;
+#endif
   std::lock_guard<std::mutex> lock(_mutex);
   for (const auto& info : getBaseSettingsList()) {
     if (!info.key || (!info.valuePtr && !info.value16Ptr && !info.stringOffset)) continue;
@@ -1031,6 +1034,19 @@ bool CrossPointSettings::fromJson(JsonVariantConst doc, bool importingCrossPoint
     pluginsEnabled = clamp(doc["pluginsEnabled"] | uint8_t{0}, 2, 0);
   }
   pluginHubPromptHidden = clamp(doc["pluginHubPromptHidden"] | uint8_t{0}, 2, 0);
+#if FREEINK_DEVICE_SILKSCREEN
+  const uint8_t loadedBrightness = frontlightBrightness;
+  const int brightnessScale = doc["frontlightBrightnessScale"] | 0;
+  if (brightnessScale < 2) {
+    const uint8_t legacyBrightness = doc["frontlightBrightness"] | static_cast<uint8_t>(60);
+    frontlightBrightness = HalFrontlight::migrateLegacyBrightness(legacyBrightness, brightnessScale == 1);
+    needsResave = true;
+  } else {
+    frontlightBrightness = HalFrontlight::normalizeBrightness(frontlightBrightness);
+    if (frontlightBrightness != loadedBrightness) needsResave = true;
+  }
+#endif
+
   if (needsResave) requestResave();
   WifiTransmitPower::setLimit(wifiTransmitPower);
   LOG_DBG("CPS", "Settings loaded from file");

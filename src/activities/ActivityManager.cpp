@@ -188,12 +188,13 @@ bool applyConfiguredSwipeAction(Activity& activity, ActivityManager& activityMan
       if (!Frontlight.present()) return true;
       const uint8_t previousBrightness = Frontlight.brightness();
       const bool previousOn = Frontlight.isOn();
-      const int delta = action == CrossPointSettings::TWO_FINGER_SWIPE_INCREASE_BRIGHTNESS ? lightAmount : -lightAmount;
+      const int amount = persist && BoardConfig::isSilkscreen() ? HalFrontlight::brightnessStep() : lightAmount;
+      const int delta = action == CrossPointSettings::TWO_FINGER_SWIPE_INCREASE_BRIGHTNESS ? amount : -amount;
       const uint8_t brightness =
           static_cast<uint8_t>(std::clamp(static_cast<int>(Frontlight.brightness()) + delta, 0, 100));
       Frontlight.setBrightness(brightness);
-      Frontlight.setOn(true);
-      SETTINGS.frontlightBrightness = brightness;
+      if ((!BoardConfig::isSilkscreen() || !previousOn) && !Frontlight.startupBlocked()) Frontlight.setOn(true);
+      SETTINGS.frontlightBrightness = Frontlight.brightness();
       SETTINGS.frontlightOn = 1;
       activity.onExternalFrontlightChange();
       if (persist && (brightness != previousBrightness || !previousOn)) activityManager.persistGlobalSettings();
@@ -208,7 +209,7 @@ bool applyConfiguredSwipeAction(Activity& activity, ActivityManager& activityMan
       const uint8_t warmth = static_cast<uint8_t>(std::clamp(static_cast<int>(Frontlight.warmth()) + delta, 0, 100));
       Frontlight.setWarmth(warmth);
       SETTINGS.frontlightWarmth = warmth;
-      SETTINGS.frontlightOn = Frontlight.isOn() ? 1 : 0;
+      if (!BoardConfig::isSilkscreen()) SETTINGS.frontlightOn = Frontlight.isOn() ? 1 : 0;
       activity.onExternalFrontlightChange();
       if (persist && (warmth != previousWarmth || Frontlight.isOn() != previousOn))
         activityManager.persistGlobalSettings();
@@ -261,10 +262,12 @@ void updateLiveLightSwipe(Activity& activity, ActivityManager& activityManager, 
   if (difference != 0 || (brightness && amount > 0 && !Frontlight.isOn()))
     applyConfiguredSwipeAction(activity, activityManager, state.action, difference, false);
   if (brightness && amount == 0 && Frontlight.isOn() != state.initialOn) {
-    Frontlight.setOn(state.initialOn);
-    SETTINGS.frontlightOn = state.initialOn ? 1 : 0;
+    if (!state.initialOn || !Frontlight.startupBlocked()) Frontlight.setOn(state.initialOn);
+    SETTINGS.frontlightOn = (BoardConfig::isSilkscreen() ? state.initialSavedOn : state.initialOn) ? 1 : 0;
     activity.onExternalFrontlightChange();
   }
+  // A failed startup can already be physically off when a gesture rolls back.
+  if (brightness && amount == 0 && BoardConfig::isSilkscreen()) SETTINGS.frontlightOn = state.initialSavedOn ? 1 : 0;
   state.changed = (brightness ? Frontlight.brightness() : Frontlight.warmth()) != state.initialValue ||
                   Frontlight.isOn() != state.initialOn;
 }
@@ -272,10 +275,11 @@ void updateLiveLightSwipe(Activity& activity, ActivityManager& activityManager, 
 void cancelLiveLightSwipe(Activity& activity, ActivityManager& activityManager, LiveLightSwipeState& state) {
   updateLiveLightSwipe(activity, activityManager, state, 0);
   if (Frontlight.isOn() != state.initialOn) {
-    Frontlight.setOn(state.initialOn);
-    SETTINGS.frontlightOn = state.initialOn ? 1 : 0;
+    if (!state.initialOn || !Frontlight.startupBlocked()) Frontlight.setOn(state.initialOn);
+    SETTINGS.frontlightOn = (BoardConfig::isSilkscreen() ? state.initialSavedOn : state.initialOn) ? 1 : 0;
     activity.onExternalFrontlightChange();
   }
+  if (BoardConfig::isSilkscreen()) SETTINGS.frontlightOn = state.initialSavedOn ? 1 : 0;
   state.active = false;
   state.blocked = true;
   state.changed = false;
@@ -366,6 +370,7 @@ bool applyLiveTwoFingerLightSwipe(Activity& activity, MappedInputManager& mapped
     state.movementSign =
         direction == TwoFingerSwipe::Direction::Up || direction == TwoFingerSwipe::Direction::Left ? -1 : 1;
     state.initialOn = Frontlight.isOn();
+    state.initialSavedOn = SETTINGS.frontlightOn != 0;
     state.initialValue = action == CrossPointSettings::TWO_FINGER_SWIPE_INCREASE_BRIGHTNESS ||
                                  action == CrossPointSettings::TWO_FINGER_SWIPE_DECREASE_BRIGHTNESS
                              ? Frontlight.brightness()
@@ -440,6 +445,7 @@ bool applyEdgeSlideAction(Activity& activity, MappedInputManager& mappedInput, A
     state.action = action;
     state.direction = static_cast<int>(progress.direction);
     state.initialOn = Frontlight.isOn();
+    state.initialSavedOn = SETTINGS.frontlightOn != 0;
     state.initialValue = action == CrossPointSettings::TWO_FINGER_SWIPE_INCREASE_BRIGHTNESS ||
                                  action == CrossPointSettings::TWO_FINGER_SWIPE_DECREASE_BRIGHTNESS
                              ? Frontlight.brightness()

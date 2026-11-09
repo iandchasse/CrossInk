@@ -2049,6 +2049,9 @@ void SettingsActivity::buildSettingsScreen(UiApp::ScreenType& screen) {
     item.label = isSectionHeader ? uiListSectionHeaderLabel(values[i], sectionLabel)
                                  : (directionIcon ? "" : I18N.get(settings[i].nameId));
     item.icon = itemIcon;
+#if FREEINK_DEVICE_SILKSCREEN
+    if (settings[i].nameId == StrId::STR_RESTORE_LIGHT_ON_WAKE) item.subtitle = tr(STR_RESTORE_LIGHT_ON_WAKE_HELP);
+#endif
     if (!isSectionHeader && !values[i].empty()) item.value = values[i].c_str();
     item.isHeader = isSectionHeader;
     item.toggle = !isSectionHeader && settings[i].type == SettingType::TOGGLE;

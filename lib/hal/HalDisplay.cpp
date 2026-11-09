@@ -28,6 +28,11 @@ HalDisplay::HalDisplay() : einkDisplay(EPD_SCLK, EPD_MOSI, EPD_CS, EPD_DC, EPD_R
 
 HalDisplay::~HalDisplay() {}
 
+void HalDisplay::setStandardHalfRefresh(bool enabled) {
+  einkDisplay.setStandardHalfRefresh(enabled && BoardConfig::isSilkscreen() &&
+                                     BoardConfig::ACTIVE.displayController == BoardConfig::DisplayController::SSD1677);
+}
+
 void HalDisplay::startBegin() {
 #if !defined(SIMULATOR) && FREEINK_DEVICE_X4PRO
   if (hardwareReady || beginDone) return;
@@ -106,6 +111,9 @@ EInkDisplay::RefreshMode convertRefreshMode(HalDisplay::RefreshMode mode) {
 }
 
 void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+#if FREEINK_DEVICE_SILKSCREEN
+  noteBatteryRefreshStart();
+#endif
   HalSpiBus::Lock spiLock;
 
   if (isX3Panel() && mode == RefreshMode::HALF_REFRESH) {
@@ -113,6 +121,9 @@ void HalDisplay::displayBuffer(HalDisplay::RefreshMode mode, bool turnOffScreen)
   }
 
   einkDisplay.displayBuffer(convertRefreshMode(mode), turnOffScreen);
+#if FREEINK_DEVICE_SILKSCREEN
+  notePaintComplete();
+#endif
 }
 
 void HalDisplay::setInverted(bool inverted) {
@@ -130,14 +141,28 @@ bool HalDisplay::restoreVisibleFrame() {
 }
 
 void HalDisplay::displayBufferAsync(HalDisplay::RefreshMode mode) {
+#if FREEINK_DEVICE_SILKSCREEN
+  noteBatteryRefreshStart();
+#endif
   if (isX3Panel() && mode == RefreshMode::HALF_REFRESH) {
     einkDisplay.requestResync(1);
   }
 
+#if FREEINK_DEVICE_SILKSCREEN
+  asyncPaintPending = true;
+#endif
   einkDisplay.displayBufferAsyncNoShadow(convertRefreshMode(mode));
 }
 
-void HalDisplay::waitRefreshComplete() { einkDisplay.waitRefreshComplete(); }
+void HalDisplay::waitRefreshComplete() {
+  einkDisplay.waitRefreshComplete();
+#if FREEINK_DEVICE_SILKSCREEN
+  if (asyncPaintPending) {
+    asyncPaintPending = false;
+    notePaintComplete();
+  }
+#endif
+}
 #if FREEINK_DEVICE_PICCO
 void HalDisplay::powerOffBetweenFrames() { einkDisplay.powerOffBetweenFrames(); }
 #endif
@@ -151,12 +176,22 @@ HalDisplay::GrayscaleCapabilities HalDisplay::grayscaleCapabilities(GrayscaleMod
 bool HalDisplay::supportsAsyncGrayscaleBase() const { return grayscaleCapabilities().asyncBase; }
 
 bool HalDisplay::displayGrayscaleBase(GrayscaleMode mode, RefreshMode fallback, bool turnOffScreen) {
+#if FREEINK_DEVICE_SILKSCREEN
+  noteBatteryRefreshStart();
+#endif
   HalSpiBus::Lock spiLock;
   if (isX3Panel() && fallback == HALF_REFRESH) einkDisplay.requestResync(1);
-  return einkDisplay.displayGrayscaleBase(mode, convertRefreshMode(fallback), turnOffScreen);
+  const bool result = einkDisplay.displayGrayscaleBase(mode, convertRefreshMode(fallback), turnOffScreen);
+#if FREEINK_DEVICE_SILKSCREEN
+  noteBatteryRefreshEnd();
+#endif
+  return result;
 }
 
 void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen) {
+#if FREEINK_DEVICE_SILKSCREEN
+  noteBatteryRefreshStart();
+#endif
   HalSpiBus::Lock spiLock;
 
   if (isX3Panel() && mode == RefreshMode::HALF_REFRESH) {
@@ -164,6 +199,9 @@ void HalDisplay::refreshDisplay(HalDisplay::RefreshMode mode, bool turnOffScreen
   }
 
   einkDisplay.refreshDisplay(convertRefreshMode(mode), turnOffScreen);
+#if FREEINK_DEVICE_SILKSCREEN
+  notePaintComplete();
+#endif
 }
 
 bool HalDisplay::isInverted() const { return einkDisplay.isInverted(); }
@@ -216,6 +254,9 @@ void HalDisplay::copyGrayscaleBuffers(const uint8_t* lsbBuffer, const uint8_t* m
 }
 
 void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) {
+#if FREEINK_DEVICE_SILKSCREEN
+  noteBatteryRefreshStart();
+#endif
   // X3: a HALF or FULL fallback means the caller wants a clean base (e.g. the
   // sleep cover, a full-screen swap from arbitrary prior content). Without
   // this, the X3 grayscale base takes its gentle differential happy path and
@@ -227,12 +268,29 @@ void HalDisplay::displayGrayscaleBase(RefreshMode fallback, bool turnOffScreen) 
   }
 
   einkDisplay.displayGrayscaleBase(convertRefreshMode(fallback), turnOffScreen);
+#if FREEINK_DEVICE_SILKSCREEN
+  notePaintComplete();
+#endif
 }
 
-void HalDisplay::preconditionGrayscale() { einkDisplay.preconditionGrayscale(); }
+void HalDisplay::preconditionGrayscale() {
+#if FREEINK_DEVICE_SILKSCREEN
+  noteBatteryRefreshStart();
+#endif
+  einkDisplay.preconditionGrayscale();
+#if FREEINK_DEVICE_SILKSCREEN
+  noteBatteryRefreshEnd();
+#endif
+}
 
 void HalDisplay::preconditionGrayscale(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
+#if FREEINK_DEVICE_SILKSCREEN
+  noteBatteryRefreshStart();
+#endif
   einkDisplay.preconditionGrayscale(x, y, w, h);
+#if FREEINK_DEVICE_SILKSCREEN
+  noteBatteryRefreshEnd();
+#endif
 }
 
 void HalDisplay::copyGrayscaleLsbBuffers(const uint8_t* lsbBuffer) { einkDisplay.copyGrayscaleLsbBuffers(lsbBuffer); }
@@ -242,8 +300,14 @@ void HalDisplay::copyGrayscaleMsbBuffers(const uint8_t* msbBuffer) { einkDisplay
 void HalDisplay::cleanupGrayscaleBuffers(const uint8_t* bwBuffer) { einkDisplay.cleanupGrayscaleBuffers(bwBuffer); }
 
 void HalDisplay::displayGrayBuffer(bool turnOffScreen) {
+#if FREEINK_DEVICE_SILKSCREEN
+  noteBatteryRefreshStart();
+#endif
   HalSpiBus::Lock spiLock;
   einkDisplay.displayGrayBuffer(turnOffScreen);
+#if FREEINK_DEVICE_SILKSCREEN
+  notePaintComplete();
+#endif
 }
 
 void HalDisplay::writeGrayscalePlaneStrip(bool lsbPlane, const uint8_t* rows, uint16_t yStart, uint16_t numRows) {

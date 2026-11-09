@@ -53,6 +53,10 @@ const std::vector<SettingInfo>& getBaseSettingsList() {
                             "libraryUseMetadata", StrId::STR_CAT_DISPLAY));
     add(SettingInfo::Toggle(StrId::STR_SUNLIGHT_FADING_FIX, &CrossPointSettings::fadingFix, "fadingFix",
                             StrId::STR_CAT_DISPLAY));
+#if FREEINK_DEVICE_SILKSCREEN && !FREEINK_SILKSCREEN_368
+    add(SettingInfo::Toggle(StrId::STR_STANDARD_HALF_REFRESH, &CrossPointSettings::standardHalfRefresh,
+                            "standardHalfRefresh", StrId::STR_CAT_DISPLAY));
+#endif
     add(SettingInfo::Toggle(StrId::STR_RESTORE_LIGHT_ON_WAKE, &CrossPointSettings::frontlightRestoreOnWake,
                             "frontlightRestoreOnWake", StrId::STR_CAT_DISPLAY));
     // Kept in the shared catalog for persistence and the web API. On-device,
@@ -313,7 +317,8 @@ const std::vector<SettingInfo>& getBaseSettingsList() {
 
     // Frontlight quick-panel state: persisted + web-exposed, category-less so
     // it stays off the Settings screen (edited from the swipe-down panel).
-    add(SettingInfo::Value(StrId::STR_BRIGHTNESS, &CrossPointSettings::frontlightBrightness, {0, 100, 5},
+    add(SettingInfo::Value(StrId::STR_BRIGHTNESS, &CrossPointSettings::frontlightBrightness,
+                           {0, 100, static_cast<uint8_t>(BoardConfig::isSilkscreen() ? 1 : 5)},
                            "frontlightBrightness"));
     add(SettingInfo::Value(StrId::STR_WARMTH, &CrossPointSettings::frontlightWarmth, {0, 100, 5}, "frontlightWarmth"));
     add(SettingInfo::Toggle(StrId::STR_FRONTLIGHT, &CrossPointSettings::frontlightOn, "frontlightOn"));

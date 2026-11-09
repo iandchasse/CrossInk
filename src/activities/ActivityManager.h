@@ -35,6 +35,7 @@ struct LiveLightSwipeState {
   bool blocked = false;
   bool changed = false;
   bool initialOn = false;
+  bool initialSavedOn = false;
   uint8_t action = 0;
   int startX = 0;
   int startY = 0;

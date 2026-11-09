@@ -91,6 +91,7 @@ const char* BaseTheme::batteryLabel(char* buf, const size_t size, const uint16_t
                                     const bool showPercentage) {
   if (showsNoBattery()) return tr(STR_NO_BATTERY);
   if (!showPercentage) return nullptr;
+  if (BoardConfig::isSilkscreen() && percentage > 100) return "--%";
   snprintf(buf, size, "%u%%", static_cast<unsigned>(percentage));
   return buf;
 }
@@ -105,6 +106,7 @@ void BaseTheme::fillBatteryIcon(const GfxRenderer& renderer, Rect rect, uint16_t
     renderer.fillRect(rect.x + 2, rect.y + 2, rect.width - 5, rect.height - 4, foregroundBlack);
     drawBatteryLightningBolt(renderer, rect.x + 4, rect.y + 2, !foregroundBlack);
   } else {
+    if (BoardConfig::isSilkscreen() && percentage > 100) return;
     if (percentage > 10) {
       renderer.fillRect(rect.x + 2, rect.y + 2, 3, rect.height - 4, foregroundBlack);
     }
@@ -966,6 +968,7 @@ void BaseTheme::drawReaderStatusBar(const GfxRenderer& renderer, const ReaderSta
                    : nullptr;
       case ReaderStatusBarItem::Battery:
         // Icon styles are drawn separately; percentage-only renders as plain text.
+        if (BoardConfig::isSilkscreen() && batteryPercentage > 100) return "--%";
         snprintf(scratch, len, "%u%%", static_cast<unsigned>(batteryPercentage));
         return scratch;
       case ReaderStatusBarItem::TimeLeftBook:

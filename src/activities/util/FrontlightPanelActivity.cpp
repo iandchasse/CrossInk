@@ -91,11 +91,12 @@ void FrontlightPanelActivity::onEnter() {
   }
 
   // The HAL is the live source of truth; SETTINGS only mirrors it for boot.
-  brightness = Frontlight.brightness();
+  brightness = BoardConfig::isSilkscreen() ? std::max<uint8_t>(1, Frontlight.brightness()) : Frontlight.brightness();
   warmth = Frontlight.warmth();
   // A single-colour light: warmth is the string that lights, and that is saved.
   if (warmthLocked()) warmth = Frontlight.stringMissing(true) ? 0 : 100;
   observedLightOn = Frontlight.isOn();
+  lightOnChanged = false;
   navKeysArmed = !boardHasFrontButtons();
 #if FREEINK_CAP_FRONTLIGHT_PROBE
   // Also after a switch-on elsewhere, or a restore at wake, found no light.
@@ -127,14 +128,15 @@ void FrontlightPanelActivity::onExit() {
   // Debounced persistence: one SPIFFS write on close, never per slider tick.
   const bool inversionChanged = initialInversion != static_cast<bool>(SETTINGS.screenInverted);
   const bool touchscreenChanged = initialTouchscreenDisabled != static_cast<bool>(SETTINGS.disableReaderTouchscreen);
+  const bool saveLightOn = !BoardConfig::isSilkscreen() || (lightOnChanged && !Frontlight.startupBlocked());
   const bool frontlightChanged = !context.showReaderDetails &&
                                  (SETTINGS.frontlightBrightness != brightness || SETTINGS.frontlightWarmth != warmth ||
-                                  SETTINGS.frontlightOn != (Frontlight.isOn() ? 1 : 0));
+                                  (saveLightOn && SETTINGS.frontlightOn != (Frontlight.isOn() ? 1 : 0)));
   if (frontlightChanged || inversionChanged || touchscreenChanged) {
     if (!context.showReaderDetails) {
       SETTINGS.frontlightBrightness = brightness;
       SETTINGS.frontlightWarmth = warmth;
-      SETTINGS.frontlightOn = Frontlight.isOn() ? 1 : 0;
+      if (saveLightOn) SETTINGS.frontlightOn = Frontlight.isOn() ? 1 : 0;
     }
     // The drawer can be opened over a dictionary or another reader child.
     // Find the owning reader so its per-book values stay out of the global file.
@@ -146,7 +148,8 @@ void FrontlightPanelActivity::onExit() {
 }
 
 void FrontlightPanelActivity::onExternalFrontlightChange() {
-  brightness = Frontlight.brightness();
+  lightOnChanged = true;
+  brightness = BoardConfig::isSilkscreen() ? std::max<uint8_t>(1, Frontlight.brightness()) : Frontlight.brightness();
   warmth = Frontlight.warmth();
   observedLightOn = Frontlight.isOn();
   requestUpdate();
@@ -155,10 +158,14 @@ void FrontlightPanelActivity::onExternalFrontlightChange() {
 void FrontlightPanelActivity::onBrightnessEvent(const fui::ActionEvent& event, void* user) {
   auto* self = static_cast<FrontlightPanelActivity*>(user);
   if (event.dragPermille < 0) return;
-  self->brightness = percentFromPermille(event.dragPermille);
+  self->brightness = HalFrontlight::normalizeBrightness(
+      std::max<uint8_t>(BoardConfig::isSilkscreen() ? 1 : 0, percentFromPermille(event.dragPermille)));
   Frontlight.setBrightness(self->brightness);
   // Adjusting brightness while off is an obvious "I want light" intent.
-  if (self->levelSwitchesOn()) Frontlight.setOn(true);
+  if (self->levelSwitchesOn()) {
+    Frontlight.setOn(true);
+    self->lightOnChanged = true;
+  }
   self->observedLightOn = Frontlight.isOn();
   self->noteSwitchOnResult();
 }
@@ -172,7 +179,7 @@ void FrontlightPanelActivity::onWarmthEvent(const fui::ActionEvent& event, void*
 }
 
 void FrontlightPanelActivity::onBrightnessStepEvent(const fui::ActionEvent& event, void* user) {
-  static_cast<FrontlightPanelActivity*>(user)->adjustBrightness(event.value * FINE_STEP);
+  static_cast<FrontlightPanelActivity*>(user)->adjustBrightness(event.value * HalFrontlight::brightnessStep());
 }
 
 void FrontlightPanelActivity::onWarmthStepEvent(const fui::ActionEvent& event, void* user) {
@@ -193,12 +200,15 @@ void FrontlightPanelActivity::onDismissEvent(const fui::ActionEvent&, void* user
 
 void FrontlightPanelActivity::adjustBrightness(const int delta) {
   int next = static_cast<int>(brightness) + delta;
-  if (next < 0) next = 0;
+  if (next < (BoardConfig::isSilkscreen() ? 1 : 0)) next = BoardConfig::isSilkscreen() ? 1 : 0;
   if (next > 100) next = 100;
   if (next == brightness) return;
-  brightness = static_cast<uint8_t>(next);
+  brightness = HalFrontlight::normalizeBrightness(static_cast<uint8_t>(next));
   Frontlight.setBrightness(brightness);
-  if (levelSwitchesOn()) Frontlight.setOn(true);
+  if (levelSwitchesOn()) {
+    Frontlight.setOn(true);
+    lightOnChanged = true;
+  }
   observedLightOn = Frontlight.isOn();
   noteSwitchOnResult();
   requestUpdate();
@@ -217,6 +227,10 @@ void FrontlightPanelActivity::adjustWarmth(const int delta) {
 }
 
 void FrontlightPanelActivity::stepBrightnessByKey(const bool up) {
+  if (BoardConfig::isSilkscreen()) {
+    adjustBrightness(up ? HalFrontlight::brightnessStep() : -HalFrontlight::brightnessStep());
+    return;
+  }
   if (!boardHasFrontButtons()) {
     adjustBrightness(up ? BRIGHTNESS_STEP : -BRIGHTNESS_STEP);
     return;
@@ -244,6 +258,7 @@ void FrontlightPanelActivity::stepWarmthByKey(const bool warmer) {
 void FrontlightPanelActivity::toggleLight() {
   Frontlight.setOn(!Frontlight.isOn());
   observedLightOn = Frontlight.isOn();
+  lightOnChanged = true;
   noteSwitchOnResult();
   requestUpdate();
 }
@@ -263,6 +278,11 @@ void FrontlightPanelActivity::noteSwitchOnResult() {
 }
 
 void FrontlightPanelActivity::syncLightState() {
+  if (Frontlight.startupBlocked() && observedLightOn) {
+    observedLightOn = false;
+    requestUpdate();
+  }
+
   // A switch-on started elsewhere while the panel is open (a Toggle Frontlight
   // shortcut): the panel owns its notice (showsFrontlightNotice()), so it takes
   // the result here, shows the note and leaves the light saved as off on close.

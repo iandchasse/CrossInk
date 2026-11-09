@@ -1,6 +1,9 @@
 #pragma once
 #include <Arduino.h>
 #include <BoardConfig.h>
+#if FREEINK_DEVICE_SILKSCREEN
+#include <atomic>
+#endif
 #include <EInkDisplay.h>
 #include <HalGPIO.h>
 #ifndef SIMULATOR
@@ -53,6 +56,16 @@ class HalDisplay {
   // Starts hardware initialization on SDMMC S3 boards; begin() joins it before
   // applying wake policy. SPI boards keep their existing synchronous path.
   void startBegin();
+  // Per-panel choice; effective only on Silkscreen SSD1677.
+  void setStandardHalfRefresh(bool enabled);
+#if FREEINK_DEVICE_SILKSCREEN
+  uint32_t firstPaintMs() const { return firstPaint.load(std::memory_order_acquire); }
+  bool batteryRefreshActive() const { return batteryRefreshInProgress.load(std::memory_order_acquire); }
+  bool batteryRefreshRecent(uint32_t now, uint32_t quietMs) const {
+    const uint32_t ended = batteryLastRefresh.load(std::memory_order_acquire);
+    return ended != 0 && static_cast<uint32_t>(now - ended) < quietMs;
+  }
+#endif
 
   // Selected SDK driver identity; nullptr before display initialization.
   const char* getControllerName() const;
@@ -167,6 +180,28 @@ class HalDisplay {
 #ifndef SIMULATOR
   StaticSemaphore_t beginDoneStorage{};
   SemaphoreHandle_t beginDone = nullptr;
+#endif
+
+#if FREEINK_DEVICE_SILKSCREEN
+  std::atomic<uint32_t> firstPaint{0};
+  std::atomic<uint32_t> batteryLastRefresh{0};
+  std::atomic<bool> batteryRefreshInProgress{false};
+  void noteBatteryRefreshStart() {
+    if (BoardConfig::isSilkscreen()) batteryRefreshInProgress.store(true, std::memory_order_release);
+  }
+  void noteBatteryRefreshEnd() {
+    if (!BoardConfig::isSilkscreen()) return;
+    const uint32_t now = millis();
+    batteryLastRefresh.store(now != 0 ? now : 1u, std::memory_order_release);
+    batteryRefreshInProgress.store(false, std::memory_order_release);
+  }
+  bool asyncPaintPending = false;
+  void notePaintComplete() {
+    noteBatteryRefreshEnd();
+    uint32_t unset = 0;
+    const uint32_t now = millis();
+    firstPaint.compare_exchange_strong(unset, now != 0 ? now : 1u, std::memory_order_release);
+  }
 #endif
   EInkDisplay einkDisplay;
 };

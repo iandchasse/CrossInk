@@ -1,6 +1,7 @@
 #pragma once
 
 #include <BoardConfig.h>  // FREEINK_CAP_FRONTLIGHT_PROBE: the class layout depends on it
+#include <CrossInkHalFrontlight.h>
 #include <FreeInkApp.h>
 #include <FreeInkUIGfxRenderer.h>
 
@@ -38,6 +39,7 @@ class FrontlightPanelActivity final : public Activity {
   uint8_t brightness = 60;
   uint8_t warmth = 50;
   bool observedLightOn = false;  // redraw tracking only; the HAL owns live on/off state
+  bool lightOnChanged = false;
   FrontlightPanelContext context;
   FrontlightDrawerState drawerState{};
   OptionPopup optionPopup;
@@ -130,7 +132,7 @@ class FrontlightPanelActivity final : public Activity {
   // light: then the slider and the steps only set the level, so one drag or held
   // key does not run the unloaded probe again on every event, and the light
   // toggle is the retry.
-  bool levelSwitchesOn() const { return !noLightNote; }
+  bool levelSwitchesOn() const { return !noLightNote && !Frontlight.startupBlocked(); }
   // From loop(): take a switch-on's result once it has decided.
   void syncLightState();
   // The line under the warmth row of a single-colour light, or nullptr.

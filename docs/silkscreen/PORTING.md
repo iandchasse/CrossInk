@@ -645,7 +645,7 @@ CrossInk keys a few layout and naming choices on device macros. Silkscreen gets 
 **On a 3.68" unit** ([The 3.68" variant](#the-368-variant)): do CrossPoint's bench list for it first, with its `silkscreen-368-test` image ([TEST-SUITE.md](TEST-SUITE.md#the-368-variant-silkscreen-368-test)). It starts with the power-key rework (a cut board has no POWER key until UP(2) is made one) and a first-power gate (the flex, the unpowered readings, the first power at a 500 mA limit, and what to do if the panel stays blank); then it opens P1 (the controller is the UC8279d, fixed in the build and read from nothing, so the picture and T4's BUSY times say whether a panel answers) and goes on to the boost (with three questions about the buzz), a wake (nothing is probed or kept, and no `BUSY_N` guard restarts the boot) and then ten cold power-ups and ten wakes, one of each at a low cell voltage, the panel's deep-sleep current, `BUSY_N` and its PON-idle current with a page on screen, the 60 ms driver-free settle (step 10: host-tested only, and the only way to run it is a scratch `abort();`, as for C3 below), orientation, the logic-analyser check that nothing talks to the touch addresses, gray (T5's strip routes are the first run of the strip-transaction fix (upstream's) on a board, then the page that froze, reopened) and the clock. Then flash `pio run -e silkscreen-368 -t upload` and run C1-C13 with these differences:
 
 - **C1:** the log shows `Device: silkscreen_368` and `Panel controller UC8279 (forced by the build)`, at a wake too: there are no VER bytes, because nothing is read from the panel (`HalDisplay::logController()`); Settings > System shows `1.6.1-silkscreen-368`; the SD firmware update rejects a `silkscreen` image and accepts CrossPoint's `silkscreen-368` image.
-- **C2:** there are no touch terms: ≈58-73 µA plus this panel's own draw, which is not in hand (POWER.md row 17).
+- **C2:** there are no touch terms: ≈58-73 µA (Rev 1.02: ≈48-63 µA) plus this panel's own draw, which is not in hand (POWER.md row 17).
 - **C3:** nothing talks to the touch addresses at boot or at a sleep entry. The log cannot show it: the touch code is not compiled in (`FREEINK_CAP_TOUCH=0`), and the 4.26" board's touch lines are `LOG_DBG`, with no debug env here. The logic-analyser step of CrossPoint's list is the check: no transaction to 0x38, 0x5D or 0x14, `IO11` HIGH and still, `IO41` never driven.
 - **C4:** as on the 4.26" board.
 - **C8:** as on the 4.26" board, with one care: a cut board has no D3 and D8, so U10's own over-voltage limit is the only one, and an enable with nothing on J3 is an open load that is safe and avoidable. Do not switch the light on with J3 empty, or build without it: `[silkscreen368]` / `frontlight_flags =` in `platformio.local.ini` (set under `[silkscreen]` instead, it drops the light from every Silkscreen env).
@@ -660,7 +660,7 @@ CrossInk keys a few layout and naming choices on device macros. Silkscreen gets 
    - After a USB Drive session and eject, USB Serial/JTAG comes back without a power cycle.
    - The SD firmware update rejects an image built for another board and accepts CrossPoint's `silkscreen` image.
 2. **C2 - Sleep current** (MEAS-01, [POWER.md §4](POWER.md#4-measurement-and-bench-checks)).
-   - ≈58-73 µA without touch, ≈113-130 µA with the FT6336U tail (`silkscreen-debug` logs `Touch controller asleep`).
+   - ≈58-73 µA without touch (Rev 1.02: ≈48-63), ≈113-130 µA with the FT6336U tail (Rev 1.02: ≈103-120) (`silkscreen-debug` logs `Touch controller asleep`).
    - Within ≈2 µA of CrossPoint's figure on the same board, after every CrossInk sleep path.
 3. **C3 - Wake and boot checks.**
    - A short tap re-sleeps with no touch probe.
@@ -679,7 +679,7 @@ CrossInk keys a few layout and naming choices on device macros. Silkscreen gets 
 7. **C7 - Radio** ([POWER.md §4](POWER.md#4-measurement-and-bench-checks), "Radio"): the network result screens idle with Wi-Fi off and still restart on Back; KOReader's modem sleep and Upload; the Wi-Fi list; the Nearby windows, results and offer timeout against a second reader; radio shortcuts at ≈3.4 V; OTA and SD updates below 3.6 V.
 8. **C8 - Front light.**
    - **No light fitted:** switching it on leaves it dark within ≈0.5 s, then "No front light detected" appears with the 10 s advice. After a reboot the light reads off.
-   - **Restore with no light:** with Restore Light on Wake on, or inside the daily schedule's window, unplug the light while asleep and wake. The restore tries once, and the popup follows the first screen. The next wake logs `Frontlight not restored` and leaves the boost off. A power cycle tries once again.
+   - **Restore with no light:** with Restore Light on Wake on, or inside the daily schedule's window, unplug the light while asleep and wake. The restore tries once, and the popup follows the first screen. The next wake logs `Frontlight not restored` and leaves the boost off. A power cycle stays dark; a deliberate user toggle can try again.
    - **Single-string light:** it lights the string that is there; the panel says "Warm light only" or "Cool light only" and pins the warmth.
    - **Light Controls** (Settings > Display > Frontlight): Left/Right set the brightness, Up/Down the warmth, Confirm switches the light, Back closes it, and the light is saved on exit.
    - **Light Controls from a book:** the reader menu's Settings tab lists Light Controls, and it returns to the menu when the panel closes. With Short Power, Long Power or Long-press Confirm set to Light Controls, that key opens the panel in a book and on Home without lighting anything, and the same key closes it (a long press of Confirm, when that is the shortcut). Left and Right step 1 % up to 10 % and 5 % above it, and a held key takes 0 to 100 % in about 5 s (10 to 100 % in about 3 s) where it took about 10 s.
@@ -762,3 +762,10 @@ It differs from Silkscreen in three ways:
 - **Before any release channel** (as for CrossPoint, [MODULARITY.md, Future work](MODULARITY.md#future-work)): a board tag per panel family, and an OTA feed for the fork.
 - **The battery log's bench A/B** ([BATTERY-LOG.md](BATTERY-LOG.md), and CrossPoint's section 9): the `silkscreen` image against `silkscreen-batlog` on the same board and cell, M1 first. C2's set-up applies.
 - **Optional SDK wording:** the `awakeCeilingMin` comment (`BoardConfig.h`) and the SDK README could say that the consumer may extend the ceiling to a longer user timeout. That would be an SDK commit on the shared line, then a gitlink bump in both repos.
+
+## Frontlight startup and percentage range (2026-10-24)
+
+Both apps use the shared SDK startup checks and 100 percentages over original 1..50%.
+See [POWER.md](POWER.md#startup-and-brightness-policy) for the current limits,
+migration, reset policy and required healthy-board checks. Older full-duty
+frontlight bring-up steps are superseded by that policy and the current T9.

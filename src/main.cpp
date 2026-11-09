@@ -1266,6 +1266,16 @@ static void showFrontlightNotFound() {
 // deciding does not stay on beside the popup. From the loop task only.
 static void settleFrontlight() {
   static bool firstPassDone = false;
+  static bool startupNoticeDue = false;
+  if (Frontlight.takeStartupNotice()) startupNoticeDue = true;
+#if FREEINK_DEVICE_SILKSCREEN
+  if (startupNoticeDue && firstPassDone && display.firstPaintMs() != 0) {
+    startupNoticeDue = false;
+    activityManager.requestUpdateAndWait();
+    RenderLock lock;
+    GUI.drawPopup(renderer, tr(STR_FRONTLIGHT_STARTUP_FAILED));
+  }
+#endif
   static bool noticeDue = false;
   if (handleFrontlightTrip()) noticeDue = true;
   if (Frontlight.takeRestoreNoLightNotice()) noticeDue = true;
@@ -1407,6 +1417,7 @@ void enterDeepSleep(bool fromTimeout) {
   }
 
 #if SILKSCREEN_BATLOG
+  powerManager.flushBatteryChargeLog();
   BatteryLogWriter::flushAtEntry();  // a row the loop never flushed, with the card still mounted
 #endif
 
@@ -1468,6 +1479,9 @@ void setupDisplayAndFonts(const bool seamless, const bool loadReaderResources, c
   display.begin();
 #else
   display.begin(seamless);
+#endif
+#if FREEINK_DEVICE_SILKSCREEN && !FREEINK_SILKSCREEN_368
+  display.setStandardHalfRefresh(SETTINGS.standardHalfRefresh != 0);
 #endif
   renderer.begin();
   renderer.setViewableInsets(HalScreenCalibration::load());
@@ -1965,8 +1979,17 @@ void setup() {
       restoreLightOn = false;
     }
   }
+#if FREEINK_DEVICE_SILKSCREEN
+  if (!freeink::frontlight::restoreEligible(rawResetReason == ESP_RST_DEEPSLEEP, rawResetReason == ESP_RST_SW,
+                                            isSilentReboot && isValidSilentTarget)) {
+    restoreLightOn = false;
+  }
+#endif
   LOG_DBG("LIGHT", "Frontlight boot state: %s (silent=%d)", restoreLightOn ? "on" : "off", isSilentReboot ? 1 : 0);
   Frontlight.begin(SETTINGS.frontlightBrightness, SETTINGS.frontlightWarmth, restoreLightOn);
+#if FREEINK_DEVICE_SILKSCREEN && !CROSSPOINT_TEST_SUITE
+  powerManager.updateBatteryDisplay();
+#endif
 
   if (recoveryFirmwareMode) {
     LOG_INF("MAIN", "Recovery firmware mode (%s + POWER held at boot)",
@@ -2442,8 +2465,19 @@ void loop() {
                          activityManager.isReaderActivity());
   }
 
+#if FREEINK_DEVICE_SILKSCREEN && !CROSSPOINT_TEST_SUITE
+  // Keep the estimate current; ordinary UI redraws pick up battery changes.
+  powerManager.updateBatteryDisplay();
+#endif
+
   renderer.setFadingFix(SETTINGS.fadingFix);
+#if FREEINK_DEVICE_SILKSCREEN && !FREEINK_SILKSCREEN_368
+  display.setStandardHalfRefresh(SETTINGS.standardHalfRefresh != 0);
+#endif
 #if FREEINK_CAP_FRONTLIGHT_PROBE
+#if FREEINK_DEVICE_SILKSCREEN
+  Frontlight.updateRestore(display.firstPaintMs());
+#endif
   settleFrontlight();
 #endif
 
@@ -2673,9 +2707,9 @@ void loop() {
     }
   }
 
-  // Refresh the battery icon when USB is plugged or unplugged.
+  // Other boards refresh the battery icon when USB is plugged or unplugged.
   // Placed after sleep guards so we never queue a render that won't be processed.
-  if (gpio.wasUsbStateChanged()) {
+  if (!BoardConfig::isSilkscreen() && gpio.wasUsbStateChanged()) {
     activityManager.requestUpdate();
   }
 
@@ -2688,7 +2722,7 @@ void loop() {
 #else
   const bool usbConnected = gpio.isUsbConnectedCached();
 #endif
-  if (usbConnected) {
+  if (!BoardConfig::isSilkscreen() && usbConnected) {
     static unsigned long lastBatteryPollTime = 0UL;
     static uint16_t lastBatteryPercent = 0xFFFF;
     if (millis() - lastBatteryPollTime >= 60000UL) {
